@@ -101,27 +101,6 @@ the moment you tap it.
 
 Sorting is strictly by time, so the reddest story is always the first one.
 
-**The same story from several outlets** is grouped into one row, marked
-`+2 more` with the other outlets named beside it, and the status line reports
-how many stories were folded away on the last refresh — so whether grouping is
-doing anything is visible rather than inferred. Matching is deliberately cautious:
-headlines are compared as stemmed word sets, and only merge above a high
-similarity bar. It was tuned against real headline pairs — at a looser setting
-it merged "Toronto council approves transit funding" with the Vancouver
-version, and "evacuation ordered" with "evacuation lifted", because the one
-word carrying the meaning is invisible to a word-set comparison. The current
-setting misses some genuine duplicates in exchange for never hiding a
-different story: a repeated headline is a mild annoyance, a hidden one is a
-missed story. Against a labelled set of 21 pairs it merges 7 of 12 duplicates
-and 0 of 9 distinct pairs; the distinct-but-similar pairs all score 0.667 and
-the duplicates it catches all score 0.75 or above, so any threshold from 0.68
-to 0.75 behaves identically — there is no tuning left to do without merging
-things that should stay apart. Turn it off in Settings → Behaviour.
-
-Grouping is per category by design, so a story covered in both World and
-Canada still appears in each — it is never hidden from a category with no
-visible copy of it.
-
 Earlier builds also had Alerts and Unread chips, and keyword matching behind
 them; all of it was dropped. The app is for reading, not alerting — that job
 belongs to the Shortcut, which can actually reach you with the app closed.
