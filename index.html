@@ -473,6 +473,18 @@ let cfg = load();
 save();
 
 let items    = JSON.parse(localStorage.getItem(KEY + ".items") || "[]");
+
+// Cached stories outlive the feed that produced them - they sit in storage for
+// 72h regardless of the feed list. So removing a feed (by hand, or by a
+// migration retiring a dead one) has to drop its stories too, or they linger
+// for days under a category the app can no longer resolve.
+function pruneOrphans() {
+  const live = new Set(cfg.feeds.map(f => f.name));
+  const before = items.length;
+  items = items.filter(i => live.has(i.source));
+  if (items.length !== before) localStorage.setItem(KEY + ".items", JSON.stringify(items));
+  return before - items.length;
+}
 let seen     = new Set(JSON.parse(localStorage.getItem(KEY + ".seen")  || "[]"));
 let filter   = "all";
 let loading  = false;
@@ -786,6 +798,7 @@ function render() {
   // sorted; categories themselves lead with whichever holds the newest story.
   const buckets = new Map();
   for (const i of view) {
+    if (!(i.source in catOf)) continue;   // orphan from a removed feed
     const c = catOf[i.source] || "Other";
     if (!buckets.has(c)) buckets.set(c, []);
     buckets.get(c).push(i);
@@ -901,7 +914,7 @@ function renderFeeds() {
       x.setAttribute("aria-label", "Remove " + f.name);
       x.onclick = () => {
         cfg.feeds = cfg.feeds.filter(o => o.url !== f.url);
-        save(); renderFeeds(); renderLibrary(); render();
+        save(); pruneOrphans(); renderFeeds(); renderLibrary(); render();
       };
       r.append(d, g, x);
       box.appendChild(r);
@@ -927,7 +940,7 @@ function renderLibrary() {
     all.onclick = () => {
       if (allOn) cfg.feeds = cfg.feeds.filter(f => !list.some(c => c.url === f.url));
       else list.forEach(f => { if (!have.has(f.url)) cfg.feeds.push({ ...f }); });
-      save(); renderFeeds(); renderLibrary(); render();
+      save(); pruneOrphans(); renderFeeds(); renderLibrary(); render();
     };
     h.appendChild(all);
     box.appendChild(h);
@@ -939,7 +952,7 @@ function renderLibrary() {
       b.onclick = () => {
         if (have.has(f.url)) cfg.feeds = cfg.feeds.filter(o => o.url !== f.url);
         else cfg.feeds.push({ ...f });
-        save(); renderFeeds(); renderLibrary(); render();
+        save(); pruneOrphans(); renderFeeds(); renderLibrary(); render();
       };
       wrap.appendChild(b);
     });
@@ -1033,6 +1046,7 @@ $("#io-import").onclick = () => {
 };
 
 /* ------------------------------------------------------------------ boot */
+pruneOrphans();
 render();
 if (items.length) setStatus(items.length + " stored stories · refreshing…");
 refresh();
@@ -1047,7 +1061,7 @@ setInterval(() => { if (!document.hidden) render(); }, 60000);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-const BUILD = "2026-08-23.12";
+const BUILD = "2026-08-23.13";
 $("#ver").textContent = "Breaking · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

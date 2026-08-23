@@ -103,6 +103,12 @@ Reserve and SEC press releases as primary sources. The FT, WSJ, Bloomberg,
 Economist, Business Insider and Reuters are all left out on purpose — their
 RSS may fetch fine, but the links dead-end on a subscribe wall.
 
+**Removing a feed removes its stories.** Cached stories live in local storage
+for 72 hours independently of the feed list, so deleting a feed used to leave
+its headlines in the list for days — under a category the app could no longer
+resolve. Stories whose feed is gone are now pruned at startup and whenever a
+feed is removed.
+
 **Dead feeds.** Publishers retire RSS endpoints without notice. When one is
 confirmed dead on a real device its URL goes into `DEAD_FEEDS` in `index.html`
 and a migration removes it from every installed feed list — shipping a
