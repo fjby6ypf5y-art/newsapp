@@ -850,7 +850,7 @@ async function refresh(scope) {
 
   const merged = new Map(items.map(i => [i.id, i]));
   const total = feeds.length;
-  let ok = 0, done = 0;
+  let ok = 0, done = 0, added = 0;
   const failed = [];
 
   const absorb = list => {
@@ -859,6 +859,7 @@ async function refresh(scope) {
       // copy is newer, so a fresher (possibly re-headlined) version wins
       // instead of whichever feed simply resolved last.
       const prev = merged.get(it.id);
+      if (!prev) added++;
       if (!prev || it.ts >= prev.ts) merged.set(it.id, it);
     });
     const cutoff = Date.now() - 1000 * 60 * 60 * 72;
@@ -893,11 +894,13 @@ async function refresh(scope) {
   if (ok === 0) {
     setStatus("No feeds reachable — check your connection or relays", true);
   } else {
-    const fresh = items.filter(i => !seen.has(i.id)).length;
+    // "new" counts what this refresh actually brought in. It used to count
+    // every story never tapped, across the whole cache - a number in the
+    // hundreds that ignored the scope of the refresh and told you nothing.
     setStatus(
       "Updated " + timeAgo(Date.now()) + " · " + ok + "/" + total + " "
       + (scoped ? active + " " : "") + "feeds"
-      + (fresh ? " · " + fresh + " new" : "")
+      + (added ? " · " + added + " new" : "")
       + (failed.length
           ? " · failed: " + (failed.length > 2
               ? failed.slice(0, 2).join(", ") + " +" + (failed.length - 2) + " more"
@@ -1729,7 +1732,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.42";
+const BUILD = "2026-08-23.43";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
