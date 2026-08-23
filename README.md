@@ -53,7 +53,7 @@ and shows your last stories even with no bars.
 Stories are grouped into **categories**, each headed by a count and a dot in
 that category's hottest colour. Categories always appear in a fixed order —
 
-> World · Business · Tech · Canada · US · UK & Europe · Science · Sport · Entertainment
+> World · Business · Tech · Canada · UK & Europe · Science · Sport · Entertainment
 
 — so the list reads the same way every time and you learn where to look.
 Within a group, stories run hottest (newest) to coldest. Tapping a category
@@ -74,7 +74,7 @@ Tap the **⚙** button to configure.
 - **Your feeds** — grouped by category, each with a health dot. Green means the
   feed answered on the last refresh; red shows the actual error. **Test all
   feeds** re-checks every one on demand.
-- **Add from library** — 93 curated feeds across the nine categories, with an
+- **Add from library** — 84 curated feeds across the eight categories, with an
   **Add all** button per category.
   Digital-native outlets sit alongside legacy ones: Axios, Vox, The Intercept,
   Rest of World, 404 Media, The Markup, Quanta, Defector, ProPublica, The
@@ -90,9 +90,11 @@ library alone is invisible until you tap them. New categories are therefore
 seeded into the feed list directly on upgrade — once, and only when the
 category is empty. Remove those feeds and they stay removed.
 
-**What the categories mean.** *World* is international news; *Canada* and *US*
-are each country's domestic coverage and politics; *UK & Europe* likewise.
-*Entertainment* sits last: film, TV, music, games and arts.
+**What the categories mean.** *World* is international news; *Canada* and
+*UK & Europe* are regional domestic coverage and politics. *Entertainment*
+sits last: film, TV, music, games and arts. US domestic coverage has no
+category of its own — American stories of international weight still arrive
+through the World feeds.
 
 **Business** is deliberately the deepest category, and every entry is free to
 read with no metering: BBC, NPR and CBC business desks, Marketplace, CNBC,

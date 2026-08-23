@@ -227,7 +227,7 @@ const KEY = "breaking.v1";
 /* Curated feed library. Everything here is a free, non-paywalled publisher
    that offers first-party RSS - no aggregator bridges (they go down) and no
    metered outlets whose links dead-end on a subscribe wall. */
-const CATS = ["World","Business","Tech","Canada","US","UK & Europe",
+const CATS = ["World","Business","Tech","Canada","UK & Europe",
               "Science","Sport","Entertainment"];
 const CAT_ORDER = [...CATS, "Other"];
 const catRank = c => { const i = CAT_ORDER.indexOf(c); return i < 0 ? CAT_ORDER.length : i; };
@@ -291,15 +291,6 @@ const CATALOG = [
   ["Canada","Bank of Canada",     "https://www.bankofcanada.ca/content_type/press-releases/feed/"],
   ["Canada","StatCan The Daily",  "https://www150.statcan.gc.ca/n1/dai-quo/rss/new-nouveau-eng.xml"],
 
-  ["US",    "NPR Politics",       "https://feeds.npr.org/1014/rss.xml"],
-  ["US",    "PBS NewsHour",       "https://www.pbs.org/newshour/feeds/rss/headlines"],
-  ["US",    "CBS News",           "https://www.cbsnews.com/latest/rss/main"],
-  ["US",    "NBC News",           "https://feeds.nbcnews.com/nbcnews/public/news"],
-  ["US",    "The Hill",           "https://thehill.com/news/feed/"],
-  ["US",    "Axios Politics",     "https://api.axios.com/feed/politics"],
-  ["US",    "Marshall Project",   "https://www.themarshallproject.org/rss/recent.rss"],
-  ["US",    "Stateline",          "https://stateline.org/feed/"],
-  ["US",    "Guardian US",        "https://www.theguardian.com/us-news/rss"],
 
   ["UK & Europe", "BBC UK",       "https://feeds.bbci.co.uk/news/uk/rss.xml"],
   ["UK & Europe", "Guardian UK",  "https://www.theguardian.com/uk-news/rss"],
@@ -346,8 +337,6 @@ const DEFAULTS = {
     { cat:"World", name:"Al Jazeera",  url:"https://www.aljazeera.com/xml/rss/all.xml" },
     { cat:"World", name:"France 24",   url:"https://www.france24.com/en/rss" },
     { cat:"World", name:"CBC World",   url:"https://rss.cbc.ca/lineup/world.xml" },
-    { cat:"US",    name:"NPR Politics","url":"https://feeds.npr.org/1014/rss.xml" },
-    { cat:"US",    name:"PBS NewsHour",url:"https://www.pbs.org/newshour/feeds/rss/headlines" },
     { cat:"Business",name:"BBC Business",url:"https://feeds.bbci.co.uk/news/business/rss.xml" },
     { cat:"Business",name:"NPR Business",url:"https://feeds.npr.org/1006/rss.xml" },
     { cat:"Business",name:"CBC Business",url:"https://rss.cbc.ca/lineup/business.xml" },
@@ -448,11 +437,18 @@ function migrate(c) {
     seedCategory(c, "Entertainment", SEED_ENTERTAINMENT);
     c.migrated = 4;
   }
+
+  // The US desk was retired. Drop its feeds rather than leaving them orphaned
+  // under a category that no longer has a rank, a chip or a section.
+  if (c.migrated < 5) {
+    c.feeds = c.feeds.filter(f => f.cat !== "US");
+    c.migrated = 5;
+  }
   return c;
 }
 
 const load = () => { try { return migrate({...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || "{}")}); }
-                     catch { return {...DEFAULTS, migrated:4}; } };
+                     catch { return {...DEFAULTS, migrated:5}; } };
 const save = () => localStorage.setItem(KEY, JSON.stringify(cfg));
 let cfg = load();
 // Persist immediately: migrations rewrite feed URLs and backfill categories,
@@ -1035,7 +1031,7 @@ setInterval(() => { if (!document.hidden) render(); }, 60000);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-const BUILD = "2026-08-23.9";
+const BUILD = "2026-08-23.10";
 $("#ver").textContent = "Breaking · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
