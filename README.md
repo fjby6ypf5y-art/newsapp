@@ -50,21 +50,25 @@ and shows your last stories even with no bars.
 
 ### Set up your feeds
 
-Stories are grouped into **categories**, each headed by a count and a dot in
-that category's hottest colour. Categories always appear in a fixed order —
+The chips under the header are **pages, not filters** — one per category, each
+showing only that category, newest first. Tapping one always lands you at the
+top of it, and the app reopens on whichever you last read. Categories appear in
+a fixed order —
 
 > World · Business · Tech · Canada · Science · Sport · Entertainment
 
-— so the list reads the same way every time and you learn where to look.
-Within a group, stories run hottest (newest) to coldest. Tapping a category
-chip narrows to just that one. Categories with no stories are skipped.
+— so the row reads the same way every time and you learn where to look.
+Categories with no feeds are skipped.
+
+There is no "All" view. It was the one chip that behaved differently — a stack
+of grouped sections rather than a single list — which made the whole row read
+as filters over one page instead of a set of pages.
 
 Sorting is strictly by time. Keyword hits are *not* floated above newer
 stories, because that would break the promise that the reddest item is the
 first one; the inline `ALERT` tag carries that instead.
 
-The chip row is **All plus your categories** — nothing else. Earlier builds
-also had Alerts and Unread chips; both were dropped. Alerts duplicated the
+Earlier builds also had Alerts and Unread chips; both were dropped. Alerts duplicated the
 inline tag, and Unread only ever marked a story read when you *tapped* it, so
 headlines you read in the list and skipped stayed "unread" forever — the label
 was a lie. Unread dots per row still show what's new.
