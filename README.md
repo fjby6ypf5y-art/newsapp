@@ -68,6 +68,12 @@ There is no "All" view. It was the one chip that behaved differently — a stack
 of grouped sections rather than a single list — which made the whole row read
 as filters over one page instead of a set of pages.
 
+**Swipe left and right** on the list to move between categories, or tap a chip.
+Swiping stops at the ends rather than wrapping, so the first and last category
+feel like edges. A gesture commits to being a swipe, a pull or a scroll as soon
+as its direction is clear and stays that way — switching mid-drag is what makes
+gesture handling feel unreliable.
+
 **Two refreshes, deliberately different.** Pull down on the list to refresh
 **just the category you're reading** — quick, and it doesn't spend requests on
 categories you aren't looking at. The **↻** button refreshes **every**
