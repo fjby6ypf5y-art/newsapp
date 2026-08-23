@@ -6,6 +6,23 @@
 <title>News</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0d0d10">
+<!-- Defence in depth. connect-src has to stay open: feeds and relays live on
+     arbitrary origins, and that is the whole point of the app. What this does
+     buy is that nothing can pull in a script, stylesheet, image, font or frame
+     from anywhere else, and no injected <base> can re-point relative URLs.
+     'unsafe-inline' is required because the script and styles are inline in
+     this file; a hash would be stronger, but with no build step a stale hash
+     would silently brick the app, which is the worse failure. -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'none';
+  script-src 'self' 'unsafe-inline';
+  style-src 'self' 'unsafe-inline';
+  img-src 'self';
+  connect-src *;
+  manifest-src 'self';
+  worker-src 'self';
+  base-uri 'none';
+  form-action 'none'">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="News">
@@ -1823,7 +1840,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.39";
+const BUILD = "2026-08-23.40";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

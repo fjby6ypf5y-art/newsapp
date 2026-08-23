@@ -384,6 +384,14 @@ Because relay output is untrusted, the app treats feed content as hostile:
   a feed renders as visible characters rather than executing.
 - The service worker never caches feed responses — only the app's own files.
 
+**A Content-Security-Policy** is set in the page. `connect-src` has to stay
+open — feeds and relays live on arbitrary origins, and that is the whole point
+of the app — but nothing can pull in a script, stylesheet, image, font or frame
+from anywhere else, and an injected `<base>` cannot re-point relative URLs.
+`'unsafe-inline'` is required because the script and styles live in this file;
+a hash would be stronger, but with no build step a stale hash would silently
+brick the app, which is the worse failure mode.
+
 **A public repo is fine, with one caveat.** The source contains no secrets,
 no keys and no personal data, and a GitHub Pages site is publicly reachable
 whether or not the repo is private. What a public repo does expose is the
