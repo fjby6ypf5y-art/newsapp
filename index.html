@@ -662,7 +662,7 @@ const txt = (node, ...names) => {
   return "";
 };
 
-function parseFeed(xml, source) {
+function parseFeed(xml, source, feedUrl) {
   const doc = new DOMParser().parseFromString(xml, "application/xml");
   if (doc.querySelector("parsererror")) throw new Error("bad XML");
 
@@ -681,7 +681,10 @@ function parseFeed(xml, source) {
     }
 
     const title = txt(n, "title") || "(untitled)";
-    const when  = txt(n, "pubDate", "published", "updated", "date");
+    // dc:date covers RSS 1.0/RDF and the many RSS 2.0 feeds that use Dublin
+    // Core instead of pubDate. Without it those stories arrive undated, which
+    // paints them coldest and sinks them to the bottom of the list.
+    const when  = txt(n, "pubDate", "published", "updated", "dc:date", "date");
     const raw   = txt(n, "description", "summary", "content");
     const snip  = raw.replace(/<[^>]*>/g, " ").replace(/&[a-z#0-9]+;/gi, " ")
                      .replace(/\s+/g, " ").trim().slice(0, 220);
@@ -689,7 +692,9 @@ function parseFeed(xml, source) {
     let ts = Date.parse(when);
     if (isNaN(ts)) ts = 0;
 
-    link = safeLink(link);
+    // Relative hrefs resolve against the feed's own address. Resolving them
+    // against this app produced links back into the app itself.
+    link = safeLink(link, feedUrl);
     return { id: (link || title).slice(0, 300), title, link, snip, ts, source };
   }).filter(i => i.title !== "(untitled)" || i.link);
 }
@@ -742,7 +747,7 @@ async function refresh(scope) {
 
   // Render each feed the moment it lands rather than blocking on the slowest.
   await Promise.all(feeds.map(f =>
-    grab(f.url).then(x => parseFeed(x, f.name)).then(
+    grab(f.url).then(x => parseFeed(x, f.name, f.url)).then(
       list => {
         ok++;
         health[f.url] = { ok: true, at: Date.now(), n: list.length, direct: isDirect(f.url) };
@@ -836,10 +841,10 @@ function clockOf(ts) {
 // the middle of every fetch - so a "javascript:" or "data:" URL here would run
 // script in the app's own origin and could read everything in localStorage.
 // Only ordinary web links are allowed through.
-function safeLink(raw) {
+function safeLink(raw, base) {
   if (!raw) return "";
   try {
-    const u = new URL(raw, location.href);
+    const u = new URL(raw, base || location.href);
     return (u.protocol === "https:" || u.protocol === "http:") ? u.href : "";
   } catch { return ""; }
 }
@@ -1226,7 +1231,7 @@ $("#f-test").onclick = async () => {
   const b = $("#f-test");
   b.textContent = "Testing…"; b.disabled = true;
   await Promise.all(cfg.feeds.map(f =>
-    grab(f.url).then(x => parseFeed(x, f.name)).then(
+    grab(f.url).then(x => parseFeed(x, f.name, f.url)).then(
       list => { health[f.url] = { ok: true, at: Date.now(), n: list.length, direct: isDirect(f.url) }; },
       err  => { health[f.url] = { ok: false, at: Date.now(), err: String(err && err.message || err) }; }
     )
@@ -1337,7 +1342,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.30";
+const BUILD = "2026-08-23.31";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

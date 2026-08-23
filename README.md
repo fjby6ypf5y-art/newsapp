@@ -113,8 +113,19 @@ Tap the **⚙** button to configure.
   thin category looking stale. Tap to add or remove. Everything in it is
   free and non-paywalled, published first-party — no aggregator bridges (they
   go down) and no metered outlets whose links dead-end on a subscribe wall.
-- **Add by URL** — any other RSS or Atom feed, filed under a category you pick.
-  Most outlets publish one at `/rss`, `/feed`, or `/rss.xml`.
+- **Add by URL** — any other feed, filed under a category you pick. Most outlets
+  publish one at `/rss`, `/feed`, or `/rss.xml`.
+
+**Feed formats.** Anything that is well-formed XML with `<item>` or `<entry>`
+elements works — RSS 2.0, Atom, and RSS 1.0/RDF. Dates are read from `pubDate`,
+`published`, `updated` or `dc:date`; a story with none still appears, but as
+the coldest colour with "time unknown" instead of a timestamp, since there is
+nothing to place it on the ramp. CDATA and escaped markup in titles are handled.
+Relative story links resolve against the feed's own address.
+
+Not supported: **JSON Feed**, and anything that is not valid XML — a login page,
+an error page, or a feed with malformed markup all fail with "bad XML" rather
+than silently showing nothing.
 
 A category with no feeds shows no chip and no section, so adding feeds to the
 library alone is invisible until you tap them. New categories are therefore
