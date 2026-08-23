@@ -230,9 +230,10 @@ select.sel{width:100%;background:var(--panel);border:1px solid var(--line);
   <input type="text" id="f-name" placeholder="Name (e.g. Local paper)">
   <input type="url" id="f-url" placeholder="RSS / Atom URL" inputmode="url">
   <select id="f-cat" class="sel"></select>
-  <button class="btn" id="f-add">Add feed</button>
-  <p class="hint">Most outlets publish one at <code>/rss</code>, <code>/feed</code>,
-  or <code>/rss.xml</code>.</p>
+  <button class="btn primary" id="f-add">Add feed</button>
+  <p class="hint" id="f-add-msg"></p>
+  <p class="hint">You can paste a plain site address &mdash; <code>theguardian.com</code>
+  &mdash; and the feed will be found from the page. An exact feed URL works too.</p>
 </section>
 
 <!-- ================= settings ================= -->
@@ -278,6 +279,14 @@ select.sel{width:100%;background:var(--panel);border:1px solid var(--line);
     <button class="btn" id="io-export">Export</button>
     <button class="btn" id="io-import">Import</button>
   </div>
+  <div class="btns" style="margin-top:8px">
+    <button class="btn" id="opml-export">Export OPML</button>
+    <button class="btn" id="opml-import">Import OPML</button>
+  </div>
+  <p class="hint">OPML is the standard feed-list format: export it to move your
+  feeds into any other reader, or paste one in to bring feeds across. Importing
+  adds to your list rather than replacing it, and skips feeds you already have.
+  Folder names that match a category are kept; anything else lands in Other.</p>
   <p class="hint" id="ver"></p>
 </section>
 
@@ -884,6 +893,63 @@ function timeAgo(ts) {
   return Math.round(h / 24) + "d ago";
 }
 
+// Find a feed from an ordinary page address. Publishers advertise their feed
+// in a <link rel="alternate">, which is how every reader has resolved
+// "paste the site, not the feed" for twenty years.
+function discoverFeeds(html, base) {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const out = [];
+  for (const l of doc.querySelectorAll('link[rel~="alternate"][href]')) {
+    const type = (l.getAttribute("type") || "").toLowerCase();
+    if (!/(rss|atom)\+xml|feed\+json|application\/json/.test(type)) continue;
+    const href = safeLink(l.getAttribute("href"), base);
+    if (href) out.push({ url: href, title: l.getAttribute("title") || "" });
+  }
+  // Last resort: the conventional paths, in the order they are usually right.
+  if (!out.length) {
+    for (const guess of ["/feed", "/rss", "/rss.xml", "/index.xml", "/feed.json", "/atom.xml"]) {
+      const href = safeLink(guess, base);
+      if (href) out.push({ url: href, title: "", guessed: true });
+    }
+  }
+  return out;
+}
+
+// Try a URL as a feed; if it is a web page, follow its advertised feed.
+// Returns {url, name, items} or throws with something worth showing.
+async function resolveFeed(input) {
+  const first = await grab(input);
+  try {
+    const items = parseFeed(first, "probe", input);
+    if (items.length) return { url: input, name: feedTitle(first) , items };
+    throw new Error("no stories in that feed");
+  } catch (e) {
+    // Not a feed. If it looks like a page, see what it points at.
+    if (!/^\s*</.test(first)) throw e;
+    const candidates = discoverFeeds(first, input);
+    if (!candidates.length) throw new Error("no feed advertised on that page");
+    let lastErr;
+    for (const c of candidates.slice(0, 6)) {
+      try {
+        const body = await grab(c.url);
+        const items = parseFeed(body, "probe", c.url);
+        if (items.length) return { url: c.url, name: c.title || feedTitle(body), items };
+      } catch (err) { lastErr = err; }
+    }
+    throw lastErr || new Error("found a feed link, but it did not load");
+  }
+}
+
+// The feed's own title, for pre-filling the name field.
+function feedTitle(body) {
+  try {
+    if (String(body).trimStart().startsWith("{")) return String(JSON.parse(body).title || "").trim();
+    const doc = new DOMParser().parseFromString(body, "application/xml");
+    const t = doc.querySelector("channel > title, feed > title");
+    return t ? t.textContent.trim() : "";
+  } catch { return ""; }
+}
+
 /* ---- grouping the same story from several outlets ---------------------- */
 
 // Words that carry no signal about which story this is. Kept short on purpose:
@@ -1389,19 +1455,33 @@ $("#open-settings").onclick  = () => openSettings(true);
 $("#close-settings").onclick = () => openSettings(false);
 $("#refresh").onclick        = () => refresh();
 
-$("#f-add").onclick = () => {
-  const url  = $("#f-url").value.trim();
-  const name = $("#f-name").value.trim() || (() => {
-    try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return "Feed"; }
-  })();
-  if (!url) return;
-  cfg.feeds.push({ id: newId(), name, url, cat: $("#f-cat").value || "Other" });
-  save();
-  $("#f-url").value = ""; $("#f-name").value = "";
-  renderFeeds(); renderLibrary();
+$("#f-add").onclick = async () => {
+  const btn = $("#f-add"), msg = $("#f-add-msg");
+  let raw = $("#f-url").value.trim();
+  if (!raw) return;
+  // A pasted domain has no scheme; assume https rather than rejecting it.
+  if (!/^https?:\/\//i.test(raw)) raw = "https://" + raw.replace(/^\/+/, "");
+
+  msg.style.color = ""; msg.textContent = "Looking for a feed…";
+  btn.disabled = true; btn.textContent = "Checking…";
+  try {
+    const found = await resolveFeed(raw);
+    if (cfg.feeds.some(f => f.url === found.url)) throw new Error("You already have that feed.");
+    const name = $("#f-name").value.trim() || found.name
+      || (() => { try { return new URL(found.url).hostname.replace(/^www\./, ""); } catch { return "Feed"; } })();
+    cfg.feeds.push({ id: newId(), name, url: found.url, cat: $("#f-cat").value || "Other" });
+    save();
+    $("#f-url").value = ""; $("#f-name").value = "";
+    msg.textContent = "Added " + name + " — " + found.url;
+    renderFeeds(); renderLibrary(); render();
+  } catch (e) {
+    msg.style.color = "var(--accent)";
+    msg.textContent = e && e.message ? e.message : "Could not read that as a feed.";
+  } finally {
+    btn.disabled = false; btn.textContent = "Add feed";
+  }
 };
 
-$("#proxy").oninput = e => { cfg.proxies  = e.target.value.split("\n").map(s => s.trim()).filter(Boolean); save(); };
 $("#s-auto").onchange   = e => { cfg.autoRefresh = e.target.checked; save(); };
 $("#s-idle").onchange   = e => { cfg.idleResetMin = +e.target.value || 0; save(); markSeen(); };
 $("#s-dupes").onchange  = e => {
@@ -1428,7 +1508,60 @@ $("#f-test").onclick = async () => {
   b.disabled = false;
 };
 
+const xmlEsc = t => String(t).replace(/[&<>"]/g, c =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function toOPML() {
+  const order = [...CATS, "Other"];
+  const cats = [...new Set(cfg.feeds.map(f => f.cat || "Other"))]
+    .sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  const body = cats.map(c =>
+    '    <outline text="' + xmlEsc(c) + '">\n' +
+    cfg.feeds.filter(f => (f.cat || "Other") === c).map(f =>
+      '      <outline type="rss" text="' + xmlEsc(f.name) +
+      '" title="' + xmlEsc(f.name) + '" xmlUrl="' + xmlEsc(f.url) + '"/>'
+    ).join("\n") + "\n    </outline>"
+  ).join("\n");
+  return '<?xml version="1.0" encoding="UTF-8"?>\n<opml version="2.0">\n  <head>\n'
+    + "    <title>News feeds</title>\n  </head>\n  <body>\n" + body + "\n  </body>\n</opml>\n";
+}
+
+function fromOPML(text) {
+  const doc = new DOMParser().parseFromString(text, "application/xml");
+  if (doc.querySelector("parsererror")) throw new Error("not valid OPML");
+  const found = [];
+  for (const o of doc.querySelectorAll("outline[xmlUrl]")) {
+    const url = safeLink(o.getAttribute("xmlUrl"));
+    if (!url) continue;
+    // The enclosing outline is the folder, which maps onto our categories.
+    const parent = o.parentElement;
+    const folder = parent && parent.tagName.toLowerCase() === "outline"
+      ? (parent.getAttribute("text") || parent.getAttribute("title") || "") : "";
+    const cat = CAT_ORDER.find(c => c.toLowerCase() === folder.trim().toLowerCase()) || "Other";
+    found.push({
+      id: newId(),
+      name: (o.getAttribute("title") || o.getAttribute("text") || "").trim()
+            || (() => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return "Feed"; } })(),
+      url, cat
+    });
+  }
+  if (!found.length) throw new Error("no feeds found in that OPML");
+  return found;
+}
+
 $("#io-export").onclick = () => { $("#io").value = JSON.stringify(cfg, null, 2); };
+$("#opml-export").onclick = () => { $("#io").value = toOPML(); };
+$("#opml-import").onclick = () => {
+  try {
+    const incoming = fromOPML($("#io").value);
+    const have = new Set(cfg.feeds.map(f => f.url));
+    const added = incoming.filter(f => !have.has(f.url));
+    cfg.feeds = cfg.feeds.concat(added);
+    save(); renderFeeds(); renderLibrary(); render();
+    setStatus("Imported " + added.length + " feed" + (added.length === 1 ? "" : "s")
+      + (incoming.length - added.length ? ", " + (incoming.length - added.length) + " already present" : ""));
+  } catch (e) { alert(e.message); }
+};
 $("#io-import").onclick = () => {
   try {
     cfg = migrate({ ...DEFAULTS, ...JSON.parse($("#io").value) });
@@ -1537,7 +1670,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.35";
+const BUILD = "2026-08-23.36";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

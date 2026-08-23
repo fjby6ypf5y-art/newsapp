@@ -124,8 +124,10 @@ Tap the **⚙** button to configure.
   thin category looking stale. Tap to add or remove. Everything in it is
   free and non-paywalled, published first-party — no aggregator bridges (they
   go down) and no metered outlets whose links dead-end on a subscribe wall.
-- **Add by URL** — any other feed, filed under a category you pick. Most outlets
-  publish one at `/rss`, `/feed`, or `/rss.xml`.
+- **Add by URL** — paste a plain site address (`theguardian.com`) and the feed
+  is found from the page's advertised `<link rel="alternate">`, falling back to
+  the conventional paths. An exact feed URL works too. The name is taken from
+  the feed itself unless you supply one.
 
 **Feed formats.** Two families work:
 
