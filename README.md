@@ -50,6 +50,10 @@ and shows your last stories even with no bars.
 
 ### Set up your feeds
 
+The header has three buttons: **↻** refresh, **☰** feeds, **⚙** settings. Feeds
+live on their own page because they are the part you actually maintain;
+Settings holds behaviour, privacy, the relay list and backup.
+
 The chips under the header are **pages, not filters** — one per category, each
 showing only that category, newest first. Tapping one always lands you at the
 top of it, and the app reopens on whichever you last read. Categories appear in
@@ -90,9 +94,13 @@ belongs to the Shortcut, which can actually reach you with the app closed.
 
 Tap the **⚙** button to configure.
 
-- **Your feeds** — grouped by category, each with a health dot. Green means the
-  feed answered on the last refresh; red shows the actual error. **Test all
-  feeds** re-checks every one on demand.
+- **Your feeds** (☰ page) — grouped by category, each with a health dot. Green
+  means the feed answered on the last refresh; red shows the actual error.
+  **Tap any feed to edit its name, address or category, or delete it** — so a
+  publisher moving its RSS is a thirty-second fix rather than a code change.
+  Editing an address clears what was learned about the old one; renaming a feed
+  relabels the stories already fetched under the old name. **Test all feeds**
+  re-checks every one on demand.
 - **Add from library** — 82 curated feeds across the seven categories, with an
   **Add all** button per category.
   Digital-native outlets sit alongside legacy ones: Axios, Vox, The Intercept,
