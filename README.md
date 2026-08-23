@@ -50,9 +50,17 @@ and shows your last stories even with no bars.
 
 ### Set up your feeds
 
-Tap the **⚙** button. Stories are filtered by **category** from the chips under
-the header, not by individual outlet — with a couple of dozen feeds a
-per-source chip row gets longer than the story list.
+Stories are grouped into **categories**, each headed by a count and a dot in
+that category's hottest colour. Within a group, stories run hottest (newest)
+to coldest, and the categories themselves lead with whichever holds the newest
+story — so the most active category sits at the top. Tapping a category chip
+narrows to just that one.
+
+Sorting is strictly by time. Keyword hits are *not* floated above newer
+stories, because that would break the promise that the reddest item is the
+first one; the `ALERT` tag and the Alerts chip carry that instead.
+
+Tap the **⚙** button to configure.
 
 - **Your feeds** — grouped by category, each with a health dot. Green means the
   feed answered on the last refresh; red shows the actual error. **Test all
