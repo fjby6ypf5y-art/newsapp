@@ -323,6 +323,25 @@ tools-icon.py          regenerates the icons; no dependencies
 No build step, no dependencies, no npm. Edit `index.html`, commit, and Pages
 redeploys in about a minute.
 
+## Keeping your feeds through a reinstall
+
+**On iOS a Home Screen app has its own storage, separate from Safari — and
+deleting the icon deletes it.** So re-adding the icon to pick up a change wipes
+your feed list. Nothing local can survive that, so the fix is a link that
+carries your setup.
+
+Settings → Backup → **Copy setup link** produces a URL with your feeds and
+settings packed into it (about 1.8 KB for sixteen feeds). Mail it to yourself.
+Opening it offers to restore, and adding *that* link to the Home Screen brings
+everything back on first launch.
+
+A setup link is treated as untrusted — it could come from anyone — so it never
+applies itself. It says how many feeds it holds and waits to be accepted, and a
+malformed one is ignored rather than breaking the app.
+
+The JSON export and OPML export in the same section are the other two routes:
+JSON is the complete config, OPML moves your feeds to any other reader.
+
 ## Privacy and security
 
 Everything is local. Feed list, read state and cached headlines are
