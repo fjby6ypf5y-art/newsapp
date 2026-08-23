@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Breaking</title>
+<title>News</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0d0d10">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Breaking">
+<meta name="apple-mobile-web-app-title" content="News">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" href="icons/icon-192.png">
 <style>
@@ -141,7 +141,7 @@ textarea{min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospac
 
 <header>
   <div class="bar">
-    <div class="brand"><span class="dot live"></span><h1>Breaking</h1></div>
+    <div class="brand"><span class="dot live"></span><h1>News</h1></div>
     <button class="iconbtn" id="refresh" aria-label="Refresh">&#8635;</button>
     <button class="iconbtn" id="open-settings" aria-label="Settings">&#9881;</button>
   </div>
@@ -209,6 +209,8 @@ textarea{min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospac
 "use strict";
 
 /* ------------------------------------------------------------------ state */
+// Storage key keeps its original name: renaming it would orphan the feed
+// list, cached stories and settings on every device that already has them.
 const KEY = "breaking.v1";
 
 /* Curated feed library. Everything here is a free, non-paywalled publisher
@@ -986,8 +988,8 @@ setInterval(() => { if (!document.hidden) render(); }, 60000);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-const BUILD = "2026-08-23.18";
-$("#ver").textContent = "Breaking · build " + BUILD + " · "
+const BUILD = "2026-08-23.19";
+$("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
 </body>

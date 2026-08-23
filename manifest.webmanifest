@@ -1,7 +1,7 @@
 {
-  "name": "Breaking",
-  "short_name": "Breaking",
-  "description": "A private breaking-news reader that runs entirely on your phone.",
+  "name": "News",
+  "short_name": "News",
+  "description": "A private news reader that runs entirely on your phone.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

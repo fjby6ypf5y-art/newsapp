@@ -1,6 +1,6 @@
-# Breaking
+# News
 
-A breaking-news reader that runs entirely on your iPhone. No web host, no home
+A news reader that runs entirely on your iPhone. No web host, no home
 server, no account, no backend. Your feed list, read state and cached headlines
 live in your phone's local storage and are never sent anywhere.
 
@@ -174,7 +174,7 @@ This is what actually taps you on the shoulder. It runs with the app closed.
 
 ### Build the Shortcut
 
-Open **Shortcuts** → **+** → name it **Breaking Check**. Add these actions in
+Open **Shortcuts** → **+** → name it **News Check**. Add these actions in
 order (search for each by name in the action list):
 
 1. **Text**
@@ -205,7 +205,7 @@ order (search for each by name in the action list):
    Turn **Error If Not Found** **off** in the action's ⓘ options.
 
 8. **If** — *File* **is not** *Item from List*:
-   - **Show Notification** — Title `Breaking`, Body: the *Item from List*.
+   - **Show Notification** — Title `News`, Body: the *Item from List*.
    - **Save File** — save *Item from List* to Service *Shortcuts*, path
      `last-headline.txt`, **Overwrite If File Exists** on, *Ask Where to Save*
      **off**.
@@ -221,7 +221,7 @@ Run it manually once to confirm you get a notification and grant it file access.
 **Shortcuts** → **Automation** tab → **+** → **Time of Day**.
 
 - Pick a time, repeat **Daily**.
-- Choose **Breaking Check**.
+- Choose **News Check**.
 - **Turn "Ask Before Running" OFF** and **"Notify When Run" off.** This is the
   step people miss — leave it on and you get a confirmation prompt instead of
   an alert.
@@ -238,7 +238,7 @@ Two honest caveats:
 - If your phone is in Low Power Mode or has been idle a long time, a run can
   be delayed or skipped. This is a news *alerter*, not a pager.
 
-Tap any notification to open Breaking and read the story in full.
+Tap any notification to open the app and read the story in full.
 
 ---
 
