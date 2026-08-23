@@ -1320,9 +1320,24 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
 })();
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("sw.js").catch(() => {});
+  // Check for a new worker on every launch, not just when the browser feels
+  // like it, and reload once the new one takes over so the running page is not
+  // left on the old build.
+  navigator.serviceWorker.register("sw.js")
+    .then(reg => {
+      reg.update().catch(() => {});
+      setInterval(() => reg.update().catch(() => {}), 60 * 60 * 1000);
+    })
+    .catch(() => {});
+
+  let reloading = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (reloading) return;      // guard: controllerchange must not loop
+    reloading = true;
+    location.reload();
+  });
 }
-const BUILD = "2026-08-23.29";
+const BUILD = "2026-08-23.30";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
