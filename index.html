@@ -134,6 +134,8 @@ textarea{min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospac
   background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:11px 12px;margin-bottom:8px}
 .sw label{font-size:14.5px}
 .sw input{width:44px;height:26px;flex:none}
+.sw select{flex:none;background:var(--panel2);border:1px solid var(--line);
+  border-radius:9px;padding:7px 9px;font-size:13.5px}
 .hd{width:8px;height:8px;border-radius:50%;flex:none;background:var(--faint)}
 .hd.ok{background:#4bd76d}
 .hd.bad{background:var(--accent)}
@@ -199,6 +201,19 @@ textarea{min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospac
 
   <h3>Behaviour</h3>
   <div class="sw"><label for="s-auto">Refresh when app opens</label><input type="checkbox" id="s-auto" checked></div>
+  <div class="sw"><label for="s-idle">Reset to first category after</label>
+    <select id="s-idle">
+      <option value="0">Never</option>
+      <option value="5">5 minutes</option>
+      <option value="15">15 minutes</option>
+      <option value="30">30 minutes</option>
+      <option value="60">1 hour</option>
+      <option value="120">2 hours</option>
+      <option value="480">8 hours</option>
+    </select></div>
+  <p class="hint">Reopening the app after this long goes back to the first
+  category instead of wherever you were. Pull down on the list to refresh just
+  the category you're reading; the &#8635; button refreshes every category.</p>
 
   <h3>Privacy</h3>
   <div class="sw"><label for="s-direct">Direct only &mdash; never use a relay</label><input type="checkbox" id="s-direct"></div>
@@ -358,6 +373,7 @@ const DEFAULTS = {
     "https://api.codetabs.com/v1/proxy?quest="
   ],
   autoRefresh: true,
+  idleResetMin: 30,          // 0 = never reset the category
   directOnly: false
 };
 
@@ -496,12 +512,14 @@ let seen     = new Set(JSON.parse(localStorage.getItem(KEY + ".seen")  || "[]"))
 let active   = localStorage.getItem(KEY + ".tab") || "";   // category on screen
 
 // Coming back after a break should feel like opening the paper, not resuming
-// mid-scroll in whatever niche category you last poked at.
-const IDLE_RESET_MS = 30 * 60 * 1000;
+// mid-scroll in whatever niche category you last poked at. How long "a break"
+// means is a matter of taste, so it is a setting.
 const markSeen = () => { try { localStorage.setItem(KEY + ".seenAt", Date.now()); } catch {} };
 function resetTabIfStale() {
+  const mins = cfg.idleResetMin;
   const last = +(localStorage.getItem(KEY + ".seenAt") || 0);
-  if (last && Date.now() - last <= IDLE_RESET_MS) return false;
+  if (last && !mins) return false;                       // "Never", once established
+  if (last && Date.now() - last <= mins * 60000) return false;
   active = "";                                  // render() falls back to the first
   try { localStorage.removeItem(KEY + ".tab"); } catch {}
   return true;
@@ -616,14 +634,20 @@ function parseFeed(xml, source) {
   }).filter(i => i.title !== "(untitled)" || i.link);
 }
 
-async function refresh() {
+// scope: an array of feeds to fetch, or omitted for all of them. The pull
+// gesture refreshes just the category on screen; the button does the lot.
+async function refresh(scope) {
   if (loading) return;
+  const feeds = Array.isArray(scope) ? scope : cfg.feeds;
+  const scoped = Array.isArray(scope);
+  if (!feeds.length) { setStatus(scoped ? "No feeds in " + active : "No feeds yet"); return; }
   loading = true;
   $("#refresh").style.opacity = ".4";
-  setStatus("Fetching " + cfg.feeds.length + " feed" + (cfg.feeds.length === 1 ? "" : "s") + "…");
+  setStatus("Fetching " + feeds.length + " " + (scoped ? active + " " : "")
+    + "feed" + (feeds.length === 1 ? "" : "s") + "…");
 
   const merged = new Map(items.map(i => [i.id, i]));
-  const total = cfg.feeds.length;
+  const total = feeds.length;
   let ok = 0, done = 0;
   const failed = [];
 
@@ -643,7 +667,7 @@ async function refresh() {
   };
 
   // Render each feed the moment it lands rather than blocking on the slowest.
-  await Promise.all(cfg.feeds.map(f =>
+  await Promise.all(feeds.map(f =>
     grab(f.url).then(x => parseFeed(x, f.name)).then(
       list => {
         ok++;
@@ -668,7 +692,8 @@ async function refresh() {
   } else {
     const fresh = items.filter(i => !seen.has(i.id)).length;
     setStatus(
-      "Updated " + timeAgo(Date.now()) + " · " + ok + "/" + total + " feeds"
+      "Updated " + timeAgo(Date.now()) + " · " + ok + "/" + total + " "
+      + (scoped ? active + " " : "") + "feeds"
       + (fresh ? " · " + fresh + " new" : "")
       + (failed.length ? " · failed: " + failed.join(", ") : ""),
       failed.length > 0 && ok === 0
@@ -941,6 +966,7 @@ function openSettings(open) {
     $("#proxy").value   = cfg.proxies.join("\n");
     $("#s-auto").checked   = cfg.autoRefresh;
     $("#s-direct").checked = cfg.directOnly;
+    $("#s-idle").value = String(cfg.idleResetMin);
     const checked = cfg.feeds.filter(f => health[f.url] && health[f.url].ok);
     const viaRelay = checked.filter(f => !health[f.url].direct);
     $("#relay-count").textContent = checked.length
@@ -972,6 +998,7 @@ $("#f-add").onclick = () => {
 
 $("#proxy").oninput = e => { cfg.proxies  = e.target.value.split("\n").map(s => s.trim()).filter(Boolean); save(); };
 $("#s-auto").onchange   = e => { cfg.autoRefresh = e.target.checked; save(); };
+$("#s-idle").onchange   = e => { cfg.idleResetMin = +e.target.value || 0; save(); markSeen(); };
 $("#s-direct").onchange = e => {
   cfg.directOnly = e.target.checked; save();
   routes = {}; localStorage.setItem(KEY + ".routes", "{}");   // re-probe from scratch
@@ -1061,8 +1088,8 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     pulling = false; startY = null;
     if (go) {
       ptr.classList.add("busy");
-      label.textContent = "Refreshing…";
-      refresh().finally(() => { ptr.classList.remove("busy"); settle(); });
+      label.textContent = "Refreshing " + active + "…";
+      refresh(cfg.feeds.filter(f => (f.cat || "Other") === active)).finally(() => { ptr.classList.remove("busy"); settle(); });
     } else {
       settle();
     }
@@ -1074,7 +1101,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-const BUILD = "2026-08-23.20";
+const BUILD = "2026-08-23.21";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
