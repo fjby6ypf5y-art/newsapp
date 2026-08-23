@@ -135,6 +135,8 @@ main{
 .clock{font-variant-numeric:tabular-nums;color:var(--dim)}
 .also{font-size:0.625rem;font-weight:700;letter-spacing:.4px;color:var(--dim);
   border:1px solid var(--line);border-radius:4px;padding:1px 4px}
+.alsonames{font-size:0.6875rem;color:var(--faint);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:11rem}
 .src{color:var(--dim);font-weight:600}
 .snip{margin:5px 0 0;font-size:0.8438rem;color:var(--dim);line-height:1.4;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -891,10 +893,12 @@ async function refresh(scope) {
     setStatus("No feeds reachable — check your connection or relays", true);
   } else {
     const fresh = items.filter(i => !seen.has(i.id)).length;
+    const grouped = items.filter(i => i.hidden).length;
     setStatus(
       "Updated " + timeAgo(Date.now()) + " · " + ok + "/" + total + " "
       + (scoped ? active + " " : "") + "feeds"
       + (fresh ? " · " + fresh + " new" : "")
+      + (grouped ? " · " + grouped + " grouped" : "")
       + (failed.length
           ? " · failed: " + (failed.length > 2
               ? failed.slice(0, 2).join(", ") + " +" + (failed.length - 2) + " more"
@@ -1204,9 +1208,12 @@ function renderItem(i, list) {
     const s = el("span", "src"); s.textContent = i.source; m.appendChild(s);
     if (i.alsoIn && i.alsoIn.length) {
       const also = el("span", "also");
-      also.textContent = "+" + i.alsoIn.length;
+      also.textContent = "+" + i.alsoIn.length + " more";
       also.title = "Also covered by " + i.alsoIn.join(", ");
       m.appendChild(also);
+      const who = el("span", "alsonames");
+      who.textContent = i.alsoIn.join(", ");
+      m.appendChild(who);
     }
     if (i.ts) {
       const c = el("span", "clock"); c.textContent = "· " + clockOf(i.ts); m.appendChild(c);
@@ -1840,7 +1847,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.40";
+const BUILD = "2026-08-23.41";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
