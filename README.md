@@ -99,7 +99,9 @@ Tap the **⚙** button to configure.
   **Tap any feed to edit its name, address or category** — so a publisher moving
   its RSS is a thirty-second fix rather than a code change. **Cancel** closes
   without writing anything, so you can open a feed just to read its address.
-  **Delete feed** sits on its own row, away from Save.
+  **Delete feed** sits on its own row, away from Save, and asks
+  for confirmation naming the feed before anything is removed. Red is reserved
+  for destructive actions throughout, so Save is never red.
   Editing an address clears what was learned about the old one; renaming a feed
   relabels the stories already fetched under the old name. **Test all feeds**
   re-checks every one on demand.

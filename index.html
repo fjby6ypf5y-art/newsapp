@@ -127,7 +127,9 @@ input[type=text],input[type=url],textarea{
   padding:11px 12px;font-size:15px;margin-bottom:8px}
 textarea{min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.5}
 .btn{width:100%;border:0;border-radius:11px;padding:12px;font-size:15px;font-weight:600;background:var(--panel2)}
-.btn.primary{background:var(--accent);color:#fff}
+/* Red is reserved for destructive actions. A red Save sitting above a red
+   Delete made the two read as the same kind of thing. */
+.btn.primary{background:var(--text);color:#111}
 .btn:active{opacity:.7}
 .btns{display:flex;gap:8px;margin-top:4px}
 .sw{display:flex;align-items:center;justify-content:space-between;gap:12px;
@@ -147,6 +149,10 @@ select.sel{width:100%;background:var(--panel);border:1px solid var(--line);
 .editor textarea{min-height:62px;font-size:12px;margin-bottom:9px}
 .editor .btns{margin-top:2px}
 .btn.danger{background:transparent;border:1px solid rgba(232,67,79,.4);color:var(--accent)}
+.confirm{margin-top:8px;padding:10px;border-radius:11px;
+  background:rgba(232,67,79,.08);border:1px solid rgba(232,67,79,.3)}
+.confirm .err-msg{margin-bottom:9px;font-size:13.5px;line-height:1.4}
+.confirm .btn.danger{background:var(--accent);color:#fff;border-color:var(--accent)}
 .err-msg{color:var(--accent);font-size:12px;margin:0 0 8px}
 .hd{width:8px;height:8px;border-radius:50%;flex:none;background:var(--faint)}
 .hd.ok{background:#4bd76d}
@@ -1031,6 +1037,26 @@ function feedEditor(f) {
   del.style.marginTop = "8px";
   wrap.appendChild(del);
 
+  // Deleting is the one irreversible action here, and there is no undo, so it
+  // asks first - naming the feed, since the editor may be scrolled past it.
+  const confirmBox = el("div", "confirm");
+  confirmBox.style.display = "none";
+  const q = el("p", "err-msg");
+  q.style.color = "var(--text)";
+  q.textContent = "Delete " + f.name + "? Its stories are removed too.";
+  const cbtns = el("div", "btns");
+  const keep = el("button", "btn");        keep.textContent = "Keep";
+  const yes  = el("button", "btn danger"); yes.textContent = "Delete";
+  cbtns.append(keep, yes);
+  confirmBox.append(q, cbtns);
+  wrap.appendChild(confirmBox);
+
+  const arm = on => {
+    del.style.display = on ? "none" : "";
+    confirmBox.style.display = on ? "" : "none";
+  };
+  keep.onclick = e => { e.stopPropagation(); arm(false); };
+
   cancel.onclick = e => {
     e.stopPropagation();
     editing = null;          // nothing was written, so just close
@@ -1070,7 +1096,9 @@ function feedEditor(f) {
     renderFeeds(); renderLibrary(); render();
   };
 
-  del.onclick = e => {
+  del.onclick = e => { e.stopPropagation(); arm(true); };
+
+  yes.onclick = e => {
     e.stopPropagation();
     cfg.feeds = cfg.feeds.filter(o => o.id !== f.id);
     delete health[f.url]; delete routes[f.url];
@@ -1294,7 +1322,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-const BUILD = "2026-08-23.27";
+const BUILD = "2026-08-23.29";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
