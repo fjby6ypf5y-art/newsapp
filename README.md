@@ -64,6 +64,15 @@ There is no "All" view. It was the one chip that behaved differently — a stack
 of grouped sections rather than a single list — which made the whole row read
 as filters over one page instead of a set of pages.
 
+**Pull down** on the list to refresh. Past about 64px the label switches to
+*Release to refresh*; letting go before that cancels. The gesture only starts
+when the list is already at the top, so it never fights a normal scroll.
+
+**Coming back after 30 minutes away** reopens on the first category rather than
+wherever you last were — returning to the app should feel like opening the
+paper, not resuming mid-scroll in some niche section. Switch away and back
+within that window and your place is kept.
+
 Read and unread differ only by **colour** — read headlines dim, and unread ones
 carry a red dot. Nothing about the state changes weight, size or spacing: a
 property that affects layout would re-flow the headline under your finger at

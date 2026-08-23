@@ -20,8 +20,9 @@
      Hue carries no inherent magnitude, so the spectrum leans on the familiar
      rainbow order rather than on brightness; the timestamp printed on every
      row is what actually pins an item down. All seven clear 4:1 on this
-     surface (4.17 worst, at the violet end). */
-  --h0:#ff6056; --h1:#f58e02; --h2:#e8ca17; --h3:#4bd76d;
+     surface (4.17 worst, at the violet end); the hot end is a true red rather
+     than a salmon, which also widens its separation from the orange band. */
+  --h0:#ff252b; --h1:#f58e02; --h2:#e8ca17; --h3:#4bd76d;
   --h4:#00acec; --h5:#7177ea; --h6:#a355b4;
   --safe-t:env(safe-area-inset-top); --safe-b:env(safe-area-inset-bottom);
 }
@@ -71,11 +72,24 @@ h1{margin:0;font-size:22px;font-weight:800;letter-spacing:-.4px}
 .chip[aria-pressed="true"]{background:var(--text);border-color:var(--text);color:#111;font-weight:600}
 
 /* ---------- list ---------- */
+/* The list is absolutely positioned inside a clipping pane so it can be
+   translated downward during a pull without disturbing anything else. */
+.pane{flex:1;min-height:0;position:relative;overflow:hidden}
 main{
-  flex:1;min-height:0;
+  position:absolute;inset:0;
   overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
   padding:0 0 calc(var(--safe-b) + 40px);
+  background:var(--bg);
 }
+#ptr{
+  position:absolute;left:0;right:0;top:0;height:70px;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  font-size:13px;color:var(--faint);pointer-events:none;opacity:0;
+}
+#ptr .spin{display:inline-block;font-size:15px;transition:transform .15s}
+#ptr.ready .spin{transform:rotate(180deg)}
+#ptr.busy .spin{animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 .item{display:block;text-decoration:none;color:inherit;padding:14px 16px 14px 18px;
   border-bottom:1px solid var(--line);position:relative;
   --heat:var(--h6);
@@ -150,7 +164,10 @@ textarea{min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospac
   <div class="legend" aria-hidden="true"><span>Now</span><span class="grad"></span><span>24h+</span></div>
 </header>
 
-<main id="list"></main>
+<div class="pane">
+  <div id="ptr"><span class="spin">&#8635;</span><span id="ptr-text">Pull to refresh</span></div>
+  <main id="list"></main>
+</div>
 
 <!-- ================= settings ================= -->
 <section class="sheet" id="settings" aria-hidden="true">
@@ -477,6 +494,18 @@ function pruneOrphans() {
 }
 let seen     = new Set(JSON.parse(localStorage.getItem(KEY + ".seen")  || "[]"));
 let active   = localStorage.getItem(KEY + ".tab") || "";   // category on screen
+
+// Coming back after a break should feel like opening the paper, not resuming
+// mid-scroll in whatever niche category you last poked at.
+const IDLE_RESET_MS = 30 * 60 * 1000;
+const markSeen = () => { try { localStorage.setItem(KEY + ".seenAt", Date.now()); } catch {} };
+function resetTabIfStale() {
+  const last = +(localStorage.getItem(KEY + ".seenAt") || 0);
+  if (last && Date.now() - last <= IDLE_RESET_MS) return false;
+  active = "";                                  // render() falls back to the first
+  try { localStorage.removeItem(KEY + ".tab"); } catch {}
+  return true;
+}
 let loading  = false;
 
 const $  = s => document.querySelector(s);
@@ -974,21 +1003,78 @@ $("#io-import").onclick = () => {
 
 /* ------------------------------------------------------------------ boot */
 pruneOrphans();
+resetTabIfStale();
+markSeen();
 render();
 if (items.length) setStatus(items.length + " stored stories · refreshing…");
 refresh();
 
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && cfg.autoRefresh) refresh();
+  if (document.hidden) { markSeen(); return; }
+  if (resetTabIfStale()) { render(); $("#list").scrollTop = 0; }
+  markSeen();
+  if (cfg.autoRefresh) refresh();
 });
 
 // tick the relative timestamps
-setInterval(() => { if (!document.hidden) render(); }, 60000);
+setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
+
+/* ---- pull to refresh ---- */
+(function () {
+  const list = $("#list"), ptr = $("#ptr"), label = $("#ptr-text");
+  const TRIGGER = 64, MAX = 96;
+  let startY = null, pulling = false, dist = 0;
+
+  const paint = d => {
+    list.style.transform = d ? "translateY(" + d + "px)" : "";
+    ptr.style.opacity = Math.min(1, d / TRIGGER);
+    ptr.classList.toggle("ready", d >= TRIGGER);
+    label.textContent = d >= TRIGGER ? "Release to refresh" : "Pull to refresh";
+  };
+
+  const settle = () => {
+    list.style.transition = "transform .25s cubic-bezier(.32,.72,0,1)";
+    paint(0);
+    setTimeout(() => { list.style.transition = ""; }, 280);
+  };
+
+  list.addEventListener("touchstart", e => {
+    if (loading || list.scrollTop > 0 || e.touches.length !== 1) { startY = null; return; }
+    startY = e.touches[0].clientY;
+    dist = 0;
+  }, { passive: true });
+
+  list.addEventListener("touchmove", e => {
+    if (startY === null) return;
+    const dy = e.touches[0].clientY - startY;
+    // Let an upward swipe, or any scroll away from the top, go back to normal.
+    if (dy <= 0 || list.scrollTop > 0) { if (pulling) { pulling = false; settle(); } startY = null; return; }
+    e.preventDefault();                       // needs passive:false to hold the gesture
+    pulling = true;
+    dist = Math.min(MAX, dy * 0.5);           // resistance, so it feels rubbery
+    paint(dist);
+  }, { passive: false });
+
+  const release = () => {
+    if (!pulling) { startY = null; return; }
+    const go = dist >= TRIGGER;
+    pulling = false; startY = null;
+    if (go) {
+      ptr.classList.add("busy");
+      label.textContent = "Refreshing…";
+      refresh().finally(() => { ptr.classList.remove("busy"); settle(); });
+    } else {
+      settle();
+    }
+  };
+  list.addEventListener("touchend", release);
+  list.addEventListener("touchcancel", release);
+})();
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-const BUILD = "2026-08-23.19";
+const BUILD = "2026-08-23.20";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
