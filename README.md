@@ -236,13 +236,23 @@ account, and no server of ours anywhere. The only outbound requests are to the
 feeds you list and, where a feed refuses a direct request, the relays in
 Settings.
 
-**The relay is the weak point.** News sites don't send CORS headers, so most
+**The relay is the weak point.** News sites don't send CORS headers, so some
 feeds can only be read through a public relay, and that relay sees your IP
-address and every feed URL you fetch — a rough picture of what you read and
-when. It can also rewrite what comes back. Nothing else in this setup has that
-much reach. Feeds served over HTTPS that your phone can fetch directly skip the
-relay entirely; the health dots don't distinguish the two, but a feed that
-works with the relay list emptied is going direct.
+address and every feed URL routed through it — a rough picture of what you read
+and when. It can also rewrite what comes back. Nothing else in this setup has
+that much reach.
+
+So the app minimises it, and shows you exactly where you stand:
+
+- Every feed in Settings is tagged **direct** (green — straight from the
+  publisher, nobody in between) or **relay** (amber — a third party saw it).
+  The Privacy section names which feeds still need a relay.
+- Direct is always tried first, and a feed sitting on a relay is re-tested
+  directly every six hours, so it climbs off as soon as the publisher adds CORS
+  support rather than being stuck there because a relay once answered first.
+- **Direct only** disables relays completely. Nothing but your phone and the
+  publisher. Feeds that need a relay then fail honestly rather than quietly
+  routing through a stranger — check the health dots and swap them out.
 
 Because relay output is untrusted, the app treats feed content as hostile:
 

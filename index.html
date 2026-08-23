@@ -125,6 +125,10 @@ textarea{min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospac
 .hd{width:8px;height:8px;border-radius:50%;flex:none;background:var(--faint)}
 .hd.ok{background:#4bd76d}
 .hd.bad{background:var(--accent)}
+.route{font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+  border-radius:4px;padding:1px 5px;flex:none}
+.route.direct{color:#4bd76d;border:1px solid rgba(75,215,109,.35)}
+.route.relay{color:#f5a623;border:1px solid rgba(245,166,35,.35)}
 .row .e{font-size:11px;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cat{margin:14px 0 6px;font-size:11px;font-weight:800;letter-spacing:.9px;
   text-transform:uppercase;color:var(--dim)}
@@ -189,11 +193,18 @@ textarea{min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospac
   <p class="hint">Notifications only fire while the app is open in the foreground &mdash; iOS Safari
   cannot wake a home-screen web app on its own. Use the Shortcut (see README) for background alerts.</p>
 
+  <h3>Privacy</h3>
+  <div class="sw"><label for="s-direct">Direct only &mdash; never use a relay</label><input type="checkbox" id="s-direct"></div>
+  <p class="hint" id="relay-count"></p>
+
   <h3>Fetch relay</h3>
   <input type="text" id="proxy" placeholder="https://api.allorigins.win/raw?url=">
   <p class="hint">News sites block direct browser requests (CORS). Each feed is tried
   directly first, then through these relays in order, one URL-prefix per line.
-  Leave the defaults unless one stops working.</p>
+  A relay sees your IP address and which feeds you fetch, so the fewer feeds
+  that need one, the less anybody learns about your reading. Feeds on a relay
+  are re-tested directly every few hours, in case the publisher adds CORS
+  support.</p>
 
   <h3>Backup</h3>
   <textarea id="io" spellcheck="false" placeholder="Your config as JSON"></textarea>
@@ -322,8 +333,14 @@ const DEFAULTS = {
     "https://api.codetabs.com/v1/proxy?quest="
   ],
   autoRefresh: true,
-  notify: false
+  notify: false,
+  directOnly: false
 };
+
+// How often to re-test a direct fetch for a feed currently going via a relay.
+// Publishers do add CORS headers over time, and without this a feed would stay
+// on the relay forever just because the relay answered first, once.
+const REPROBE_MS = 6 * 60 * 60 * 1000;
 
 // Feeds that proved unreliable in the field, and what replaced them. Anyone
 // who already installed the app has the old list in localStorage, so changing
@@ -398,6 +415,12 @@ const el = (t, c) => { const n = document.createElement(t); if (c) n.className =
 let health = {};
 try { health = JSON.parse(localStorage.getItem(KEY + ".health") || "{}"); } catch {}
 const saveHealth = () => localStorage.setItem(KEY + ".health", JSON.stringify(health));
+// Route index 0 is the publisher itself; anything else went through a relay,
+// which means a third party saw that you fetched it.
+const isDirect = url => {
+  const m = routes[url];
+  return (m && typeof m === "object" ? m.i : m) === 0;
+};
 
 let routes = {};
 try { routes = JSON.parse(localStorage.getItem(KEY + ".routes") || "{}"); } catch {}
@@ -417,10 +440,18 @@ async function tryOnce(target) {
 }
 
 async function grab(url) {
-  const all = [url, ...cfg.proxies.map(p => p + encodeURIComponent(url))];
-  // Start with whatever worked last time, then everything else in order.
-  const first = routes[url];
-  const order = Number.isInteger(first) && all[first]
+  // Direct-only mode drops the relays entirely: nothing but your phone and the
+  // publisher, at the cost of every feed that needs a relay to be reachable.
+  const all = cfg.directOnly ? [url] : [url, ...cfg.proxies.map(p => p + encodeURIComponent(url))];
+
+  const memo = routes[url];
+  const first = memo && typeof memo === "object" ? memo.i : memo;
+  const probedAt = memo && typeof memo === "object" ? memo.t : 0;
+  const stale = Date.now() - (probedAt || 0) > REPROBE_MS;
+
+  // Retry direct first when the memo is stale, so a feed can climb back off
+  // the relay; otherwise start with whatever answered last time.
+  const order = (Number.isInteger(first) && all[first] && !(first !== 0 && stale))
     ? [first, ...all.keys()].filter((v, i, arr) => arr.indexOf(v) === i)
     : [...all.keys()];
 
@@ -428,10 +459,8 @@ async function grab(url) {
   for (const idx of order) {
     try {
       const text = await tryOnce(all[idx]);
-      if (routes[url] !== idx) {
-        routes[url] = idx;
-        localStorage.setItem(KEY + ".routes", JSON.stringify(routes));
-      }
+      routes[url] = { i: idx, t: Date.now() };
+      localStorage.setItem(KEY + ".routes", JSON.stringify(routes));
       return text;
     } catch (e) { lastErr = e; }
   }
@@ -511,7 +540,7 @@ async function refresh() {
     grab(f.url).then(x => parseFeed(x, f.name)).then(
       list => {
         ok++;
-        health[f.url] = { ok: true, at: Date.now(), n: list.length };
+        health[f.url] = { ok: true, at: Date.now(), n: list.length, direct: isDirect(f.url) };
         absorb(list); render();
       },
       err => {
@@ -778,7 +807,17 @@ function renderFeeds() {
       const d = el("span", "hd" + (hs ? (hs.ok ? " ok" : " bad") : ""));
       d.title = hs ? (hs.ok ? hs.n + " stories" : hs.err) : "not checked yet";
       const g = el("div", "g");
-      const n = el("div", "n"); n.textContent = f.name;
+      const n = el("div", "n");
+      n.style.display = "flex"; n.style.alignItems = "center"; n.style.gap = "7px";
+      const nm = el("span"); nm.textContent = f.name; n.appendChild(nm);
+      if (hs && hs.ok) {
+        const rt = el("span", "route " + (hs.direct ? "direct" : "relay"));
+        rt.textContent = hs.direct ? "direct" : "relay";
+        rt.title = hs.direct
+          ? "Fetched straight from the publisher - nobody in the middle."
+          : "Fetched through a relay, which saw your IP and this feed URL.";
+        n.appendChild(rt);
+      }
       g.appendChild(n);
       if (hs && !hs.ok) {
         const e = el("div", "e"); e.textContent = hs.err; g.appendChild(e);
@@ -852,6 +891,15 @@ function openSettings(open) {
     $("#proxy").value   = cfg.proxies.join("\n");
     $("#s-auto").checked   = cfg.autoRefresh;
     $("#s-notify").checked = cfg.notify;
+    $("#s-direct").checked = cfg.directOnly;
+    const checked = cfg.feeds.filter(f => health[f.url] && health[f.url].ok);
+    const viaRelay = checked.filter(f => !health[f.url].direct);
+    $("#relay-count").textContent = checked.length
+      ? viaRelay.length
+        ? viaRelay.length + " of " + checked.length + " working feeds go through a relay: "
+          + viaRelay.map(f => f.name).join(", ") + ". The rest are fetched directly."
+        : "All " + checked.length + " working feeds are fetched directly. No relay involved."
+      : "Run Test all feeds to see which feeds need a relay.";
   } else {
     refresh();
   }
@@ -876,6 +924,10 @@ $("#f-add").onclick = () => {
 $("#kw").oninput    = e => { cfg.keywords = e.target.value.split(",").map(s => s.trim()).filter(Boolean); save(); };
 $("#proxy").oninput = e => { cfg.proxies  = e.target.value.split("\n").map(s => s.trim()).filter(Boolean); save(); };
 $("#s-auto").onchange   = e => { cfg.autoRefresh = e.target.checked; save(); };
+$("#s-direct").onchange = e => {
+  cfg.directOnly = e.target.checked; save();
+  routes = {}; localStorage.setItem(KEY + ".routes", "{}");   // re-probe from scratch
+};
 $("#s-notify").onchange = async e => {
   cfg.notify = e.target.checked; save();
   if (cfg.notify && "Notification" in window && Notification.permission === "default") {
@@ -888,7 +940,7 @@ $("#f-test").onclick = async () => {
   b.textContent = "Testing…"; b.disabled = true;
   await Promise.all(cfg.feeds.map(f =>
     grab(f.url).then(x => parseFeed(x, f.name)).then(
-      list => { health[f.url] = { ok: true, at: Date.now(), n: list.length }; },
+      list => { health[f.url] = { ok: true, at: Date.now(), n: list.length, direct: isDirect(f.url) }; },
       err  => { health[f.url] = { ok: false, at: Date.now(), err: String(err && err.message || err) }; }
     )
   ));
@@ -922,7 +974,7 @@ setInterval(() => { if (!document.hidden) render(); }, 60000);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-const BUILD = "2026-08-23.6";
+const BUILD = "2026-08-23.7";
 $("#ver").textContent = "Breaking · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
