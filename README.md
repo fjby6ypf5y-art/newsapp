@@ -255,6 +255,14 @@ Tap any notification to open the app and read the story in full.
 
 ---
 
+## The icon
+
+Headline bars in the same seven-step heat ramp the list uses, hottest at the
+top. Run `python3 tools-icon.py` to regenerate every size. It reads the ramp
+straight out of `index.html`, so the icon cannot drift out of step with the
+colours the list actually uses — change `--h0`…`--h6` and re-run. No
+dependencies; it writes the PNGs by hand.
+
 ## Files
 
 ```
@@ -262,6 +270,7 @@ index.html             the entire app - markup, styles and logic
 sw.js                  service worker; caches the shell for offline use
 manifest.webmanifest   Home Screen icon, name, standalone display
 icons/                 app icons (180/192/512)
+tools-icon.py          regenerates the icons; no dependencies
 .nojekyll              stops GitHub Pages running the files through Jekyll
 ```
 

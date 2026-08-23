@@ -1124,7 +1124,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-const BUILD = "2026-08-23.22";
+const BUILD = "2026-08-23.23";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
