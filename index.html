@@ -227,7 +227,8 @@ const KEY = "breaking.v1";
 /* Curated feed library. Everything here is a free, non-paywalled publisher
    that offers first-party RSS - no aggregator bridges (they go down) and no
    metered outlets whose links dead-end on a subscribe wall. */
-const CATS = ["World","Business","Tech","US","UK & Europe","Science","Sport"];
+const CATS = ["World","Business","Tech","Canada","US","UK & Europe",
+              "Science","Sport","Entertainment"];
 const CAT_ORDER = [...CATS, "Other"];
 const catRank = c => { const i = CAT_ORDER.indexOf(c); return i < 0 ? CAT_ORDER.length : i; };
 const CATALOG = [
@@ -278,6 +279,18 @@ const CATALOG = [
   ["Tech",  "Schneier",           "https://www.schneier.com/feed/atom/"],
   ["Tech",  "BBC Technology",     "https://feeds.bbci.co.uk/news/technology/rss.xml"],
 
+  ["Canada","CBC Top Stories",    "https://rss.cbc.ca/lineup/topstories.xml"],
+  ["Canada","CBC Canada",         "https://rss.cbc.ca/lineup/canada.xml"],
+  ["Canada","CBC Politics",       "https://rss.cbc.ca/lineup/politics.xml"],
+  ["Canada","CBC Indigenous",     "https://rss.cbc.ca/lineup/canada-north.xml"],
+  ["Canada","Global News",        "https://globalnews.ca/feed/"],
+  ["Canada","CTV News",           "https://www.ctvnews.ca/rss/ctvnews-ca-top-stories-public-rss-1.822009"],
+  ["Canada","The Tyee",           "https://thetyee.ca/rss2.xml"],
+  ["Canada","The Narwhal",        "https://thenarwhal.ca/feed/"],
+  ["Canada","National Post",      "https://nationalpost.com/feed/"],
+  ["Canada","Bank of Canada",     "https://www.bankofcanada.ca/content_type/press-releases/feed/"],
+  ["Canada","StatCan The Daily",  "https://www150.statcan.gc.ca/n1/dai-quo/rss/new-nouveau-eng.xml"],
+
   ["US",    "NPR Politics",       "https://feeds.npr.org/1014/rss.xml"],
   ["US",    "PBS NewsHour",       "https://www.pbs.org/newshour/feeds/rss/headlines"],
   ["US",    "CBS News",           "https://www.cbsnews.com/latest/rss/main"],
@@ -309,7 +322,20 @@ const CATALOG = [
   ["Sport", "Guardian Sport",     "https://www.theguardian.com/sport/rss"],
   ["Sport", "ESPN",               "https://www.espn.com/espn/rss/news"],
   ["Sport", "Defector",           "https://defector.com/feed"],
-  ["Sport", "Yahoo Sports",       "https://sports.yahoo.com/rss/"]
+  ["Sport", "Yahoo Sports",       "https://sports.yahoo.com/rss/"],
+
+  ["Entertainment","BBC Entertainment","https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml"],
+  ["Entertainment","CBC Arts",        "https://rss.cbc.ca/lineup/arts.xml"],
+  ["Entertainment","Guardian Culture","https://www.theguardian.com/culture/rss"],
+  ["Entertainment","NPR Music",       "https://feeds.npr.org/1039/rss.xml"],
+  ["Entertainment","Variety",         "https://variety.com/feed/"],
+  ["Entertainment","Deadline",        "https://deadline.com/feed/"],
+  ["Entertainment","IndieWire",       "https://www.indiewire.com/feed/"],
+  ["Entertainment","Rolling Stone",   "https://www.rollingstone.com/feed/"],
+  ["Entertainment","Pitchfork",       "https://pitchfork.com/rss/news/"],
+  ["Entertainment","The A.V. Club",   "https://www.avclub.com/rss"],
+  ["Entertainment","Polygon",         "https://www.polygon.com/rss/index.xml"],
+  ["Entertainment","Aftermath",       "https://aftermath.site/feed"]
 ].map(([cat, name, url]) => ({ cat, name, url }));
 
 const inCatalog = url => CATALOG.find(f => f.url === url);
@@ -325,6 +351,11 @@ const DEFAULTS = {
     { cat:"Business",name:"BBC Business",url:"https://feeds.bbci.co.uk/news/business/rss.xml" },
     { cat:"Business",name:"NPR Business",url:"https://feeds.npr.org/1006/rss.xml" },
     { cat:"Business",name:"CBC Business",url:"https://rss.cbc.ca/lineup/business.xml" },
+    { cat:"Canada", name:"CBC Top Stories",url:"https://rss.cbc.ca/lineup/topstories.xml" },
+    { cat:"Canada", name:"CBC Politics", url:"https://rss.cbc.ca/lineup/politics.xml" },
+    { cat:"Canada", name:"Global News",  url:"https://globalnews.ca/feed/" },
+    { cat:"Entertainment",name:"CBC Arts",url:"https://rss.cbc.ca/lineup/arts.xml" },
+    { cat:"Entertainment",name:"BBC Entertainment",url:"https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml" },
     { cat:"Tech",  name:"Ars Technica",url:"https://feeds.arstechnica.com/arstechnica/index" },
     { cat:"Tech",  name:"Hacker News", url:"https://news.ycombinator.com/rss" },
     { cat:"Science",name:"Phys.org",   url:"https://phys.org/rss-feed/" }
@@ -366,6 +397,30 @@ const SEED_BUSINESS = [
   { cat:"Business", name:"CBC Business", url:"https://rss.cbc.ca/lineup/business.xml" }
 ];
 
+const SEED_CANADA = [
+  { cat:"Canada", name:"CBC Top Stories", url:"https://rss.cbc.ca/lineup/topstories.xml" },
+  { cat:"Canada", name:"CBC Politics",    url:"https://rss.cbc.ca/lineup/politics.xml" },
+  { cat:"Canada", name:"Global News",     url:"https://globalnews.ca/feed/" },
+  { cat:"Canada", name:"CTV News",        url:"https://www.ctvnews.ca/rss/ctvnews-ca-top-stories-public-rss-1.822009" },
+  { cat:"Canada", name:"The Tyee",        url:"https://thetyee.ca/rss2.xml" }
+];
+
+const SEED_ENTERTAINMENT = [
+  { cat:"Entertainment", name:"BBC Entertainment", url:"https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml" },
+  { cat:"Entertainment", name:"CBC Arts",          url:"https://rss.cbc.ca/lineup/arts.xml" },
+  { cat:"Entertainment", name:"Guardian Culture",  url:"https://www.theguardian.com/culture/rss" },
+  { cat:"Entertainment", name:"Variety",           url:"https://variety.com/feed/" }
+];
+
+// Seed a category only when it is empty, so anything removed on purpose stays
+// removed. Without this a new category is invisible until it is tapped, which
+// reads as the request having been ignored.
+function seedCategory(c, cat, feeds) {
+  if (c.feeds.some(f => f.cat === cat)) return;
+  const have = new Set(c.feeds.map(f => f.url));
+  feeds.forEach(f => { if (!have.has(f.url)) c.feeds.push({ ...f }); });
+}
+
 function migrate(c) {
   c.feeds.forEach(f => { if (!f.cat) f.cat = (inCatalog(f.url) || {}).cat || "Other"; });
 
@@ -384,17 +439,20 @@ function migrate(c) {
   }
 
   if (c.migrated < 3) {
-    if (!c.feeds.some(f => f.cat === "Business")) {
-      const have = new Set(c.feeds.map(f => f.url));
-      SEED_BUSINESS.forEach(f => { if (!have.has(f.url)) c.feeds.push({ ...f }); });
-    }
+    seedCategory(c, "Business", SEED_BUSINESS);
     c.migrated = 3;
+  }
+
+  if (c.migrated < 4) {
+    seedCategory(c, "Canada", SEED_CANADA);
+    seedCategory(c, "Entertainment", SEED_ENTERTAINMENT);
+    c.migrated = 4;
   }
   return c;
 }
 
 const load = () => { try { return migrate({...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || "{}")}); }
-                     catch { return {...DEFAULTS, migrated:3}; } };
+                     catch { return {...DEFAULTS, migrated:4}; } };
 const save = () => localStorage.setItem(KEY, JSON.stringify(cfg));
 let cfg = load();
 // Persist immediately: migrations rewrite feed URLs and backfill categories,
@@ -977,7 +1035,7 @@ setInterval(() => { if (!document.hidden) render(); }, 60000);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-const BUILD = "2026-08-23.8";
+const BUILD = "2026-08-23.9";
 $("#ver").textContent = "Breaking · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
