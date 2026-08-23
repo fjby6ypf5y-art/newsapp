@@ -116,6 +116,8 @@ main{
 .item:not(.unseen) .ttl{color:var(--dim)}
 .meta{display:flex;gap:7px;align-items:center;font-size:0.75rem;color:var(--faint);flex-wrap:wrap}
 .clock{font-variant-numeric:tabular-nums;color:var(--dim)}
+.also{font-size:0.625rem;font-weight:700;letter-spacing:.4px;color:var(--dim);
+  border:1px solid var(--line);border-radius:4px;padding:1px 4px}
 .src{color:var(--dim);font-weight:600}
 .snip{margin:5px 0 0;font-size:0.8438rem;color:var(--dim);line-height:1.4;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -242,6 +244,7 @@ select.sel{width:100%;background:var(--panel);border:1px solid var(--line);
 
   <h3>Behaviour</h3>
   <div class="sw"><label for="s-auto">Refresh when app opens</label><input type="checkbox" id="s-auto" checked></div>
+  <div class="sw"><label for="s-dupes">Group the same story from several outlets</label><input type="checkbox" id="s-dupes" checked></div>
   <div class="sw"><label for="s-idle">Reset to first category after</label>
     <select id="s-idle">
       <option value="0">Never</option>
@@ -419,6 +422,7 @@ const DEFAULTS = {
     "https://api.codetabs.com/v1/proxy?quest="
   ],
   autoRefresh: true,
+  groupDupes: true,
   idleResetMin: 30,          // 0 = never reset the category
   directOnly: false
 };
@@ -819,6 +823,8 @@ async function refresh(scope) {
       .filter(i => !i.ts || i.ts > cutoff)
       .sort((a, b) => b.ts - a.ts)
       .slice(0, 400);
+    stampCategories();
+    groupDuplicates();
   };
 
   // Render each feed the moment it lands rather than blocking on the slowest.
@@ -876,6 +882,98 @@ function timeAgo(ts) {
   const h = Math.round(m / 60);
   if (h < 24) return h + "h ago";
   return Math.round(h / 24) + "d ago";
+}
+
+/* ---- grouping the same story from several outlets ---------------------- */
+
+// Words that carry no signal about which story this is. Kept short on purpose:
+// an over-long list starts stripping the words that distinguish headlines.
+const STOP = new Set(("the a an and or but of in on at to for from with by as is are was were "
+  + "be been will would could should says say said after before over under new").split(" "));
+
+// Crude suffix stripping, enough that "tightens"/"tighten" and
+// "rentals"/"rental" match. Not real stemming - it only has to make two
+// headlines about one event look alike.
+const stem = w => w
+  .replace(/(ies)$/, "y")
+  .replace(/(sses|shes|ches|xes)$/, "")
+  .replace(/(ing|ed|es|s)$/, "");
+
+const tokens = title => {
+  const out = new Set();
+  for (const w of String(title).toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/)) {
+    if (w.length >= 4 && !STOP.has(w)) out.add(stem(w));
+  }
+  return out;
+};
+
+// Jaccard, deliberately not containment. Containment merges "evacuation
+// ordered" with "evacuation lifted" - a short headline sits inside a longer
+// one whatever it says. Jaccard counts the words that disagree as well.
+const overlap = (a, b) => {
+  if (!a.size || !b.size) return 0;
+  let hit = 0;
+  for (const w of a) if (b.has(w)) hit++;
+  return hit / (a.size + b.size - hit);
+};
+
+// Tuned against real headline pairs. At 0.62 this merged "Toronto council
+// approves transit funding" with the Vancouver version, and "evacuation
+// ordered" with "evacuation lifted" - the single word that carries the meaning
+// is invisible to a word-set comparison. 0.72 gives up some genuine duplicates
+// to guarantee it never hides a different story, which is the right way round:
+// a repeated headline is a mild annoyance, a hidden one is a missed story.
+const SAME_STORY = 0.72;
+const MIN_SHARED = 3;                       // short headlines coincide too easily
+const SAME_WINDOW = 12 * 60 * 60 * 1000;    // outlets rarely lag each other by more
+
+// Marks duplicates in place: the newest copy keeps `alsoIn` naming the other
+// outlets, the rest get `hidden`. Grouping is per category, so a story is never
+// hidden from a category that has no representative of it.
+function groupDuplicates() {
+  const byCat = new Map();
+  for (const i of items) {
+    delete i.hidden; delete i.alsoIn;
+    const c = i.cat || "";
+    if (!byCat.has(c)) byCat.set(c, []);
+    byCat.get(c).push(i);
+  }
+  if (!cfg.groupDupes) return;
+
+  for (const list of byCat.values()) {
+    // An inverted index keeps this from being every-pair: only stories sharing
+    // an uncommon word are ever compared.
+    const index = new Map();
+    for (const it of list) {
+      it._t = tokens(it.title);
+      const seen = new Set();
+      for (const w of it._t) {
+        const bucket = index.get(w);
+        if (bucket) for (const other of bucket) seen.add(other);
+      }
+      let host = null;
+      for (const other of seen) {
+        if (other.hidden) continue;
+        if (Math.abs((other.ts || 0) - (it.ts || 0)) > SAME_WINDOW) continue;
+        let shared = 0;
+        for (const w of it._t) if (other._t.has(w)) shared++;
+        if (shared >= MIN_SHARED && overlap(it._t, other._t) >= SAME_STORY) { host = other; break; }
+      }
+      if (host) {
+        // Keep whichever is newer as the visible one.
+        const [keep, drop] = (it.ts || 0) > (host.ts || 0) ? [it, host] : [host, it];
+        drop.hidden = true;
+        keep.hidden = false;
+        keep.alsoIn = [...new Set([...(keep.alsoIn || []), ...(drop.alsoIn || []), drop.source])]
+          .filter(n => n !== keep.source);
+      }
+      for (const w of it._t) {
+        if (!index.has(w)) index.set(w, []);
+        index.get(w).push(it);
+      }
+    }
+    for (const it of list) delete it._t;
+  }
 }
 
 // Age -> ramp step. Buckets, not a continuous blend: a handful of legible
@@ -958,7 +1056,7 @@ function render() {
 
   // Strictly newest first, so the reddest story is always the first one.
   const view = items
-    .filter(i => (i.source in catOf) && (catOf[i.source] || "Other") === active)
+    .filter(i => (i.source in catOf) && (catOf[i.source] || "Other") === active && !i.hidden)
     .sort((a, b) => b.ts - a.ts);
 
   const list = $("#list");
@@ -1008,6 +1106,12 @@ function renderItem(i, list) {
 
     const m = el("div", "meta");
     const s = el("span", "src"); s.textContent = i.source; m.appendChild(s);
+    if (i.alsoIn && i.alsoIn.length) {
+      const also = el("span", "also");
+      also.textContent = "+" + i.alsoIn.length;
+      also.title = "Also covered by " + i.alsoIn.join(", ");
+      m.appendChild(also);
+    }
     if (i.ts) {
       const c = el("span", "clock"); c.textContent = "· " + clockOf(i.ts); m.appendChild(c);
       const w = el("span"); w.textContent = "· " + timeAgo(i.ts); m.appendChild(w);
@@ -1265,6 +1369,7 @@ function openSettings(open) {
     $("#s-auto").checked   = cfg.autoRefresh;
     $("#s-direct").checked = cfg.directOnly;
     $("#s-idle").value     = String(cfg.idleResetMin);
+    $("#s-dupes").checked  = cfg.groupDupes !== false;
     const checked = cfg.feeds.filter(f => health[f.url] && health[f.url].ok);
     const viaRelay = checked.filter(f => !health[f.url].direct);
     $("#relay-count").textContent = checked.length
@@ -1299,6 +1404,10 @@ $("#f-add").onclick = () => {
 $("#proxy").oninput = e => { cfg.proxies  = e.target.value.split("\n").map(s => s.trim()).filter(Boolean); save(); };
 $("#s-auto").onchange   = e => { cfg.autoRefresh = e.target.checked; save(); };
 $("#s-idle").onchange   = e => { cfg.idleResetMin = +e.target.value || 0; save(); markSeen(); };
+$("#s-dupes").onchange  = e => {
+  cfg.groupDupes = e.target.checked; save();
+  stampCategories(); groupDuplicates(); render();
+};
 $("#s-direct").onchange = e => {
   cfg.directOnly = e.target.checked; save();
   routes = {}; localStorage.setItem(KEY + ".routes", "{}");   // re-probe from scratch
@@ -1328,8 +1437,17 @@ $("#io-import").onclick = () => {
   } catch { alert("That isn't valid JSON."); }
 };
 
+// Grouping is per category, so each story needs to know its own.
+function stampCategories() {
+  const catOf = {};
+  cfg.feeds.forEach(f => { catOf[f.name] = f.cat || "Other"; });
+  items.forEach(i => { i.cat = catOf[i.source]; });
+}
+
 /* ------------------------------------------------------------------ boot */
 pruneOrphans();
+stampCategories();
+groupDuplicates();
 resetTabIfStale();
 markSeen();
 render();
@@ -1419,7 +1537,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.34";
+const BUILD = "2026-08-23.35";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

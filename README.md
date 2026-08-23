@@ -88,6 +88,17 @@ the moment you tap it.
 
 Sorting is strictly by time, so the reddest story is always the first one.
 
+**The same story from several outlets** is grouped into one row, marked `+2`
+with the other outlets named on the badge. Matching is deliberately cautious:
+headlines are compared as stemmed word sets, and only merge above a high
+similarity bar. It was tuned against real headline pairs — at a looser setting
+it merged "Toronto council approves transit funding" with the Vancouver
+version, and "evacuation ordered" with "evacuation lifted", because the one
+word carrying the meaning is invisible to a word-set comparison. The current
+setting misses some genuine duplicates in exchange for never hiding a
+different story: a repeated headline is a mild annoyance, a hidden one is a
+missed story. Turn it off in Settings → Behaviour.
+
 Earlier builds also had Alerts and Unread chips, and keyword matching behind
 them; all of it was dropped. The app is for reading, not alerting — that job
 belongs to the Shortcut, which can actually reach you with the app closed.
