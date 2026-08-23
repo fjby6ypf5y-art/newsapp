@@ -475,6 +475,7 @@ function parseFeed(xml, source) {
     let ts = Date.parse(when);
     if (isNaN(ts)) ts = 0;
 
+    link = safeLink(link);
     return { id: (link || title).slice(0, 300), title, link, snip, ts, source };
   }).filter(i => i.title !== "(untitled)" || i.link);
 }
@@ -588,6 +589,19 @@ function clockOf(ts) {
   return d.toLocaleDateString([], { month: "short", day: "numeric" }) + " " + hm;
 }
 
+// Feed content is untrusted. A story's link is attacker-controlled by anyone
+// who can serve or rewrite the XML - including the CORS relay, which sits in
+// the middle of every fetch - so a "javascript:" or "data:" URL here would run
+// script in the app's own origin and could read everything in localStorage.
+// Only ordinary web links are allowed through.
+function safeLink(raw) {
+  if (!raw) return "";
+  try {
+    const u = new URL(raw, location.href);
+    return (u.protocol === "https:" || u.protocol === "http:") ? u.href : "";
+  } catch { return ""; }
+}
+
 const keywordHit = i => {
   const kws = cfg.keywords.filter(Boolean);
   if (!kws.length) return false;
@@ -640,15 +654,22 @@ function render() {
       const want = filter.slice(4);
       const mine = cfg.feeds.filter(f => (f.cat || "Other") === want);
       const bad  = mine.filter(f => health[f.url] && !health[f.url].ok);
+      // Built as text nodes: feed names are user-supplied and error strings can
+      // carry remote content, so neither goes near innerHTML.
+      const line = t => { const d = el("div"); d.textContent = t; e.appendChild(d); };
       if (!mine.length) {
-        e.innerHTML = "No " + want + " feeds yet.<br>Add some in Settings → Add from library.";
+        line("No " + want + " feeds yet.");
+        line("Add some in Settings → Add from library.");
       } else if (bad.length === mine.length) {
-        e.innerHTML = "All " + mine.length + " " + want + " feed" + (mine.length > 1 ? "s are" : " is")
-          + " failing:<br><br>" + bad.map(f => f.name + " — " + health[f.url].err).join("<br>")
-          + "<br><br>Try swapping them in Settings.";
+        line("All " + mine.length + " " + want + " feed" + (mine.length > 1 ? "s are" : " is") + " failing:");
+        line("\u00a0");
+        bad.forEach(f => line(f.name + " — " + health[f.url].err));
+        line("\u00a0");
+        line("Try swapping them in Settings.");
       } else {
-        e.innerHTML = "Your " + mine.length + " " + want + " feed"
-          + (mine.length > 1 ? "s haven't" : " hasn't") + " returned anything yet.<br>Tap ↻ to refresh.";
+        line("Your " + mine.length + " " + want + " feed"
+          + (mine.length > 1 ? "s haven't" : " hasn't") + " returned anything yet.");
+        line("Tap ↻ to refresh.");
       }
     } else {
       e.innerHTML = items.length
@@ -692,7 +713,9 @@ function render() {
 function renderItem(i, list) {
   {
     const a = el("a", "item");
-    a.href = i.link || "#";
+    const href = safeLink(i.link);
+    a.href = href || "#";
+    if (!href) { a.removeAttribute("target"); a.style.pointerEvents = "none"; }
     a.target = "_blank";
     a.rel = "noopener noreferrer";
     if (!seen.has(i.id)) a.classList.add("unseen");
@@ -899,7 +922,7 @@ setInterval(() => { if (!document.hidden) render(); }, 60000);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-const BUILD = "2026-08-23.5";
+const BUILD = "2026-08-23.6";
 $("#ver").textContent = "Breaking · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

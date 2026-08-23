@@ -228,9 +228,35 @@ icons/                 app icons (180/192/512)
 No build step, no dependencies, no npm. Edit `index.html`, commit, and Pages
 redeploys in about a minute.
 
-## Privacy
+## Privacy and security
 
 Everything is local. Feed list, keywords, read state and cached headlines are
-in your device's `localStorage`. There is no analytics, no telemetry and no
-account. The only outbound requests are to the feeds you list and, where a
-feed refuses a direct request, the relays in Settings.
+in your device's `localStorage`. There is no analytics, no telemetry, no
+account, and no server of ours anywhere. The only outbound requests are to the
+feeds you list and, where a feed refuses a direct request, the relays in
+Settings.
+
+**The relay is the weak point.** News sites don't send CORS headers, so most
+feeds can only be read through a public relay, and that relay sees your IP
+address and every feed URL you fetch — a rough picture of what you read and
+when. It can also rewrite what comes back. Nothing else in this setup has that
+much reach. Feeds served over HTTPS that your phone can fetch directly skip the
+relay entirely; the health dots don't distinguish the two, but a feed that
+works with the relay list emptied is going direct.
+
+Because relay output is untrusted, the app treats feed content as hostile:
+
+- Story links are scheme-checked, so only `http:` and `https:` survive. A
+  `javascript:` or `data:` link is stripped and the row is made unclickable —
+  otherwise a rewritten feed could run script in the app's origin and read
+  everything in local storage.
+- Titles and summaries are inserted as text nodes, never as HTML, so markup in
+  a feed renders as visible characters rather than executing.
+- The service worker never caches feed responses — only the app's own files.
+
+**A public repo is fine, with one caveat.** The source contains no secrets,
+no keys and no personal data, and a GitHub Pages site is publicly reachable
+whether or not the repo is private. What a public repo does expose is the
+commit history, including the email addresses of whoever authored the commits.
+Check `git log --format='%ae' | sort -u` before publishing if that matters to
+you.
