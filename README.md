@@ -69,14 +69,11 @@ carry a red dot. Nothing about the state changes weight, size or spacing: a
 property that affects layout would re-flow the headline under your finger at
 the moment you tap it.
 
-Sorting is strictly by time. Keyword hits are *not* floated above newer
-stories, because that would break the promise that the reddest item is the
-first one; the inline `ALERT` tag carries that instead.
+Sorting is strictly by time, so the reddest story is always the first one.
 
-Earlier builds also had Alerts and Unread chips; both were dropped. Alerts duplicated the
-inline tag, and Unread only ever marked a story read when you *tapped* it, so
-headlines you read in the list and skipped stayed "unread" forever — the label
-was a lie. Unread dots per row still show what's new.
+Earlier builds also had Alerts and Unread chips, and keyword matching behind
+them; all of it was dropped. The app is for reading, not alerting — that job
+belongs to the Shortcut, which can actually reach you with the app closed.
 
 Tap the **⚙** button to configure.
 
@@ -128,12 +125,6 @@ URL saved. CTV's Bell Media endpoint was the first entry.
 which relay can reach it, so the only place the answer is true is your phone.
 That's what the health dots are for. If one goes red, drop it and try another
 in the same category — that's why the library is deliberately over-stocked.
-- **Alert keywords** — comma-separated, and **empty by default**. Matching
-  headlines get a gold `ALERT` tag and a gold hairline, and drive notifications
-  if you enable them. Partial words work: `evacuat` catches both *evacuate* and
-  *evacuation*. Keep them specific — a place, a company, a story you're
-  following. Broad words like "breaking" match headline boilerplate, and the
-  tag stops meaning anything.
 - **Backup** — **Export** dumps your whole config as JSON. Mail it to yourself.
   **Import** pastes it back. This is your only backup; clearing Safari's
   website data wipes the app's storage.
@@ -266,7 +257,7 @@ redeploys in about a minute.
 
 ## Privacy and security
 
-Everything is local. Feed list, keywords, read state and cached headlines are
+Everything is local. Feed list, read state and cached headlines are
 in your device's `localStorage`. There is no analytics, no telemetry, no
 account, and no server of ours anywhere. The only outbound requests are to the
 feeds you list and, where a feed refuses a direct request, the relays in

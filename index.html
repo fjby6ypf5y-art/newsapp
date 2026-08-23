@@ -15,7 +15,7 @@
 :root{
   --bg:#0d0d10; --panel:#17171c; --panel2:#1f1f26; --line:#2c2c35;
   --text:#f2f2f5; --dim:#9a9aa8; --faint:#6a6a78;
-  --accent:#e8434f; --accent-dim:#7c1c22; --gold:#ffd666;
+  --accent:#e8434f;
   /* Recency heat ramp: full ROYGBIV spectrum, newest (red) -> oldest (violet).
      Hue carries no inherent magnitude, so the spectrum leans on the familiar
      rainbow order rather than on brightness; the timestamp printed on every
@@ -84,16 +84,12 @@ main{
   transition:border-color .3s,background .3s}
 .item:active{background:var(--panel)}
 .item.unseen::before{content:"";position:absolute;left:8px;top:21px;width:5px;height:5px;border-radius:50%;background:var(--accent)}
-/* Alerts get a gold hairline, not a wash - the row background is spoken for
-   by the heat ramp, and two overlaid gradients read as mud. */
-.item.hit{box-shadow:inset 0 0 0 1px rgba(255,214,102,.22)}
 .ttl{margin:0 0 5px;font-size:16px;font-weight:600;line-height:1.32;letter-spacing:-.2px;
   color:var(--text)}
 .item:not(.unseen) .ttl{color:var(--dim)}
 .meta{display:flex;gap:7px;align-items:center;font-size:12px;color:var(--faint);flex-wrap:wrap}
 .clock{font-variant-numeric:tabular-nums;color:var(--dim)}
 .src{color:var(--dim);font-weight:600}
-.tag{font-size:10px;font-weight:800;letter-spacing:.7px;color:var(--gold);border:1px solid rgba(255,214,102,.35);border-radius:4px;padding:1px 5px}
 .snip{margin:5px 0 0;font-size:13.5px;color:var(--dim);line-height:1.4;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .empty{padding:60px 30px;text-align:center;color:var(--faint);font-size:14px;line-height:1.6}
@@ -184,19 +180,8 @@ textarea{min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospac
   <p class="hint">Most outlets publish one at <code>/rss</code>, <code>/feed</code>,
   or <code>/rss.xml</code>.</p>
 
-  <h3>Alert keywords</h3>
-  <input type="text" id="kw" placeholder="e.g. a place, a company, a story you're following">
-  <p class="hint">Comma-separated, and empty by default. Matching headlines get a gold
-  <b>ALERT</b> tag, and drive notifications if you switch those on below.
-  Partial words work &mdash; <code>evacuat</code> catches both &ldquo;evacuate&rdquo; and
-  &ldquo;evacuation&rdquo;. Keep them specific: broad words like &ldquo;breaking&rdquo; match
-  boilerplate and the tag stops meaning anything.</p>
-
   <h3>Behaviour</h3>
   <div class="sw"><label for="s-auto">Refresh when app opens</label><input type="checkbox" id="s-auto" checked></div>
-  <div class="sw"><label for="s-notify">Notify on keyword hits</label><input type="checkbox" id="s-notify"></div>
-  <p class="hint">Notifications only fire while the app is open in the foreground &mdash; iOS Safari
-  cannot wake a home-screen web app on its own. Use the Shortcut (see README) for background alerts.</p>
 
   <h3>Privacy</h3>
   <div class="sw"><label for="s-direct">Direct only &mdash; never use a relay</label><input type="checkbox" id="s-direct"></div>
@@ -348,17 +333,12 @@ const DEFAULTS = {
     { cat:"Tech",  name:"Hacker News", url:"https://news.ycombinator.com/rss" },
     { cat:"Science",name:"Phys.org",   url:"https://phys.org/rss-feed/" }
   ],
-  // Empty by default: generic words like "breaking" match headline boilerplate,
-  // which made the ALERT tag meaningless. Set your own and it starts earning
-  // its place.
-  keywords: [],
   proxies: [
     "https://api.allorigins.win/raw?url=",
     "https://corsproxy.io/?url=",
     "https://api.codetabs.com/v1/proxy?quest="
   ],
   autoRefresh: true,
-  notify: false,
   directOnly: false
 };
 
@@ -462,11 +442,17 @@ function migrate(c) {
     c.feeds = c.feeds.filter(f => !dead.has(f.url));
     c.migrated = 7;
   }
+  // Keyword alerting was removed; drop the settings and the id list it kept.
+  if (c.migrated < 8) {
+    delete c.keywords; delete c.notify;
+    try { localStorage.removeItem(KEY + ".notified"); } catch {}
+    c.migrated = 8;
+  }
   return c;
 }
 
 const load = () => { try { return migrate({...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || "{}")}); }
-                     catch { return {...DEFAULTS, migrated:7}; } };
+                     catch { return {...DEFAULTS, migrated:8}; } };
 const save = () => localStorage.setItem(KEY, JSON.stringify(cfg));
 let cfg = load();
 // Persist immediately: migrations rewrite feed URLs and backfill categories,
@@ -656,7 +642,6 @@ async function refresh() {
       + (failed.length ? " · failed: " + failed.join(", ") : ""),
       failed.length > 0 && ok === 0
     );
-    maybeNotify();
   }
 
   render();
@@ -721,13 +706,6 @@ function safeLink(raw) {
   } catch { return ""; }
 }
 
-const keywordHit = i => {
-  const kws = cfg.keywords.filter(Boolean);
-  if (!kws.length) return false;
-  const hay = (i.title + " " + i.snip).toLowerCase();
-  return kws.some(k => hay.includes(k.toLowerCase()));
-};
-
 function render() {
   const catOf = {};
   cfg.feeds.forEach(f => { catOf[f.name] = f.cat || "Other"; });
@@ -759,9 +737,7 @@ function render() {
     chips.appendChild(b);
   });
 
-  // Strictly newest first. Keyword hits are not floated to the top - that
-  // would break the promise that the reddest story is the first one; the
-  // inline ALERT tag carries that job.
+  // Strictly newest first, so the reddest story is always the first one.
   const view = items
     .filter(i => (i.source in catOf) && (catOf[i.source] || "Other") === active)
     .sort((a, b) => b.ts - a.ts);
@@ -807,14 +783,11 @@ function renderItem(i, list) {
     a.target = "_blank";
     a.rel = "noopener noreferrer";
     if (!seen.has(i.id)) a.classList.add("unseen");
-    const hit = keywordHit(i);
-    if (hit) a.classList.add("hit");
     a.style.setProperty("--heat", heat(i.ts));
 
     const h = el("h2", "ttl"); h.textContent = i.title; a.appendChild(h);
 
     const m = el("div", "meta");
-    if (hit) { const t = el("span", "tag"); t.textContent = "ALERT"; m.appendChild(t); }
     const s = el("span", "src"); s.textContent = i.source; m.appendChild(s);
     if (i.ts) {
       const c = el("span", "clock"); c.textContent = "· " + clockOf(i.ts); m.appendChild(c);
@@ -834,18 +807,6 @@ function renderItem(i, list) {
 
     list.appendChild(a);
   }
-}
-
-/* --------------------------------------------------------- notifications */
-let notified = new Set(JSON.parse(localStorage.getItem(KEY + ".notified") || "[]"));
-function maybeNotify() {
-  if (!cfg.notify || !("Notification" in window) || Notification.permission !== "granted") return;
-  const hits = items.filter(i => keywordHit(i) && !notified.has(i.id) && !seen.has(i.id)).slice(0, 3);
-  for (const h of hits) {
-    try { new Notification(h.source, { body: h.title, tag: h.id, icon: "icons/icon-192.png" }); } catch {}
-    notified.add(h.id);
-  }
-  localStorage.setItem(KEY + ".notified", JSON.stringify([...notified].slice(-500)));
 }
 
 /* -------------------------------------------------------------- settings */
@@ -946,10 +907,8 @@ function openSettings(open) {
         const o = document.createElement("option"); o.value = c; o.textContent = c; sel.appendChild(o);
       });
     }
-    $("#kw").value      = cfg.keywords.join(", ");
     $("#proxy").value   = cfg.proxies.join("\n");
     $("#s-auto").checked   = cfg.autoRefresh;
-    $("#s-notify").checked = cfg.notify;
     $("#s-direct").checked = cfg.directOnly;
     const checked = cfg.feeds.filter(f => health[f.url] && health[f.url].ok);
     const viaRelay = checked.filter(f => !health[f.url].direct);
@@ -980,18 +939,11 @@ $("#f-add").onclick = () => {
   renderFeeds(); renderLibrary();
 };
 
-$("#kw").oninput    = e => { cfg.keywords = e.target.value.split(",").map(s => s.trim()).filter(Boolean); save(); };
 $("#proxy").oninput = e => { cfg.proxies  = e.target.value.split("\n").map(s => s.trim()).filter(Boolean); save(); };
 $("#s-auto").onchange   = e => { cfg.autoRefresh = e.target.checked; save(); };
 $("#s-direct").onchange = e => {
   cfg.directOnly = e.target.checked; save();
   routes = {}; localStorage.setItem(KEY + ".routes", "{}");   // re-probe from scratch
-};
-$("#s-notify").onchange = async e => {
-  cfg.notify = e.target.checked; save();
-  if (cfg.notify && "Notification" in window && Notification.permission === "default") {
-    await Notification.requestPermission();
-  }
 };
 
 $("#f-test").onclick = async () => {
@@ -1034,7 +986,7 @@ setInterval(() => { if (!document.hidden) render(); }, 60000);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-const BUILD = "2026-08-23.17";
+const BUILD = "2026-08-23.18";
 $("#ver").textContent = "Breaking · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
