@@ -744,7 +744,13 @@ function render() {
       const b = el("button", "chip");
       b.textContent = label;
       b.setAttribute("aria-pressed", filter === id);
-      b.onclick = () => { filter = id; render(); };
+      b.onclick = () => {
+        if (filter === id) return;
+        filter = id;
+        render();
+        window.scrollTo(0, 0);
+        b.scrollIntoView({ block: "nearest", inline: "center" });
+      };
       chips.appendChild(b);
     });
 
@@ -1061,7 +1067,7 @@ setInterval(() => { if (!document.hidden) render(); }, 60000);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-const BUILD = "2026-08-23.13";
+const BUILD = "2026-08-23.14";
 $("#ver").textContent = "Breaking · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
