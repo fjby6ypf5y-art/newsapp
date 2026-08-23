@@ -545,8 +545,20 @@ function migrate(c) {
   return c;
 }
 
-const load = () => { try { return migrate({...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || "{}")}); }
-                     catch { return {...DEFAULTS, migrated:10}; } };
+// Ids are load-bearing: the feed editor keys off them, and a feed without one
+// compares equal to every other feed without one. Migrations can be skipped by
+// a stored version number, so this runs unconditionally.
+function normalise(c) {
+  c.feeds = (c.feeds || []).map(f => ({
+    ...f,
+    id:  f.id  || newId(),
+    cat: f.cat || "Other"
+  }));
+  return c;
+}
+
+const load = () => { try { return normalise(migrate({...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || "{}")})); }
+                     catch { return normalise({...DEFAULTS, migrated:10}); } };
 const save = () => localStorage.setItem(KEY, JSON.stringify(cfg));
 let cfg = load();
 // Persist immediately: migrations rewrite feed URLs and backfill categories,
@@ -991,14 +1003,15 @@ function renderFeeds() {
       g.appendChild(u);
 
       const x = el("button", "x");
-      x.textContent = editing === f.id ? "\u2715" : "\u203a";
+      const open = !!f.id && editing === f.id;
+      x.textContent = open ? "\u2715" : "\u203a";
       x.setAttribute("aria-label", "Edit " + f.name);
 
       r.append(d, g, x);
-      r.onclick = () => { editing = editing === f.id ? null : f.id; renderFeeds(); };
+      r.onclick = () => { editing = open ? null : f.id; renderFeeds(); };
       box.appendChild(r);
 
-      if (editing === f.id) box.appendChild(feedEditor(f));
+      if (open) box.appendChild(feedEditor(f));
     });
   });
 }
@@ -1342,7 +1355,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.31";
+const BUILD = "2026-08-23.32";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
