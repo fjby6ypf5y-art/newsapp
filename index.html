@@ -183,9 +183,12 @@ textarea{min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospac
   or <code>/rss.xml</code>.</p>
 
   <h3>Alert keywords</h3>
-  <input type="text" id="kw" placeholder="breaking, earthquake, evacuat">
-  <p class="hint">Comma-separated. Matching headlines are highlighted and pushed to the top.
-  Partial words work &mdash; <code>evacuat</code> catches both &ldquo;evacuate&rdquo; and &ldquo;evacuation&rdquo;.</p>
+  <input type="text" id="kw" placeholder="e.g. a place, a company, a story you're following">
+  <p class="hint">Comma-separated, and empty by default. Matching headlines get a gold
+  <b>ALERT</b> tag, and drive notifications if you switch those on below.
+  Partial words work &mdash; <code>evacuat</code> catches both &ldquo;evacuate&rdquo; and
+  &ldquo;evacuation&rdquo;. Keep them specific: broad words like &ldquo;breaking&rdquo; match
+  boilerplate and the tag stops meaning anything.</p>
 
   <h3>Behaviour</h3>
   <div class="sw"><label for="s-auto">Refresh when app opens</label><input type="checkbox" id="s-auto" checked></div>
@@ -326,7 +329,10 @@ const DEFAULTS = {
     { cat:"Tech",  name:"Hacker News", url:"https://news.ycombinator.com/rss" },
     { cat:"Science",name:"Phys.org",   url:"https://phys.org/rss-feed/" }
   ],
-  keywords: ["breaking","urgent","evacuat","earthquake"],
+  // Empty by default: generic words like "breaking" match headline boilerplate,
+  // which made the ALERT tag meaningless. Set your own and it starts earning
+  // its place.
+  keywords: [],
   proxies: [
     "https://api.allorigins.win/raw?url=",
     "https://corsproxy.io/?url=",
@@ -651,8 +657,7 @@ function render() {
   const cats = [...new Set(cfg.feeds.map(f => f.cat || "Other"))]
     .sort((a, b) => catRank(a) - catRank(b));
   chips.innerHTML = "";
-  [["all", "All"], ["alerts", "● Alerts"], ["unread", "Unread"],
-   ...cats.map(c => ["cat:" + c, c])]
+  [["all", "All"], ...cats.map(c => ["cat:" + c, c])]
     .forEach(([id, label]) => {
       const b = el("button", "chip");
       b.textContent = label;
@@ -662,16 +667,14 @@ function render() {
     });
 
   let view = items.slice();
-  if (filter === "alerts")            view = view.filter(keywordHit);
-  else if (filter === "unread")       view = view.filter(i => !seen.has(i.id));
-  else if (filter.startsWith("cat:")) {
+  if (filter.startsWith("cat:")) {
     const want = filter.slice(4);
     view = view.filter(i => (catOf[i.source] || "Other") === want);
   }
 
   // Strictly newest first. Keyword hits used to be floated to the top, which
-  // meant the reddest story was not always the first one - the ALERT tag and
-  // the Alerts chip carry that job instead.
+  // meant the reddest story was not always the first one - the inline ALERT
+  // tag carries that job instead.
   view.sort((a, b) => b.ts - a.ts);
 
   const list = $("#list");
@@ -974,7 +977,7 @@ setInterval(() => { if (!document.hidden) render(); }, 60000);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-const BUILD = "2026-08-23.7";
+const BUILD = "2026-08-23.8";
 $("#ver").textContent = "Breaking · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
