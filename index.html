@@ -227,7 +227,7 @@ const KEY = "breaking.v1";
 /* Curated feed library. Everything here is a free, non-paywalled publisher
    that offers first-party RSS - no aggregator bridges (they go down) and no
    metered outlets whose links dead-end on a subscribe wall. */
-const CATS = ["World","Business","Tech","Canada","UK & Europe",
+const CATS = ["World","Business","Tech","Canada",
               "Science","Sport","Entertainment"];
 const CAT_ORDER = [...CATS, "Other"];
 const catRank = c => { const i = CAT_ORDER.indexOf(c); return i < 0 ? CAT_ORDER.length : i; };
@@ -291,12 +291,6 @@ const CATALOG = [
   ["Canada","Bank of Canada",     "https://www.bankofcanada.ca/content_type/press-releases/feed/"],
   ["Canada","StatCan The Daily",  "https://www150.statcan.gc.ca/n1/dai-quo/rss/new-nouveau-eng.xml"],
 
-
-  ["UK & Europe", "BBC UK",       "https://feeds.bbci.co.uk/news/uk/rss.xml"],
-  ["UK & Europe", "Guardian UK",  "https://www.theguardian.com/uk-news/rss"],
-  ["UK & Europe", "Euronews",     "https://www.euronews.com/rss?level=theme&name=news"],
-  ["UK & Europe", "Politico EU",  "https://www.politico.eu/feed/"],
-  ["UK & Europe", "openDemocracy","https://www.opendemocracy.net/en/feed/"],
 
   ["Science","Quanta Magazine",   "https://api.quantamagazine.org/feed/"],
   ["Science","Phys.org",          "https://phys.org/rss-feed/"],
@@ -438,17 +432,22 @@ function migrate(c) {
     c.migrated = 4;
   }
 
-  // The US desk was retired. Drop its feeds rather than leaving them orphaned
-  // under a category that no longer has a rank, a chip or a section.
+  // Retired desks. Their feeds are dropped rather than left orphaned under a
+  // category with no rank, no chip and no section - which would keep fetching
+  // them on every refresh while their stories stayed unreachable.
   if (c.migrated < 5) {
     c.feeds = c.feeds.filter(f => f.cat !== "US");
     c.migrated = 5;
+  }
+  if (c.migrated < 6) {
+    c.feeds = c.feeds.filter(f => f.cat !== "UK & Europe");
+    c.migrated = 6;
   }
   return c;
 }
 
 const load = () => { try { return migrate({...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || "{}")}); }
-                     catch { return {...DEFAULTS, migrated:5}; } };
+                     catch { return {...DEFAULTS, migrated:6}; } };
 const save = () => localStorage.setItem(KEY, JSON.stringify(cfg));
 let cfg = load();
 // Persist immediately: migrations rewrite feed URLs and backfill categories,
@@ -1031,7 +1030,7 @@ setInterval(() => { if (!document.hidden) render(); }, 60000);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-const BUILD = "2026-08-23.10";
+const BUILD = "2026-08-23.11";
 $("#ver").textContent = "Breaking · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
