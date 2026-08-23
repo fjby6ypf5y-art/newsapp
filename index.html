@@ -217,56 +217,85 @@ const CATS = ["World","Business","Tech","US","UK & Europe","Science","Sport"];
 const CAT_ORDER = [...CATS, "Other"];
 const catRank = c => { const i = CAT_ORDER.indexOf(c); return i < 0 ? CAT_ORDER.length : i; };
 const CATALOG = [
-  ["World", "BBC World",         "https://feeds.bbci.co.uk/news/world/rss.xml"],
-  ["World", "NPR News",          "https://feeds.npr.org/1001/rss.xml"],
-  ["World", "Al Jazeera",        "https://www.aljazeera.com/xml/rss/all.xml"],
-  ["World", "Deutsche Welle",    "https://rss.dw.com/rdf/rss-en-world"],
-  ["World", "France 24",         "https://www.france24.com/en/rss"],
-  ["World", "CBC World",         "https://rss.cbc.ca/lineup/world.xml"],
-  ["World", "ABC Australia",     "https://www.abc.net.au/news/feed/51120/rss.xml"],
-  ["World", "Guardian World",    "https://www.theguardian.com/world/rss"],
-  ["World", "Sky News",          "https://feeds.skynews.com/feeds/rss/world.xml"],
+  // Everything here is free to read with no metering. Digital-native outlets
+  // are included on the same footing as legacy ones - they tend to publish
+  // more often, which is what keeps a thin category from looking stale.
+  ["World", "BBC World",          "https://feeds.bbci.co.uk/news/world/rss.xml"],
+  ["World", "NPR News",           "https://feeds.npr.org/1001/rss.xml"],
+  ["World", "Al Jazeera",         "https://www.aljazeera.com/xml/rss/all.xml"],
+  ["World", "Guardian World",     "https://www.theguardian.com/world/rss"],
+  ["World", "Deutsche Welle",     "https://rss.dw.com/rdf/rss-en-world"],
+  ["World", "France 24",          "https://www.france24.com/en/rss"],
+  ["World", "CBC World",          "https://rss.cbc.ca/lineup/world.xml"],
+  ["World", "ABC Australia",      "https://www.abc.net.au/news/feed/51120/rss.xml"],
+  ["World", "Axios",              "https://api.axios.com/feed/"],
+  ["World", "Vox",                "https://www.vox.com/rss/index.xml"],
+  ["World", "The Intercept",      "https://theintercept.com/feed/?rss"],
+  ["World", "Rest of World",      "https://restofworld.org/feed/latest"],
+  ["World", "Global Voices",      "https://globalvoices.org/feed/"],
+  ["World", "The Conversation",   "https://theconversation.com/articles.atom"],
+  ["World", "Grist",              "https://grist.org/feed/"],
+  ["World", "Sky News",           "https://feeds.skynews.com/feeds/rss/world.xml"],
 
-  ["US",    "NPR Politics",      "https://feeds.npr.org/1014/rss.xml"],
-  ["US",    "PBS NewsHour",      "https://www.pbs.org/newshour/feeds/rss/headlines"],
-  ["US",    "CBS News",          "https://www.cbsnews.com/latest/rss/main"],
-  ["US",    "NBC News",          "https://feeds.nbcnews.com/nbcnews/public/news"],
-  ["US",    "The Hill",          "https://thehill.com/news/feed/"],
+  ["Business", "BBC Business",    "https://feeds.bbci.co.uk/news/business/rss.xml"],
+  ["Business", "NPR Business",    "https://feeds.npr.org/1006/rss.xml"],
+  ["Business", "CBC Business",    "https://rss.cbc.ca/lineup/business.xml"],
+  ["Business", "Guardian Business","https://www.theguardian.com/uk/business/rss"],
+  ["Business", "Marketplace",     "https://www.marketplace.org/feed/"],
+  ["Business", "CNBC",            "https://www.cnbc.com/id/100003114/device/rss/rss.html"],
+  ["Business", "Yahoo Finance",   "https://finance.yahoo.com/news/rssindex"],
+  ["Business", "Investing.com",   "https://www.investing.com/rss/news.rss"],
+  ["Business", "ProPublica",      "https://www.propublica.org/feeds/propublica/main"],
+  ["Business", "Conversation Biz","https://theconversation.com/us/business/articles.atom"],
+  ["Business", "Federal Reserve", "https://www.federalreserve.gov/feeds/press_all.xml"],
+  ["Business", "SEC Press",       "https://www.sec.gov/news/pressreleases.rss"],
 
-  ["UK & Europe", "BBC UK",      "https://feeds.bbci.co.uk/news/uk/rss.xml"],
-  ["UK & Europe", "Guardian UK", "https://www.theguardian.com/uk-news/rss"],
-  ["UK & Europe", "Euronews",    "https://www.euronews.com/rss?level=theme&name=news"],
+  ["Tech",  "Ars Technica",       "https://feeds.arstechnica.com/arstechnica/index"],
+  ["Tech",  "The Verge",          "https://www.theverge.com/rss/index.xml"],
+  ["Tech",  "Hacker News",        "https://news.ycombinator.com/rss"],
+  ["Tech",  "TechCrunch",         "https://techcrunch.com/feed/"],
+  ["Tech",  "Engadget",           "https://www.engadget.com/rss.xml"],
+  ["Tech",  "The Register",       "https://www.theregister.com/headlines.atom"],
+  ["Tech",  "404 Media",          "https://www.404media.co/rss/"],
+  ["Tech",  "The Markup",         "https://themarkup.org/feeds/rss.xml"],
+  ["Tech",  "Techdirt",           "https://www.techdirt.com/feed/"],
+  ["Tech",  "Krebs on Security",  "https://krebsonsecurity.com/feed/"],
+  ["Tech",  "Bleeping Computer",  "https://www.bleepingcomputer.com/feed/"],
+  ["Tech",  "Schneier",           "https://www.schneier.com/feed/atom/"],
+  ["Tech",  "BBC Technology",     "https://feeds.bbci.co.uk/news/technology/rss.xml"],
 
-  // Business: all free to read, no metering. Deliberately excludes the FT,
-  // WSJ, Bloomberg, Economist, Business Insider and Reuters - their links
-  // dead-end on a subscribe wall even when the RSS itself fetches fine.
-  ["Business", "BBC Business",   "https://feeds.bbci.co.uk/news/business/rss.xml"],
-  ["Business", "NPR Business",   "https://feeds.npr.org/1006/rss.xml"],
-  ["Business", "CBC Business",   "https://rss.cbc.ca/lineup/business.xml"],
-  ["Business", "Marketplace",    "https://www.marketplace.org/feed/"],
-  ["Business", "CNBC",           "https://www.cnbc.com/id/100003114/device/rss/rss.html"],
-  ["Business", "Yahoo Finance",  "https://finance.yahoo.com/news/rssindex"],
-  ["Business", "Investing.com",  "https://www.investing.com/rss/news.rss"],
-  ["Business", "ProPublica",     "https://www.propublica.org/feeds/propublica/main"],
-  ["Business", "The Conversation","https://theconversation.com/us/business/articles.atom"],
-  ["Business", "Federal Reserve","https://www.federalreserve.gov/feeds/press_all.xml"],
-  ["Business", "SEC Press",      "https://www.sec.gov/news/pressreleases.rss"],
+  ["US",    "NPR Politics",       "https://feeds.npr.org/1014/rss.xml"],
+  ["US",    "PBS NewsHour",       "https://www.pbs.org/newshour/feeds/rss/headlines"],
+  ["US",    "CBS News",           "https://www.cbsnews.com/latest/rss/main"],
+  ["US",    "NBC News",           "https://feeds.nbcnews.com/nbcnews/public/news"],
+  ["US",    "The Hill",           "https://thehill.com/news/feed/"],
+  ["US",    "Axios Politics",     "https://api.axios.com/feed/politics"],
+  ["US",    "Marshall Project",   "https://www.themarshallproject.org/rss/recent.rss"],
+  ["US",    "Stateline",          "https://stateline.org/feed/"],
+  ["US",    "Guardian US",        "https://www.theguardian.com/us-news/rss"],
 
-  ["Tech",  "Ars Technica",      "https://feeds.arstechnica.com/arstechnica/index"],
-  ["Tech",  "The Verge",         "https://www.theverge.com/rss/index.xml"],
-  ["Tech",  "Hacker News",       "https://news.ycombinator.com/rss"],
-  ["Tech",  "TechCrunch",        "https://techcrunch.com/feed/"],
-  ["Tech",  "Engadget",          "https://www.engadget.com/rss.xml"],
-  ["Tech",  "BBC Technology",    "https://feeds.bbci.co.uk/news/technology/rss.xml"],
+  ["UK & Europe", "BBC UK",       "https://feeds.bbci.co.uk/news/uk/rss.xml"],
+  ["UK & Europe", "Guardian UK",  "https://www.theguardian.com/uk-news/rss"],
+  ["UK & Europe", "Euronews",     "https://www.euronews.com/rss?level=theme&name=news"],
+  ["UK & Europe", "Politico EU",  "https://www.politico.eu/feed/"],
+  ["UK & Europe", "openDemocracy","https://www.opendemocracy.net/en/feed/"],
 
-  ["Science","Phys.org",         "https://phys.org/rss-feed/"],
-  ["Science","ScienceDaily",     "https://www.sciencedaily.com/rss/all.xml"],
-  ["Science","NASA",             "https://www.nasa.gov/rss/dyn/breaking_news.rss"],
-  ["Science","BBC Science",      "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml"],
+  ["Science","Quanta Magazine",   "https://api.quantamagazine.org/feed/"],
+  ["Science","Phys.org",          "https://phys.org/rss-feed/"],
+  ["Science","ScienceDaily",      "https://www.sciencedaily.com/rss/all.xml"],
+  ["Science","Science News",      "https://www.sciencenews.org/feed"],
+  ["Science","Eos",               "https://eos.org/feed"],
+  ["Science","Undark",            "https://undark.org/feed/"],
+  ["Science","NASA",              "https://www.nasa.gov/rss/dyn/breaking_news.rss"],
+  ["Science","ESA",               "https://www.esa.int/rssfeed/Our_Activities/Space_News"],
+  ["Science","USGS Quakes M2.5+", "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.atom"],
+  ["Science","BBC Science",       "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml"],
 
-  ["Sport", "BBC Sport",         "https://feeds.bbci.co.uk/sport/rss.xml"],
-  ["Sport", "ESPN",              "https://www.espn.com/espn/rss/news"],
-  ["Sport", "Guardian Sport",    "https://www.theguardian.com/sport/rss"]
+  ["Sport", "BBC Sport",          "https://feeds.bbci.co.uk/sport/rss.xml"],
+  ["Sport", "Guardian Sport",     "https://www.theguardian.com/sport/rss"],
+  ["Sport", "ESPN",               "https://www.espn.com/espn/rss/news"],
+  ["Sport", "Defector",           "https://defector.com/feed"],
+  ["Sport", "Yahoo Sports",       "https://sports.yahoo.com/rss/"]
 ].map(([cat, name, url]) => ({ cat, name, url }));
 
 const inCatalog = url => CATALOG.find(f => f.url === url);
@@ -752,7 +781,21 @@ function renderLibrary() {
   CATS.forEach(cat => {
     const list = CATALOG.filter(f => f.cat === cat);
     if (!list.length) return;
-    const h = el("div", "cat"); h.textContent = cat; box.appendChild(h);
+    const h = el("div", "cat");
+    h.style.display = "flex"; h.style.alignItems = "center";
+    const label = el("span"); label.textContent = cat; h.appendChild(label);
+    const all = el("button");
+    const allOn = list.every(f => have.has(f.url));
+    all.textContent = allOn ? "Remove all" : "Add all";
+    all.style.cssText = "margin-left:auto;background:transparent;border:0;color:var(--dim);"
+      + "font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;padding:0";
+    all.onclick = () => {
+      if (allOn) cfg.feeds = cfg.feeds.filter(f => !list.some(c => c.url === f.url));
+      else list.forEach(f => { if (!have.has(f.url)) cfg.feeds.push({ ...f }); });
+      save(); renderFeeds(); renderLibrary(); render();
+    };
+    h.appendChild(all);
+    box.appendChild(h);
     const wrap = el("div", "lib");
     list.forEach(f => {
       const b = el("button");
@@ -856,7 +899,7 @@ setInterval(() => { if (!document.hidden) render(); }, 60000);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-const BUILD = "2026-08-23.4";
+const BUILD = "2026-08-23.5";
 $("#ver").textContent = "Breaking · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

@@ -68,8 +68,12 @@ Tap the **⚙** button to configure.
 - **Your feeds** — grouped by category, each with a health dot. Green means the
   feed answered on the last refresh; red shows the actual error. **Test all
   feeds** re-checks every one on demand.
-- **Add from library** — 41 curated feeds across World, Business, Tech, US,
-  UK & Europe, Science and Sport. Tap to add or remove. Everything in it is
+- **Add from library** — 70 curated feeds across World, Business, Tech, US,
+  UK & Europe, Science and Sport, with an **Add all** button per category.
+  Digital-native outlets sit alongside legacy ones: Axios, Vox, The Intercept,
+  Rest of World, 404 Media, The Markup, Quanta, Defector, ProPublica, The
+  Marshall Project and others. They publish more often, which is what stops a
+  thin category looking stale. Tap to add or remove. Everything in it is
   free and non-paywalled, published first-party — no aggregator bridges (they
   go down) and no metered outlets whose links dead-end on a subscribe wall.
 - **Add by URL** — any other RSS or Atom feed, filed under a category you pick.
