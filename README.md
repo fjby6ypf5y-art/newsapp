@@ -68,12 +68,19 @@ Tap the **⚙** button to configure.
 - **Your feeds** — grouped by category, each with a health dot. Green means the
   feed answered on the last refresh; red shows the actual error. **Test all
   feeds** re-checks every one on demand.
-- **Add from library** — 33 curated feeds across World, US, UK & Europe,
-  Business, Tech, Science and Sport. Tap to add or remove. Everything in it is
+- **Add from library** — 41 curated feeds across World, Business, Tech, US,
+  UK & Europe, Science and Sport. Tap to add or remove. Everything in it is
   free and non-paywalled, published first-party — no aggregator bridges (they
   go down) and no metered outlets whose links dead-end on a subscribe wall.
 - **Add by URL** — any other RSS or Atom feed, filed under a category you pick.
   Most outlets publish one at `/rss`, `/feed`, or `/rss.xml`.
+
+**Business** is deliberately the deepest category, and every entry is free to
+read with no metering: BBC, NPR and CBC business desks, Marketplace, CNBC,
+Yahoo Finance, Investing.com, ProPublica, The Conversation, plus Federal
+Reserve and SEC press releases as primary sources. The FT, WSJ, Bloomberg,
+Economist, Business Insider and Reuters are all left out on purpose — their
+RSS may fetch fine, but the links dead-end on a subscribe wall.
 
 **On feeds that fail:** whether a feed works depends on your network and on
 which relay can reach it, so the only place the answer is true is your phone.

@@ -237,9 +237,20 @@ const CATALOG = [
   ["UK & Europe", "Guardian UK", "https://www.theguardian.com/uk-news/rss"],
   ["UK & Europe", "Euronews",    "https://www.euronews.com/rss?level=theme&name=news"],
 
+  // Business: all free to read, no metering. Deliberately excludes the FT,
+  // WSJ, Bloomberg, Economist, Business Insider and Reuters - their links
+  // dead-end on a subscribe wall even when the RSS itself fetches fine.
   ["Business", "BBC Business",   "https://feeds.bbci.co.uk/news/business/rss.xml"],
+  ["Business", "NPR Business",   "https://feeds.npr.org/1006/rss.xml"],
+  ["Business", "CBC Business",   "https://rss.cbc.ca/lineup/business.xml"],
+  ["Business", "Marketplace",    "https://www.marketplace.org/feed/"],
   ["Business", "CNBC",           "https://www.cnbc.com/id/100003114/device/rss/rss.html"],
-  ["Business", "Guardian Money", "https://www.theguardian.com/uk/business/rss"],
+  ["Business", "Yahoo Finance",  "https://finance.yahoo.com/news/rssindex"],
+  ["Business", "Investing.com",  "https://www.investing.com/rss/news.rss"],
+  ["Business", "ProPublica",     "https://www.propublica.org/feeds/propublica/main"],
+  ["Business", "The Conversation","https://theconversation.com/us/business/articles.atom"],
+  ["Business", "Federal Reserve","https://www.federalreserve.gov/feeds/press_all.xml"],
+  ["Business", "SEC Press",      "https://www.sec.gov/news/pressreleases.rss"],
 
   ["Tech",  "Ars Technica",      "https://feeds.arstechnica.com/arstechnica/index"],
   ["Tech",  "The Verge",         "https://www.theverge.com/rss/index.xml"],
