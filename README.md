@@ -96,8 +96,10 @@ Tap the **⚙** button to configure.
 
 - **Your feeds** (☰ page) — grouped by category, each with a health dot. Green
   means the feed answered on the last refresh; red shows the actual error.
-  **Tap any feed to edit its name, address or category, or delete it** — so a
-  publisher moving its RSS is a thirty-second fix rather than a code change.
+  **Tap any feed to edit its name, address or category** — so a publisher moving
+  its RSS is a thirty-second fix rather than a code change. **Cancel** closes
+  without writing anything, so you can open a feed just to read its address.
+  **Delete feed** sits on its own row, away from Save.
   Editing an address clears what was learned about the old one; renaming a feed
   relabels the stories already fetched under the old name. **Test all feeds**
   re-checks every one on demand.

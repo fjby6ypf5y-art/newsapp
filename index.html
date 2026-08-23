@@ -1018,11 +1018,24 @@ function feedEditor(f) {
   });
   field("Category", cat);
 
+  // Cancel and Save together; Delete on its own row below, so the destructive
+  // action is not sitting under a thumb aimed at Save.
   const btns = el("div", "btns");
-  const save_ = el("button", "btn primary"); save_.textContent = "Save";
-  const del = el("button", "btn danger");   del.textContent = "Delete";
-  btns.append(save_, del);
+  const cancel = el("button", "btn");         cancel.textContent = "Cancel";
+  const save_  = el("button", "btn primary"); save_.textContent  = "Save";
+  btns.append(cancel, save_);
   wrap.appendChild(btns);
+
+  const del = el("button", "btn danger");
+  del.textContent = "Delete feed";
+  del.style.marginTop = "8px";
+  wrap.appendChild(del);
+
+  cancel.onclick = e => {
+    e.stopPropagation();
+    editing = null;          // nothing was written, so just close
+    renderFeeds();
+  };
 
   save_.onclick = e => {
     e.stopPropagation();
@@ -1281,7 +1294,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-const BUILD = "2026-08-23.26";
+const BUILD = "2026-08-23.27";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
