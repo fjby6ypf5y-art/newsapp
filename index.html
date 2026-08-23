@@ -279,6 +279,9 @@ const DEFAULTS = {
     { cat:"World", name:"CBC World",   url:"https://rss.cbc.ca/lineup/world.xml" },
     { cat:"US",    name:"NPR Politics","url":"https://feeds.npr.org/1014/rss.xml" },
     { cat:"US",    name:"PBS NewsHour",url:"https://www.pbs.org/newshour/feeds/rss/headlines" },
+    { cat:"Business",name:"BBC Business",url:"https://feeds.bbci.co.uk/news/business/rss.xml" },
+    { cat:"Business",name:"NPR Business",url:"https://feeds.npr.org/1006/rss.xml" },
+    { cat:"Business",name:"CBC Business",url:"https://rss.cbc.ca/lineup/business.xml" },
     { cat:"Tech",  name:"Ars Technica",url:"https://feeds.arstechnica.com/arstechnica/index" },
     { cat:"Tech",  name:"Hacker News", url:"https://news.ycombinator.com/rss" },
     { cat:"Science",name:"Phys.org",   url:"https://phys.org/rss-feed/" }
@@ -303,25 +306,40 @@ const RETIRED = {
     { name:"Sky News", url:"https://feeds.skynews.com/feeds/rss/world.xml" }
 };
 
+// Feeds added to an existing install when a category is requested but empty.
+// Only the publishers already proven reachable in the field.
+const SEED_BUSINESS = [
+  { cat:"Business", name:"BBC Business", url:"https://feeds.bbci.co.uk/news/business/rss.xml" },
+  { cat:"Business", name:"NPR Business", url:"https://feeds.npr.org/1006/rss.xml" },
+  { cat:"Business", name:"CBC Business", url:"https://rss.cbc.ca/lineup/business.xml" }
+];
+
 function migrate(c) {
-  if (c.migrated >= 2) {
-    c.feeds.forEach(f => { if (!f.cat) f.cat = (inCatalog(f.url) || {}).cat || "Other"; });
-    return c;
+  c.feeds.forEach(f => { if (!f.cat) f.cat = (inCatalog(f.url) || {}).cat || "Other"; });
+
+  // A category with no feeds shows no chip and no section, so asking for
+  // business news has to actually put business feeds in the list - leaving
+  // them in the library only would look like nothing happened.
+  if (c.migrated < 3) {
+    if (!c.feeds.some(f => f.cat === "Business")) {
+      const have = new Set(c.feeds.map(f => f.url));
+      SEED_BUSINESS.forEach(f => { if (!have.has(f.url)) c.feeds.push({ ...f }); });
+    }
+    c.migrated = 3;
   }
+  if (c.migrated >= 3) return c;
   const urls = new Set(c.feeds.map(f => f.url));
   c.feeds = c.feeds.flatMap(f => {
     const swap = RETIRED[f.url];
     if (!swap) return [f];
     return urls.has(swap.url) ? [] : [swap];   // don't create a duplicate
   });
-  // Backfill a category on every feed, including ones added by hand.
-  c.feeds.forEach(f => { if (!f.cat) f.cat = (inCatalog(f.url) || {}).cat || "Other"; });
-  c.migrated = 2;
+  c.migrated = 3;
   return c;
 }
 
 const load = () => { try { return migrate({...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || "{}")}); }
-                     catch { return {...DEFAULTS, migrated:2}; } };
+                     catch { return {...DEFAULTS, migrated:3}; } };
 const save = () => localStorage.setItem(KEY, JSON.stringify(cfg));
 let cfg = load();
 // Persist immediately: migrations rewrite feed URLs and backfill categories,

@@ -75,6 +75,11 @@ Tap the **⚙** button to configure.
 - **Add by URL** — any other RSS or Atom feed, filed under a category you pick.
   Most outlets publish one at `/rss`, `/feed`, or `/rss.xml`.
 
+A category with no feeds shows no chip and no section, so adding feeds to the
+library alone is invisible until you tap them. Business feeds are therefore
+seeded into the feed list directly on upgrade — once. Remove them and they
+stay removed.
+
 **Business** is deliberately the deepest category, and every entry is free to
 read with no metering: BBC, NPR and CBC business desks, Marketplace, CNBC,
 Yahoo Finance, Investing.com, ProPublica, The Conversation, plus Federal
