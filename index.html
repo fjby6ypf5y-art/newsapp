@@ -300,8 +300,10 @@ const CATALOG = [
   ["Tech",  "Schneier",           "https://www.schneier.com/feed/atom/"],
   ["Tech",  "BBC Technology",     "https://feeds.bbci.co.uk/news/technology/rss.xml"],
 
-  ["Canada","CBC Top Stories",    "https://rss.cbc.ca/lineup/topstories.xml"],
   ["Canada","CBC Canada",         "https://rss.cbc.ca/lineup/canada.xml"],
+  // CBC's front page: national plus international. Overlaps CBC World, which
+  // is why the Canada desk above is the seeded one.
+  ["Canada","CBC Top Stories",    "https://rss.cbc.ca/lineup/topstories.xml"],
   ["Canada","CBC Politics",       "https://rss.cbc.ca/lineup/politics.xml"],
   ["Canada","CBC Indigenous",     "https://rss.cbc.ca/lineup/canada-north.xml"],
   ["Canada","Global News",        "https://globalnews.ca/feed/"],
@@ -358,7 +360,7 @@ const DEFAULTS = {
     { cat:"Business",name:"BBC Business",url:"https://feeds.bbci.co.uk/news/business/rss.xml" },
     { cat:"Business",name:"NPR Business",url:"https://feeds.npr.org/1006/rss.xml" },
     { cat:"Business",name:"CBC Business",url:"https://rss.cbc.ca/lineup/business.xml" },
-    { cat:"Canada", name:"CBC Top Stories",url:"https://rss.cbc.ca/lineup/topstories.xml" },
+    { cat:"Canada", name:"CBC Canada",   url:"https://rss.cbc.ca/lineup/canada.xml" },
     { cat:"Canada", name:"CBC Politics", url:"https://rss.cbc.ca/lineup/politics.xml" },
     { cat:"Canada", name:"Global News",  url:"https://globalnews.ca/feed/" },
     { cat:"Entertainment",name:"CBC Arts",url:"https://rss.cbc.ca/lineup/arts.xml" },
@@ -396,6 +398,15 @@ const RETIRED = {
 // does not help anyone who already has the broken URL in their feed list, so
 // these are removed on upgrade. Add a URL here when a feed is verified dead,
 // and bump the migration below.
+// Feeds replaced by a better fit rather than being broken. Same reasoning as
+// DEAD_FEEDS: the swap has to reach devices that already hold the old URL.
+const SWAPPED = {
+  // CBC's front page mixes international news into the Canada tab; the Canada
+  // desk is the one that belongs there, and CBC World covers the rest.
+  "https://rss.cbc.ca/lineup/topstories.xml":
+    { cat:"Canada", name:"CBC Canada", url:"https://rss.cbc.ca/lineup/canada.xml" }
+};
+
 const DEAD_FEEDS = [
   // CTV retired this Bell Media endpoint; no working replacement found.
   "https://www.ctvnews.ca/rss/ctvnews-ca-top-stories-public-rss-1.822009"
@@ -410,7 +421,7 @@ const SEED_BUSINESS = [
 ];
 
 const SEED_CANADA = [
-  { cat:"Canada", name:"CBC Top Stories", url:"https://rss.cbc.ca/lineup/topstories.xml" },
+  { cat:"Canada", name:"CBC Canada",      url:"https://rss.cbc.ca/lineup/canada.xml" },
   { cat:"Canada", name:"CBC Politics",    url:"https://rss.cbc.ca/lineup/politics.xml" },
   { cat:"Canada", name:"Global News",     url:"https://globalnews.ca/feed/" },
   { cat:"Canada", name:"APTN News",       url:"https://www.aptnnews.ca/feed/" },
@@ -483,11 +494,21 @@ function migrate(c) {
     try { localStorage.removeItem(KEY + ".notified"); } catch {}
     c.migrated = 8;
   }
+
+  if (c.migrated < 9) {
+    const have = new Set(c.feeds.map(f => f.url));
+    c.feeds = c.feeds.flatMap(f => {
+      const swap = SWAPPED[f.url];
+      if (!swap) return [f];
+      return have.has(swap.url) ? [] : [{ ...swap }];   // never duplicate
+    });
+    c.migrated = 9;
+  }
   return c;
 }
 
 const load = () => { try { return migrate({...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || "{}")}); }
-                     catch { return {...DEFAULTS, migrated:8}; } };
+                     catch { return {...DEFAULTS, migrated:9}; } };
 const save = () => localStorage.setItem(KEY, JSON.stringify(cfg));
 let cfg = load();
 // Persist immediately: migrations rewrite feed URLs and backfill categories,
@@ -1124,7 +1145,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-const BUILD = "2026-08-23.23";
+const BUILD = "2026-08-23.24";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
