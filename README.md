@@ -56,11 +56,23 @@ Tap the **⚙** button.
   paste in any RSS or Atom URL. Most outlets publish one at `/rss`, `/feed`,
   or `/rss.xml`.
 - **Alert keywords** — comma-separated. Matching headlines get an `ALERT` tag,
-  a red wash, and get pushed to the top of the list. Partial words work:
+  a gold hairline, and get pushed to the top of the list. Partial words work:
   `evacuat` catches both *evacuate* and *evacuation*.
 - **Backup** — **Export** dumps your whole config as JSON. Mail it to yourself.
   **Import** pastes it back. This is your only backup; clearing Safari's
   website data wipes the app's storage.
+
+### Reading the heat map
+
+Every story carries its age as colour — a red-to-blue ramp running from *just
+now* to *over a day old*, shown as a rail down the left edge plus a matching
+wash across the row. The scale sits under the filter chips.
+
+The ramp is one continuous scale in seven steps: red pole → neutral pivot →
+blue pole, with brightness falling as stories age, so the newest items are
+always the most visually prominent and old ones sink back into the background.
+Colour is never the only signal — each row also prints its actual timestamp
+(`01:20 AM`, `Yesterday 11:25 PM`, `Aug 21 04:05 PM`) next to the relative age.
 
 A useful trick for any topic that has no dedicated feed — Google News will
 build one for you from a search query:
