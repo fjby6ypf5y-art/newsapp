@@ -116,16 +116,26 @@ Tap the **⚙** button to configure.
 - **Add by URL** — any other feed, filed under a category you pick. Most outlets
   publish one at `/rss`, `/feed`, or `/rss.xml`.
 
-**Feed formats.** Anything that is well-formed XML with `<item>` or `<entry>`
-elements works — RSS 2.0, Atom, and RSS 1.0/RDF. Dates are read from `pubDate`,
-`published`, `updated` or `dc:date`; a story with none still appears, but as
-the coldest colour with "time unknown" instead of a timestamp, since there is
-nothing to place it on the ramp. CDATA and escaped markup in titles are handled.
-Relative story links resolve against the feed's own address.
+**Feed formats.** Two families work:
 
-Not supported: **JSON Feed**, and anything that is not valid XML — a login page,
-an error page, or a feed with malformed markup all fail with "bad XML" rather
-than silently showing nothing.
+- **XML** — RSS 2.0, Atom, RSS 1.0/RDF. Dates come from `pubDate`, `published`,
+  `updated` or `dc:date`. CDATA and escaped markup in titles are handled.
+- **JSON Feed** — 1.0 and 1.1. Titles are optional in that format, so an
+  untitled item falls back to the opening of its body rather than being dropped;
+  a link post with an `external_url` links where it points, not to the
+  permalink.
+
+Which parser runs is decided by the first character of the response, not the
+content type — publishers get that header wrong often enough (JSON as
+`text/plain`, XML as `text/html`) that trusting it would reject working feeds.
+
+Relative story links resolve against the feed's own address. A story with no
+readable date still appears, but as the coldest colour with "time unknown",
+since there is nothing to place it on the ramp.
+
+Anything else fails visibly, with the reason on the feed's row: `bad XML`,
+`bad JSON`, or `JSON, but not a feed` — so a login page or an error page served
+in place of a feed is obvious rather than looking like an empty category.
 
 A category with no feeds shows no chip and no section, so adding feeds to the
 library alone is invisible until you tap them. New categories are therefore

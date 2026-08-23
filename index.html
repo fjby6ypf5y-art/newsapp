@@ -674,7 +674,50 @@ const txt = (node, ...names) => {
   return "";
 };
 
-function parseFeed(xml, source, feedUrl) {
+// Strip markup and entities down to plain text for the one-line summary.
+// Shared by both parsers so a JSON feed's content_html reads the same as an
+// RSS description.
+const stripMarkup = raw => String(raw || "")
+  .replace(/<[^>]*>/g, " ")
+  .replace(/&[a-z#0-9]+;/gi, " ")
+  .replace(/\s+/g, " ")
+  .trim();
+
+// A feed is XML or JSON Feed; nothing else is accepted. Dispatch on the first
+// character rather than the content type, which publishers frequently get
+// wrong (JSON served as text/plain, XML as text/html).
+function parseFeed(text, source, feedUrl) {
+  return String(text).trimStart().startsWith("{")
+    ? parseJsonFeed(text, source, feedUrl)
+    : parseXmlFeed(text, source, feedUrl);
+}
+
+function parseJsonFeed(text, source, feedUrl) {
+  let doc;
+  try { doc = JSON.parse(text); }
+  catch { throw new Error("bad JSON"); }
+  if (!doc || !Array.isArray(doc.items)) throw new Error("JSON, but not a feed");
+
+  return doc.items.map(it => {
+    // url is the story; external_url is a link post pointing elsewhere, which
+    // is what a reader of that feed actually wants to open.
+    const link = safeLink(it.url || it.external_url || "", feedUrl);
+    const body = stripMarkup(it.summary || it.content_text || it.content_html);
+    // JSON Feed titles are optional - microblog-style items carry none - so
+    // fall back to the opening of the body rather than dropping the item.
+    const title = String(it.title || "").trim() || body.slice(0, 120) || "(untitled)";
+
+    let ts = Date.parse(it.date_published || it.date_modified || "");
+    if (isNaN(ts)) ts = 0;
+
+    return {
+      id: String(link || it.id || title).slice(0, 300),
+      title, link, snip: body.slice(0, 220), ts, source
+    };
+  }).filter(i => i.title !== "(untitled)" || i.link);
+}
+
+function parseXmlFeed(xml, source, feedUrl) {
   const doc = new DOMParser().parseFromString(xml, "application/xml");
   if (doc.querySelector("parsererror")) throw new Error("bad XML");
 
@@ -697,9 +740,7 @@ function parseFeed(xml, source, feedUrl) {
     // Core instead of pubDate. Without it those stories arrive undated, which
     // paints them coldest and sinks them to the bottom of the list.
     const when  = txt(n, "pubDate", "published", "updated", "dc:date", "date");
-    const raw   = txt(n, "description", "summary", "content");
-    const snip  = raw.replace(/<[^>]*>/g, " ").replace(/&[a-z#0-9]+;/gi, " ")
-                     .replace(/\s+/g, " ").trim().slice(0, 220);
+    const snip  = stripMarkup(txt(n, "description", "summary", "content")).slice(0, 220);
 
     let ts = Date.parse(when);
     if (isNaN(ts)) ts = 0;
@@ -1355,7 +1396,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.32";
+const BUILD = "2026-08-23.33";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
