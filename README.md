@@ -64,15 +64,22 @@ Tap the **⚙** button.
 
 ### Reading the heat map
 
-Every story carries its age as colour — a red-to-blue ramp running from *just
+Every story carries its age as colour — a rainbow spectrum running from *just
 now* to *over a day old*, shown as a rail down the left edge plus a matching
 wash across the row. The scale sits under the filter chips.
 
-The ramp is one continuous scale in seven steps: red pole → neutral pivot →
-blue pole, with brightness falling as stories age, so the newest items are
-always the most visually prominent and old ones sink back into the background.
-Colour is never the only signal — each row also prints its actual timestamp
-(`01:20 AM`, `Yesterday 11:25 PM`, `Aug 21 04:05 PM`) next to the relative age.
+The ramp is the full spectrum in seven bands, newest to oldest:
+
+| red | orange | yellow | green | blue | indigo | violet |
+|---|---|---|---|---|---|---|
+| < 15 min | < 1 h | < 3 h | < 6 h | < 12 h | < 24 h | 24 h + |
+
+Colour is a glance, not the source of truth: hue has no inherent magnitude —
+green isn't "more" than yellow — so a rainbow leans on the familiar ROYGBIV
+order rather than on brightness. What actually pins a story down is the
+timestamp printed on every row (`01:20 AM`, `Yesterday 11:25 PM`,
+`Aug 21 04:05 PM`) next to the relative age. All seven bands clear 4:1
+contrast on the app surface.
 
 A useful trick for any topic that has no dedicated feed — Google News will
 build one for you from a search query:

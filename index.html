@@ -16,12 +16,13 @@
   --bg:#0d0d10; --panel:#17171c; --panel2:#1f1f26; --line:#2c2c35;
   --text:#f2f2f5; --dim:#9a9aa8; --faint:#6a6a78;
   --accent:#e8434f; --accent-dim:#7c1c22; --gold:#ffd666;
-  /* Recency heat ramp: red pole -> neutral pivot -> blue pole, with lightness
-     falling monotonically (7.9:1 down to 1.8:1 on this surface) so the newest
-     rows stay the most salient and old ones recede. Every row also prints its
-     timestamp, so age is never carried by colour alone. */
-  --h0:#ff7e77; --h1:#f17070; --h2:#bf696d; --h3:#66707a;
-  --h4:#3e6084; --h5:#1d4f82; --h6:#083c75;
+  /* Recency heat ramp: full ROYGBIV spectrum, newest (red) -> oldest (violet).
+     Hue carries no inherent magnitude, so the spectrum leans on the familiar
+     rainbow order rather than on brightness; the timestamp printed on every
+     row is what actually pins an item down. All seven clear 4:1 on this
+     surface (4.17 worst, at the violet end). */
+  --h0:#ff6056; --h1:#f58e02; --h2:#e8ca17; --h3:#4bd76d;
+  --h4:#00acec; --h5:#7177ea; --h6:#a355b4;
   --safe-t:env(safe-area-inset-top); --safe-b:env(safe-area-inset-bottom);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -73,7 +74,7 @@ main{padding:0 0 calc(var(--safe-b) + 40px)}
   border-bottom:1px solid var(--line);position:relative;
   --heat:var(--h6);
   border-left:5px solid var(--heat);
-  background:linear-gradient(90deg,color-mix(in srgb,var(--heat) 15%,transparent),transparent 58%);
+  background:linear-gradient(90deg,color-mix(in srgb,var(--heat) 12%,transparent),transparent 58%);
   transition:border-color .3s,background .3s}
 .item:active{background:var(--panel)}
 .item.unseen::before{content:"";position:absolute;left:8px;top:21px;width:5px;height:5px;border-radius:50%;background:var(--accent)}
