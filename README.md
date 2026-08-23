@@ -74,7 +74,7 @@ Tap the **⚙** button to configure.
 - **Your feeds** — grouped by category, each with a health dot. Green means the
   feed answered on the last refresh; red shows the actual error. **Test all
   feeds** re-checks every one on demand.
-- **Add from library** — 79 curated feeds across the seven categories, with an
+- **Add from library** — 82 curated feeds across the seven categories, with an
   **Add all** button per category.
   Digital-native outlets sit alongside legacy ones: Axios, Vox, The Intercept,
   Rest of World, 404 Media, The Markup, Quanta, Defector, ProPublica, The
@@ -102,6 +102,12 @@ Yahoo Finance, Investing.com, ProPublica, The Conversation, plus Federal
 Reserve and SEC press releases as primary sources. The FT, WSJ, Bloomberg,
 Economist, Business Insider and Reuters are all left out on purpose — their
 RSS may fetch fine, but the links dead-end on a subscribe wall.
+
+**Dead feeds.** Publishers retire RSS endpoints without notice. When one is
+confirmed dead on a real device its URL goes into `DEAD_FEEDS` in `index.html`
+and a migration removes it from every installed feed list — shipping a
+replacement in the library does nothing for anyone who already has the broken
+URL saved. CTV's Bell Media endpoint was the first entry.
 
 **On feeds that fail:** whether a feed works depends on your network and on
 which relay can reach it, so the only place the answer is true is your phone.
