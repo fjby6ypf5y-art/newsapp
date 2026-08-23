@@ -320,6 +320,17 @@ function migrate(c) {
   // A category with no feeds shows no chip and no section, so asking for
   // business news has to actually put business feeds in the list - leaving
   // them in the library only would look like nothing happened.
+  if (c.migrated < 2) {
+    const urls = new Set(c.feeds.map(f => f.url));
+    c.feeds = c.feeds.flatMap(f => {
+      const swap = RETIRED[f.url];
+      if (!swap) return [f];
+      return urls.has(swap.url) ? [] : [swap];   // don't create a duplicate
+    });
+    c.feeds.forEach(f => { if (!f.cat) f.cat = (inCatalog(f.url) || {}).cat || "Other"; });
+    c.migrated = 2;
+  }
+
   if (c.migrated < 3) {
     if (!c.feeds.some(f => f.cat === "Business")) {
       const have = new Set(c.feeds.map(f => f.url));
@@ -327,14 +338,6 @@ function migrate(c) {
     }
     c.migrated = 3;
   }
-  if (c.migrated >= 3) return c;
-  const urls = new Set(c.feeds.map(f => f.url));
-  c.feeds = c.feeds.flatMap(f => {
-    const swap = RETIRED[f.url];
-    if (!swap) return [f];
-    return urls.has(swap.url) ? [] : [swap];   // don't create a duplicate
-  });
-  c.migrated = 3;
   return c;
 }
 
@@ -570,7 +573,10 @@ function render() {
   // per-source chip row is longer than the story list.
   const catOf = {};
   cfg.feeds.forEach(f => { catOf[f.name] = f.cat || "Other"; });
-  const cats = [...new Set(items.map(i => catOf[i.source]).filter(Boolean))]
+  // Derive chips from the feeds you have configured, not from the stories that
+  // arrived. A category whose feeds all failed would otherwise vanish silently,
+  // which reads as "my feeds were never added" rather than "they're erroring".
+  const cats = [...new Set(cfg.feeds.map(f => f.cat || "Other"))]
     .sort((a, b) => catRank(a) - catRank(b));
   chips.innerHTML = "";
   [["all", "All"], ["alerts", "● Alerts"], ["unread", "Unread"],
@@ -601,9 +607,25 @@ function render() {
 
   if (!view.length) {
     const e = el("div", "empty");
-    e.innerHTML = items.length
-      ? "Nothing matches this filter."
-      : "No stories yet.<br>Pull the refresh button, or add feeds in Settings.";
+    if (filter.startsWith("cat:")) {
+      const want = filter.slice(4);
+      const mine = cfg.feeds.filter(f => (f.cat || "Other") === want);
+      const bad  = mine.filter(f => health[f.url] && !health[f.url].ok);
+      if (!mine.length) {
+        e.innerHTML = "No " + want + " feeds yet.<br>Add some in Settings → Add from library.";
+      } else if (bad.length === mine.length) {
+        e.innerHTML = "All " + mine.length + " " + want + " feed" + (mine.length > 1 ? "s are" : " is")
+          + " failing:<br><br>" + bad.map(f => f.name + " — " + health[f.url].err).join("<br>")
+          + "<br><br>Try swapping them in Settings.";
+      } else {
+        e.innerHTML = "Your " + mine.length + " " + want + " feed"
+          + (mine.length > 1 ? "s haven't" : " hasn't") + " returned anything yet.<br>Tap ↻ to refresh.";
+      }
+    } else {
+      e.innerHTML = items.length
+        ? "Nothing matches this filter."
+        : "No stories yet.<br>Tap ↻ to refresh, or add feeds in Settings.";
+    }
     list.appendChild(e);
     return;
   }
@@ -834,7 +856,9 @@ setInterval(() => { if (!document.hidden) render(); }, 60000);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-$("#ver").textContent = "Breaking · offline-capable · all data stays on this device";
+const BUILD = "2026-08-23.4";
+$("#ver").textContent = "Breaking · build " + BUILD + " · "
+  + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
 </body>
 </html>
