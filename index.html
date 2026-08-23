@@ -525,6 +525,7 @@ function resetTabIfStale() {
   return true;
 }
 let loading  = false;
+let queued   = null, queuedScope;
 
 const $  = s => document.querySelector(s);
 const el = (t, c) => { const n = document.createElement(t); if (c) n.className = c; return n; };
@@ -637,7 +638,21 @@ function parseFeed(xml, source) {
 // scope: an array of feeds to fetch, or omitted for all of them. The pull
 // gesture refreshes just the category on screen; the button does the lot.
 async function refresh(scope) {
-  if (loading) return;
+  // A refresh requested while one is already running used to be dropped on the
+  // floor. Opening the app starts an auto-refresh, so a pull a second later hit
+  // exactly that: the gesture appeared to work, did nothing, and left the
+  // running refresh's status on screen. Wait our turn instead of vanishing.
+  if (loading) {
+    queuedScope = scope;                       // last request wins
+    if (queued) return queued;
+    queued = (async () => {
+      while (loading) await new Promise(r => setTimeout(r, 100));
+      const s = queuedScope;
+      queued = null; queuedScope = undefined;
+      return refresh(s);
+    })();
+    return queued;
+  }
   const feeds = Array.isArray(scope) ? scope : cfg.feeds;
   const scoped = Array.isArray(scope);
   if (!feeds.length) { setStatus(scoped ? "No feeds in " + active : "No feeds yet"); return; }
@@ -680,7 +695,8 @@ async function refresh(scope) {
       }
     ).finally(() => {
       done++;
-      if (done < total) setStatus("Fetched " + done + "/" + total + " feeds…");
+      if (done < total) setStatus("Fetched " + done + "/" + total + " "
+        + (scoped ? active + " " : "") + "feeds…");
     })
   ));
 
@@ -695,7 +711,11 @@ async function refresh(scope) {
       "Updated " + timeAgo(Date.now()) + " · " + ok + "/" + total + " "
       + (scoped ? active + " " : "") + "feeds"
       + (fresh ? " · " + fresh + " new" : "")
-      + (failed.length ? " · failed: " + failed.join(", ") : ""),
+      + (failed.length
+          ? " · failed: " + (failed.length > 2
+              ? failed.slice(0, 2).join(", ") + " +" + (failed.length - 2) + " more"
+              : failed.join(", "))
+          : ""),
       failed.length > 0 && ok === 0
     );
   }
@@ -1066,7 +1086,10 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
   };
 
   list.addEventListener("touchstart", e => {
-    if (loading || list.scrollTop > 0 || e.touches.length !== 1) { startY = null; return; }
+    // Deliberately not gated on `loading`: opening the app starts an
+    // auto-refresh, and refusing to arm during it meant a pull a second later
+    // did nothing at all. refresh() queues the request instead.
+    if (list.scrollTop > 0 || e.touches.length !== 1) { startY = null; return; }
     startY = e.touches[0].clientY;
     dist = 0;
   }, { passive: true });
@@ -1101,7 +1124,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-const BUILD = "2026-08-23.21";
+const BUILD = "2026-08-23.22";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
