@@ -94,6 +94,13 @@ the moment you tap it.
 
 Sorting is strictly by time, so the reddest story is always the first one.
 
+Read and unread differ only by **colour** — read headlines dim, and unread ones
+carry a red dot. Nothing about the state changes weight, size or spacing: a
+property that affects layout would re-flow the headline under your finger at
+the moment you tap it.
+
+Sorting is strictly by time, so the reddest story is always the first one.
+
 **The same story from several outlets** is grouped into one row, marked
 `+2 more` with the other outlets named beside it, and the status line reports
 how many stories were folded away on the last refresh — so whether grouping is
