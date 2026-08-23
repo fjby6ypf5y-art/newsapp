@@ -29,13 +29,15 @@
 html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
 body{
   font:16px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;
-  overscroll-behavior-y:contain;
+  display:flex;flex-direction:column;
+  height:100vh;height:100dvh;overflow:hidden;
+  overscroll-behavior:none;
 }
 button,input,select,textarea{font:inherit;color:inherit}
 
 /* ---------- header ---------- */
 header{
-  position:sticky;top:0;z-index:20;
+  flex:none;z-index:20;
   padding:calc(var(--safe-t) + 10px) 14px 10px;
   background:rgba(13,13,16,.82);backdrop-filter:saturate(180%) blur(20px);
   -webkit-backdrop-filter:saturate(180%) blur(20px);
@@ -69,7 +71,11 @@ h1{margin:0;font-size:22px;font-weight:800;letter-spacing:-.4px}
 .chip[aria-pressed="true"]{background:var(--text);border-color:var(--text);color:#111;font-weight:600}
 
 /* ---------- list ---------- */
-main{padding:0 0 calc(var(--safe-b) + 40px)}
+main{
+  flex:1;min-height:0;
+  overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  padding:0 0 calc(var(--safe-b) + 40px);
+}
 .item{display:block;text-decoration:none;color:inherit;padding:14px 16px 14px 18px;
   border-bottom:1px solid var(--line);position:relative;
   --heat:var(--h6);
@@ -90,6 +96,7 @@ main{padding:0 0 calc(var(--safe-b) + 40px)}
 .snip{margin:5px 0 0;font-size:13.5px;color:var(--dim);line-height:1.4;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .ghead{display:flex;align-items:center;gap:8px;padding:16px 16px 8px;
+  position:sticky;top:0;z-index:5;
   background:var(--bg);border-bottom:1px solid var(--line);
   font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--dim)}
 .ghead .gdot{width:7px;height:7px;border-radius:50%;flex:none}
@@ -748,7 +755,7 @@ function render() {
         if (filter === id) return;
         filter = id;
         render();
-        window.scrollTo(0, 0);
+        $("#list").scrollTop = 0;     // direct, not a scroll request
         b.scrollIntoView({ block: "nearest", inline: "center" });
       };
       chips.appendChild(b);
@@ -1067,7 +1074,7 @@ setInterval(() => { if (!document.hidden) render(); }, 60000);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-const BUILD = "2026-08-23.14";
+const BUILD = "2026-08-23.15";
 $("#ver").textContent = "Breaking · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
