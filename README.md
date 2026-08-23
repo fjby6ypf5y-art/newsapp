@@ -64,6 +64,11 @@ There is no "All" view. It was the one chip that behaved differently — a stack
 of grouped sections rather than a single list — which made the whole row read
 as filters over one page instead of a set of pages.
 
+Read and unread differ only by **colour** — read headlines dim, and unread ones
+carry a red dot. Nothing about the state changes weight, size or spacing: a
+property that affects layout would re-flow the headline under your finger at
+the moment you tap it.
+
 Sorting is strictly by time. Keyword hits are *not* floated above newer
 stories, because that would break the promise that the reddest item is the
 first one; the inline `ALERT` tag carries that instead.

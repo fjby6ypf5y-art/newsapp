@@ -87,8 +87,9 @@ main{
 /* Alerts get a gold hairline, not a wash - the row background is spoken for
    by the heat ramp, and two overlaid gradients read as mud. */
 .item.hit{box-shadow:inset 0 0 0 1px rgba(255,214,102,.22)}
-.ttl{margin:0 0 5px;font-size:16px;font-weight:600;line-height:1.32;letter-spacing:-.2px}
-.item.unseen .ttl{font-weight:700}
+.ttl{margin:0 0 5px;font-size:16px;font-weight:600;line-height:1.32;letter-spacing:-.2px;
+  color:var(--text)}
+.item:not(.unseen) .ttl{color:var(--dim)}
 .meta{display:flex;gap:7px;align-items:center;font-size:12px;color:var(--faint);flex-wrap:wrap}
 .clock{font-variant-numeric:tabular-nums;color:var(--dim)}
 .src{color:var(--dim);font-weight:600}
@@ -1033,7 +1034,7 @@ setInterval(() => { if (!document.hidden) render(); }, 60000);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-const BUILD = "2026-08-23.16";
+const BUILD = "2026-08-23.17";
 $("#ver").textContent = "Breaking · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

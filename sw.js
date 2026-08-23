@@ -1,7 +1,7 @@
 /* Caches the app shell so Breaking opens instantly and works with no signal.
    Feed responses are never cached here - they go through localStorage instead,
    so stale headlines can't be served as if they were fresh. */
-const SHELL = "breaking-shell-v16";
+const SHELL = "breaking-shell-v17";
 const FILES = [
   "./",
   "./index.html",
