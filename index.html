@@ -761,14 +761,17 @@ function timeAgo(ts) {
 
 // Age -> ramp step. Buckets, not a continuous blend: a handful of legible
 // tiers beats 400 near-identical shades nobody can tell apart.
+// Upper bound of each band, in minutes. Roughly doubling, so the hot end has
+// the resolution and the cold end does not need seven shades of "yesterday".
+// Red covers half an hour: at 15 minutes almost nothing was ever caught in it.
 const HEAT = [
-  [15,        "var(--h0)"],   // minutes
-  [60,        "var(--h1)"],
-  [180,       "var(--h2)"],
-  [360,       "var(--h3)"],
-  [720,       "var(--h4)"],
-  [1440,      "var(--h5)"],
-  [Infinity,  "var(--h6)"]
+  [30,        "var(--h0)"],   // red     · under 30 min
+  [90,        "var(--h1)"],   // orange  · under 1.5 h
+  [180,       "var(--h2)"],   // yellow  · under 3 h
+  [360,       "var(--h3)"],   // green   · under 6 h
+  [720,       "var(--h4)"],   // blue    · under 12 h
+  [1440,      "var(--h5)"],   // indigo  · under 24 h
+  [Infinity,  "var(--h6)"]    // violet  · a day or more
 ];
 function heat(ts) {
   if (!ts) return "var(--h6)";
@@ -1145,7 +1148,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-const BUILD = "2026-08-23.24";
+const BUILD = "2026-08-23.25";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

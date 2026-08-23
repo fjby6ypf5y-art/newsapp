@@ -152,7 +152,7 @@ The ramp is the full spectrum in seven bands, newest to oldest:
 
 | red | orange | yellow | green | blue | indigo | violet |
 |---|---|---|---|---|---|---|
-| < 15 min | < 1 h | < 3 h | < 6 h | < 12 h | < 24 h | 24 h + |
+| < 30 min | < 1.5 h | < 3 h | < 6 h | < 12 h | < 24 h | 24 h + |
 
 Colour is a glance, not the source of truth: hue has no inherent magnitude —
 green isn't "more" than yellow — so a rainbow leans on the familiar ROYGBIV
