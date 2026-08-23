@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Breaking</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0d0d10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Breaking">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<style>
+:root{
+  --bg:#0d0d10; --panel:#17171c; --panel2:#1f1f26; --line:#2c2c35;
+  --text:#f2f2f5; --dim:#9a9aa8; --faint:#6a6a78;
+  --accent:#e8434f; --accent-dim:#7c1c22; --gold:#ffd666;
+  --safe-t:env(safe-area-inset-top); --safe-b:env(safe-area-inset-bottom);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{
+  font:16px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;
+  overscroll-behavior-y:contain;
+}
+button,input,select,textarea{font:inherit;color:inherit}
+
+/* ---------- header ---------- */
+header{
+  position:sticky;top:0;z-index:20;
+  padding:calc(var(--safe-t) + 10px) 14px 10px;
+  background:rgba(13,13,16,.82);backdrop-filter:saturate(180%) blur(20px);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);
+  border-bottom:1px solid var(--line);
+}
+.bar{display:flex;align-items:center;gap:10px}
+.brand{display:flex;align-items:baseline;gap:8px;flex:1;min-width:0}
+h1{margin:0;font-size:22px;font-weight:800;letter-spacing:-.4px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none;align-self:center}
+.dot.live{animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+.iconbtn{
+  flex:none;width:36px;height:36px;border:0;border-radius:10px;
+  background:var(--panel2);display:grid;place-items:center;font-size:17px;
+}
+.iconbtn:active{background:#2a2a33}
+.status{margin-top:6px;font-size:12px;color:var(--faint);min-height:15px}
+.status.err{color:var(--accent)}
+
+/* ---------- filter chips ---------- */
+.chips{display:flex;gap:7px;overflow-x:auto;margin-top:10px;padding-bottom:2px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{
+  flex:none;padding:5px 12px;border-radius:999px;border:1px solid var(--line);
+  background:transparent;color:var(--dim);font-size:13px;white-space:nowrap;
+}
+.chip[aria-pressed="true"]{background:var(--text);border-color:var(--text);color:#111;font-weight:600}
+
+/* ---------- list ---------- */
+main{padding:0 0 calc(var(--safe-b) + 40px)}
+.item{display:block;text-decoration:none;color:inherit;padding:14px 16px;border-bottom:1px solid var(--line);position:relative}
+.item:active{background:var(--panel)}
+.item.unseen::before{content:"";position:absolute;left:6px;top:20px;width:5px;height:5px;border-radius:50%;background:var(--accent)}
+.item.hit{background:linear-gradient(90deg,rgba(232,67,79,.13),transparent 60%)}
+.ttl{margin:0 0 5px;font-size:16px;font-weight:600;line-height:1.32;letter-spacing:-.2px}
+.item.unseen .ttl{font-weight:700}
+.meta{display:flex;gap:7px;align-items:center;font-size:12px;color:var(--faint);flex-wrap:wrap}
+.src{color:var(--dim);font-weight:600}
+.tag{font-size:10px;font-weight:800;letter-spacing:.7px;color:var(--gold);border:1px solid rgba(255,214,102,.35);border-radius:4px;padding:1px 5px}
+.snip{margin:5px 0 0;font-size:13.5px;color:var(--dim);line-height:1.4;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.empty{padding:60px 30px;text-align:center;color:var(--faint);font-size:14px;line-height:1.6}
+
+/* ---------- sheet ---------- */
+.sheet{position:fixed;inset:0;z-index:50;background:var(--bg);overflow-y:auto;
+  padding:calc(var(--safe-t) + 14px) 16px calc(var(--safe-b) + 40px);
+  transform:translateY(100%);transition:transform .28s cubic-bezier(.32,.72,0,1);visibility:hidden}
+.sheet.open{transform:none;visibility:visible}
+.sheet h2{margin:0;font-size:22px;font-weight:800;letter-spacing:-.4px}
+.sheet h3{margin:26px 0 8px;font-size:12px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:var(--faint)}
+.sheet p.hint{margin:6px 0 0;font-size:12.5px;color:var(--faint);line-height:1.5}
+.row{display:flex;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--line);
+  border-radius:11px;padding:9px 11px;margin-bottom:8px}
+.row .g{flex:1;min-width:0}
+.row .n{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .u{font-size:11px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .x{border:0;background:transparent;color:var(--faint);font-size:19px;padding:0 4px;flex:none}
+input[type=text],input[type=url],textarea{
+  width:100%;background:var(--panel);border:1px solid var(--line);border-radius:11px;
+  padding:11px 12px;font-size:15px;margin-bottom:8px}
+textarea{min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.5}
+.btn{width:100%;border:0;border-radius:11px;padding:12px;font-size:15px;font-weight:600;background:var(--panel2)}
+.btn.primary{background:var(--accent);color:#fff}
+.btn:active{opacity:.7}
+.btns{display:flex;gap:8px;margin-top:4px}
+.sw{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:11px 12px;margin-bottom:8px}
+.sw label{font-size:14.5px}
+.sw input{width:44px;height:26px;flex:none}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="bar">
+    <div class="brand"><span class="dot live"></span><h1>Breaking</h1></div>
+    <button class="iconbtn" id="refresh" aria-label="Refresh">&#8635;</button>
+    <button class="iconbtn" id="open-settings" aria-label="Settings">&#9881;</button>
+  </div>
+  <div class="status" id="status">Loading&hellip;</div>
+  <div class="chips" id="chips"></div>
+</header>
+
+<main id="list"></main>
+
+<!-- ================= settings ================= -->
+<section class="sheet" id="settings" aria-hidden="true">
+  <div class="bar">
+    <h2 style="flex:1">Settings</h2>
+    <button class="iconbtn" id="close-settings" aria-label="Close">&times;</button>
+  </div>
+
+  <h3>Feeds</h3>
+  <div id="feeds"></div>
+  <input type="text" id="f-name" placeholder="Name (e.g. Reuters World)">
+  <input type="url" id="f-url" placeholder="RSS / Atom URL" inputmode="url">
+  <button class="btn" id="f-add">Add feed</button>
+  <p class="hint">Paste any RSS or Atom URL. Most outlets publish one at
+  <code>/rss</code>, <code>/feed</code>, or <code>/rss.xml</code>.</p>
+
+  <h3>Alert keywords</h3>
+  <input type="text" id="kw" placeholder="breaking, earthquake, evacuat">
+  <p class="hint">Comma-separated. Matching headlines are highlighted and pushed to the top.
+  Partial words work &mdash; <code>evacuat</code> catches both &ldquo;evacuate&rdquo; and &ldquo;evacuation&rdquo;.</p>
+
+  <h3>Behaviour</h3>
+  <div class="sw"><label for="s-auto">Refresh when app opens</label><input type="checkbox" id="s-auto" checked></div>
+  <div class="sw"><label for="s-notify">Notify on keyword hits</label><input type="checkbox" id="s-notify"></div>
+  <p class="hint">Notifications only fire while the app is open in the foreground &mdash; iOS Safari
+  cannot wake a home-screen web app on its own. Use the Shortcut (see README) for background alerts.</p>
+
+  <h3>Fetch relay</h3>
+  <input type="text" id="proxy" placeholder="https://api.allorigins.win/raw?url=">
+  <p class="hint">News sites block direct browser requests (CORS). Each feed is tried
+  directly first, then through these relays in order, one URL-prefix per line.
+  Leave the defaults unless one stops working.</p>
+
+  <h3>Backup</h3>
+  <textarea id="io" spellcheck="false" placeholder="Your config as JSON"></textarea>
+  <div class="btns">
+    <button class="btn" id="io-export">Export</button>
+    <button class="btn" id="io-import">Import</button>
+  </div>
+  <p class="hint" id="ver"></p>
+</section>
+
+<script>
+"use strict";
+
+/* ------------------------------------------------------------------ state */
+const KEY = "breaking.v1";
+const DEFAULTS = {
+  feeds: [
+    { name:"BBC World",     url:"https://feeds.bbci.co.uk/news/world/rss.xml" },
+    { name:"NPR",           url:"https://feeds.npr.org/1001/rss.xml" },
+    { name:"Al Jazeera",    url:"https://www.aljazeera.com/xml/rss/all.xml" },
+    { name:"AP Top News",   url:"https://rsshub.app/apnews/topics/apf-topnews" },
+    { name:"Reuters World", url:"https://news.google.com/rss/search?q=when:24h+site:reuters.com&hl=en-US&gl=US&ceid=US:en" }
+  ],
+  keywords: ["breaking","urgent","evacuat","earthquake"],
+  proxies: [
+    "https://api.allorigins.win/raw?url=",
+    "https://corsproxy.io/?url=",
+    "https://api.codetabs.com/v1/proxy?quest="
+  ],
+  autoRefresh: true,
+  notify: false
+};
+
+const load = () => { try { return {...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || "{}")}; }
+                     catch { return {...DEFAULTS}; } };
+const save = () => localStorage.setItem(KEY, JSON.stringify(cfg));
+let cfg = load();
+
+let items    = JSON.parse(localStorage.getItem(KEY + ".items") || "[]");
+let seen     = new Set(JSON.parse(localStorage.getItem(KEY + ".seen")  || "[]"));
+let filter   = "all";
+let loading  = false;
+
+const $  = s => document.querySelector(s);
+const el = (t, c) => { const n = document.createElement(t); if (c) n.className = c; return n; };
+
+/* ------------------------------------------------------------- fetching */
+async function grab(url) {
+  const attempts = [url, ...cfg.proxies.map(p => p + encodeURIComponent(url))];
+  let lastErr;
+  for (const a of attempts) {
+    try {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 12000);
+      const res = await fetch(a, { signal: ctl.signal, cache: "no-store" });
+      clearTimeout(timer);
+      if (!res.ok) { lastErr = new Error("HTTP " + res.status); continue; }
+      const text = await res.text();
+      if (text.trim()) return text;
+      lastErr = new Error("empty response");
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error("unreachable");
+}
+
+const txt = (node, ...names) => {
+  for (const n of names) {
+    const found = node.getElementsByTagName(n)[0];
+    if (found && found.textContent.trim()) return found.textContent.trim();
+  }
+  return "";
+};
+
+function parseFeed(xml, source) {
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  if (doc.querySelector("parsererror")) throw new Error("bad XML");
+
+  const nodes = [...doc.getElementsByTagName("item"), ...doc.getElementsByTagName("entry")];
+  return nodes.map(n => {
+    let link = txt(n, "link");
+    if (!link) {
+      const a = n.getElementsByTagName("link")[0];
+      link = a ? a.getAttribute("href") || "" : "";
+    } else if (link.startsWith("<")) {
+      link = "";
+    }
+    if (!link) {
+      const alt = [...n.getElementsByTagName("link")].find(l => l.getAttribute("href"));
+      if (alt) link = alt.getAttribute("href");
+    }
+
+    const title = txt(n, "title") || "(untitled)";
+    const when  = txt(n, "pubDate", "published", "updated", "date");
+    const raw   = txt(n, "description", "summary", "content");
+    const snip  = raw.replace(/<[^>]*>/g, " ").replace(/&[a-z#0-9]+;/gi, " ")
+                     .replace(/\s+/g, " ").trim().slice(0, 220);
+
+    let ts = Date.parse(when);
+    if (isNaN(ts)) ts = 0;
+
+    return { id: (link || title).slice(0, 300), title, link, snip, ts, source };
+  }).filter(i => i.title !== "(untitled)" || i.link);
+}
+
+async function refresh() {
+  if (loading) return;
+  loading = true;
+  $("#refresh").style.opacity = ".4";
+  setStatus("Fetching " + cfg.feeds.length + " feed" + (cfg.feeds.length === 1 ? "" : "s") + "…");
+
+  const results = await Promise.allSettled(
+    cfg.feeds.map(f => grab(f.url).then(x => parseFeed(x, f.name)))
+  );
+
+  const merged = new Map(items.map(i => [i.id, i]));
+  let ok = 0;
+  const failed = [];
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") {
+      ok++;
+      r.value.forEach(it => {
+        // Two feeds often carry the same story under one link. Keep whichever
+        // copy is newer, so a fresher (possibly re-headlined) version wins
+        // instead of whichever feed simply resolved last.
+        const prev = merged.get(it.id);
+        if (!prev || it.ts >= prev.ts) merged.set(it.id, it);
+      });
+    }
+    else failed.push(cfg.feeds[i].name);
+  });
+
+  const cutoff = Date.now() - 1000 * 60 * 60 * 72;
+  items = [...merged.values()]
+    .filter(i => !i.ts || i.ts > cutoff)
+    .sort((a, b) => b.ts - a.ts)
+    .slice(0, 400);
+
+  localStorage.setItem(KEY + ".items", JSON.stringify(items));
+
+  if (ok === 0) {
+    setStatus("No feeds reachable — check your connection or relays", true);
+  } else {
+    const fresh = items.filter(i => !seen.has(i.id)).length;
+    setStatus(
+      "Updated " + timeAgo(Date.now()) + " · " + ok + "/" + cfg.feeds.length + " feeds"
+      + (fresh ? " · " + fresh + " new" : "")
+      + (failed.length ? " · failed: " + failed.join(", ") : ""),
+      failed.length > 0 && ok === 0
+    );
+    maybeNotify();
+  }
+
+  render();
+  loading = false;
+  $("#refresh").style.opacity = "";
+}
+
+/* -------------------------------------------------------------- render */
+const setStatus = (s, err) => { const n = $("#status"); n.textContent = s; n.classList.toggle("err", !!err); };
+
+function timeAgo(ts) {
+  if (!ts) return "";
+  const m = Math.round((Date.now() - ts) / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return m + "m ago";
+  const h = Math.round(m / 60);
+  if (h < 24) return h + "h ago";
+  return Math.round(h / 24) + "d ago";
+}
+
+const keywordHit = i => {
+  const kws = cfg.keywords.filter(Boolean);
+  if (!kws.length) return false;
+  const hay = (i.title + " " + i.snip).toLowerCase();
+  return kws.some(k => hay.includes(k.toLowerCase()));
+};
+
+function render() {
+  // filter chips
+  const chips = $("#chips");
+  const sources = [...new Set(items.map(i => i.source))].sort();
+  chips.innerHTML = "";
+  [["all", "All"], ["alerts", "● Alerts"], ["unread", "Unread"], ...sources.map(s => [s, s])]
+    .forEach(([id, label]) => {
+      const b = el("button", "chip");
+      b.textContent = label;
+      b.setAttribute("aria-pressed", filter === id);
+      b.onclick = () => { filter = id; render(); };
+      chips.appendChild(b);
+    });
+
+  let view = items.slice();
+  if (filter === "alerts")      view = view.filter(keywordHit);
+  else if (filter === "unread") view = view.filter(i => !seen.has(i.id));
+  else if (filter !== "all")    view = view.filter(i => i.source === filter);
+
+  // fresh keyword hits float to the top
+  view.sort((a, b) => {
+    const pa = (keywordHit(a) && !seen.has(a.id)) ? 1 : 0;
+    const pb = (keywordHit(b) && !seen.has(b.id)) ? 1 : 0;
+    return pb - pa || b.ts - a.ts;
+  });
+
+  const list = $("#list");
+  list.innerHTML = "";
+
+  if (!view.length) {
+    const e = el("div", "empty");
+    e.innerHTML = items.length
+      ? "Nothing matches this filter."
+      : "No stories yet.<br>Pull the refresh button, or add feeds in Settings.";
+    list.appendChild(e);
+    return;
+  }
+
+  for (const i of view) {
+    const a = el("a", "item");
+    a.href = i.link || "#";
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    if (!seen.has(i.id)) a.classList.add("unseen");
+    const hit = keywordHit(i);
+    if (hit) a.classList.add("hit");
+
+    const h = el("h2", "ttl"); h.textContent = i.title; a.appendChild(h);
+
+    const m = el("div", "meta");
+    if (hit) { const t = el("span", "tag"); t.textContent = "ALERT"; m.appendChild(t); }
+    const s = el("span", "src"); s.textContent = i.source; m.appendChild(s);
+    if (i.ts) { const w = el("span"); w.textContent = "· " + timeAgo(i.ts); m.appendChild(w); }
+    else { const w = el("span"); w.textContent = "· time unknown"; m.appendChild(w); }
+    a.appendChild(m);
+
+    if (i.snip) { const p = el("p", "snip"); p.textContent = i.snip; a.appendChild(p); }
+
+    a.addEventListener("click", () => {
+      seen.add(i.id);
+      localStorage.setItem(KEY + ".seen", JSON.stringify([...seen].slice(-1200)));
+      a.classList.remove("unseen");
+    });
+
+    list.appendChild(a);
+  }
+}
+
+/* --------------------------------------------------------- notifications */
+let notified = new Set(JSON.parse(localStorage.getItem(KEY + ".notified") || "[]"));
+function maybeNotify() {
+  if (!cfg.notify || !("Notification" in window) || Notification.permission !== "granted") return;
+  const hits = items.filter(i => keywordHit(i) && !notified.has(i.id) && !seen.has(i.id)).slice(0, 3);
+  for (const h of hits) {
+    try { new Notification(h.source, { body: h.title, tag: h.id, icon: "icons/icon-192.png" }); } catch {}
+    notified.add(h.id);
+  }
+  localStorage.setItem(KEY + ".notified", JSON.stringify([...notified].slice(-500)));
+}
+
+/* -------------------------------------------------------------- settings */
+function renderFeeds() {
+  const box = $("#feeds");
+  box.innerHTML = "";
+  if (!cfg.feeds.length) {
+    const p = el("p", "hint"); p.textContent = "No feeds yet."; box.appendChild(p); return;
+  }
+  cfg.feeds.forEach((f, idx) => {
+    const r = el("div", "row");
+    const g = el("div", "g");
+    const n = el("div", "n"); n.textContent = f.name;
+    const u = el("div", "u"); u.textContent = f.url;
+    g.append(n, u);
+    const x = el("button", "x"); x.innerHTML = "&times;"; x.setAttribute("aria-label", "Remove " + f.name);
+    x.onclick = () => { cfg.feeds.splice(idx, 1); save(); renderFeeds(); render(); };
+    r.append(g, x);
+    box.appendChild(r);
+  });
+}
+
+function openSettings(open) {
+  const s = $("#settings");
+  s.classList.toggle("open", open);
+  s.setAttribute("aria-hidden", String(!open));
+  if (open) {
+    renderFeeds();
+    $("#kw").value      = cfg.keywords.join(", ");
+    $("#proxy").value   = cfg.proxies.join("\n");
+    $("#s-auto").checked   = cfg.autoRefresh;
+    $("#s-notify").checked = cfg.notify;
+  } else {
+    refresh();
+  }
+}
+
+$("#open-settings").onclick  = () => openSettings(true);
+$("#close-settings").onclick = () => openSettings(false);
+$("#refresh").onclick        = () => refresh();
+
+$("#f-add").onclick = () => {
+  const url  = $("#f-url").value.trim();
+  const name = $("#f-name").value.trim() || (() => {
+    try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return "Feed"; }
+  })();
+  if (!url) return;
+  cfg.feeds.push({ name, url });
+  save();
+  $("#f-url").value = ""; $("#f-name").value = "";
+  renderFeeds();
+};
+
+$("#kw").oninput    = e => { cfg.keywords = e.target.value.split(",").map(s => s.trim()).filter(Boolean); save(); };
+$("#proxy").oninput = e => { cfg.proxies  = e.target.value.split("\n").map(s => s.trim()).filter(Boolean); save(); };
+$("#s-auto").onchange   = e => { cfg.autoRefresh = e.target.checked; save(); };
+$("#s-notify").onchange = async e => {
+  cfg.notify = e.target.checked; save();
+  if (cfg.notify && "Notification" in window && Notification.permission === "default") {
+    await Notification.requestPermission();
+  }
+};
+
+$("#io-export").onclick = () => { $("#io").value = JSON.stringify(cfg, null, 2); };
+$("#io-import").onclick = () => {
+  try {
+    cfg = { ...DEFAULTS, ...JSON.parse($("#io").value) };
+    save(); openSettings(true);
+    setStatus("Config imported");
+  } catch { alert("That isn't valid JSON."); }
+};
+
+/* ------------------------------------------------------------------ boot */
+render();
+if (items.length) setStatus(items.length + " stored stories · refreshing…");
+refresh();
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && cfg.autoRefresh) refresh();
+});
+
+// tick the relative timestamps
+setInterval(() => { if (!document.hidden) render(); }, 60000);
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+$("#ver").textContent = "Breaking · offline-capable · all data stays on this device";
+</script>
+</body>
+</html>
