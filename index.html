@@ -136,6 +136,18 @@ textarea{min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospac
 .sw input{width:44px;height:26px;flex:none}
 .sw select{flex:none;background:var(--panel2);border:1px solid var(--line);
   border-radius:9px;padding:7px 9px;font-size:13.5px}
+select.sel{width:100%;background:var(--panel);border:1px solid var(--line);
+  border-radius:11px;padding:11px 12px;margin-bottom:8px;font-size:15px}
+.row{cursor:pointer}
+.editor{background:var(--panel2);border:1px solid var(--line);border-radius:11px;
+  padding:11px;margin:-4px 0 10px}
+.editor label{display:block;font-size:11px;font-weight:700;letter-spacing:.6px;
+  text-transform:uppercase;color:var(--faint);margin:0 0 4px}
+.editor input,.editor select{margin-bottom:9px}
+.editor textarea{min-height:62px;font-size:12px;margin-bottom:9px}
+.editor .btns{margin-top:2px}
+.btn.danger{background:transparent;border:1px solid rgba(232,67,79,.4);color:var(--accent)}
+.err-msg{color:var(--accent);font-size:12px;margin:0 0 8px}
 .hd{width:8px;height:8px;border-radius:50%;flex:none;background:var(--faint)}
 .hd.ok{background:#4bd76d}
 .hd.bad{background:var(--accent)}
@@ -159,6 +171,7 @@ textarea{min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospac
   <div class="bar">
     <div class="brand"><span class="dot live"></span><h1>News</h1></div>
     <button class="iconbtn" id="refresh" aria-label="Refresh">&#8635;</button>
+    <button class="iconbtn" id="open-feeds" aria-label="Feeds">&#9776;</button>
     <button class="iconbtn" id="open-settings" aria-label="Settings">&#9881;</button>
   </div>
   <div class="status" id="status">Loading&hellip;</div>
@@ -172,19 +185,20 @@ textarea{min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospac
 </div>
 
 <!-- ================= settings ================= -->
-<section class="sheet" id="settings" aria-hidden="true">
+<!-- ================= feeds ================= -->
+<section class="sheet" id="feeds-sheet" aria-hidden="true">
   <div class="bar">
-    <h2 style="flex:1">Settings</h2>
-    <button class="iconbtn" id="close-settings" aria-label="Close">&times;</button>
+    <h2 style="flex:1">Feeds</h2>
+    <button class="iconbtn" id="close-feeds" aria-label="Close">&times;</button>
   </div>
 
   <h3>Your feeds</h3>
   <div id="feeds"></div>
   <button class="btn" id="f-test">Test all feeds</button>
-  <p class="hint">A green dot means the feed answered on the last refresh; red
-  shows what went wrong. Feeds are fetched from your phone, so this is the only
-  place the result is actually true &mdash; a feed that works on one network can
-  fail on another.</p>
+  <p class="hint">Tap a feed to edit its name, address or category. A green dot
+  means it answered on the last refresh; red shows what went wrong. Feeds are
+  fetched from your phone, so this is the only place the result is actually
+  true &mdash; a feed that works on one network can fail on another.</p>
 
   <h3>Add from library</h3>
   <p class="hint" style="margin-bottom:10px">Curated, no paywalls. Tap to add or
@@ -194,10 +208,18 @@ textarea{min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospac
   <h3>Add by URL</h3>
   <input type="text" id="f-name" placeholder="Name (e.g. Local paper)">
   <input type="url" id="f-url" placeholder="RSS / Atom URL" inputmode="url">
-  <select id="f-cat" style="width:100%;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:11px 12px;margin-bottom:8px"></select>
+  <select id="f-cat" class="sel"></select>
   <button class="btn" id="f-add">Add feed</button>
   <p class="hint">Most outlets publish one at <code>/rss</code>, <code>/feed</code>,
   or <code>/rss.xml</code>.</p>
+</section>
+
+<!-- ================= settings ================= -->
+<section class="sheet" id="settings" aria-hidden="true">
+  <div class="bar">
+    <h2 style="flex:1">Settings</h2>
+    <button class="iconbtn" id="close-settings" aria-label="Close">&times;</button>
+  </div>
 
   <h3>Behaviour</h3>
   <div class="sw"><label for="s-auto">Refresh when app opens</label><input type="checkbox" id="s-auto" checked></div>
@@ -350,6 +372,9 @@ const CATALOG = [
 ].map(([cat, name, url]) => ({ cat, name, url }));
 
 const inCatalog = url => CATALOG.find(f => f.url === url);
+
+let idSeq = 0;
+const newId = () => "f" + Date.now().toString(36) + (idSeq++).toString(36);
 const DEFAULTS = {
   feeds: [
     { cat:"World", name:"BBC World",   url:"https://feeds.bbci.co.uk/news/world/rss.xml" },
@@ -441,7 +466,7 @@ const SEED_ENTERTAINMENT = [
 function seedCategory(c, cat, feeds) {
   if (c.feeds.some(f => f.cat === cat)) return;
   const have = new Set(c.feeds.map(f => f.url));
-  feeds.forEach(f => { if (!have.has(f.url)) c.feeds.push({ ...f }); });
+  feeds.forEach(f => { if (!have.has(f.url)) c.feeds.push({ ...f, id: newId() }); });
 }
 
 function migrate(c) {
@@ -504,11 +529,18 @@ function migrate(c) {
     });
     c.migrated = 9;
   }
+
+  // Feeds were identified by URL, which stops working the moment a URL is
+  // editable. Give every feed a stable id instead.
+  if (c.migrated < 10) {
+    c.feeds.forEach(f => { if (!f.id) f.id = newId(); });
+    c.migrated = 10;
+  }
   return c;
 }
 
 const load = () => { try { return migrate({...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || "{}")}); }
-                     catch { return {...DEFAULTS, migrated:9}; } };
+                     catch { return {...DEFAULTS, migrated:10}; } };
 const save = () => localStorage.setItem(KEY, JSON.stringify(cfg));
 let cfg = load();
 // Persist immediately: migrations rewrite feed URLs and backfill categories,
@@ -910,11 +942,16 @@ function renderItem(i, list) {
 }
 
 /* -------------------------------------------------------------- settings */
+let editing = null;          // id of the feed whose editor is open
+
 function renderFeeds() {
   const box = $("#feeds");
   box.innerHTML = "";
   if (!cfg.feeds.length) {
-    const p = el("p", "hint"); p.textContent = "No feeds yet - add some from the library below."; box.appendChild(p); return;
+    const p = el("p", "hint");
+    p.textContent = "No feeds yet - add some from the library below.";
+    box.appendChild(p);
+    return;
   }
   const groups = [...new Set(cfg.feeds.map(f => f.cat || "Other"))]
     .sort((a, b) => catRank(a) - catRank(b));
@@ -922,10 +959,11 @@ function renderFeeds() {
   groups.forEach(cat => {
     const h = el("div", "cat"); h.textContent = cat; box.appendChild(h);
     cfg.feeds.filter(f => (f.cat || "Other") === cat).forEach(f => {
-      const r = el("div", "row");
       const hs = health[f.url];
+      const r = el("div", "row");
       const d = el("span", "hd" + (hs ? (hs.ok ? " ok" : " bad") : ""));
       d.title = hs ? (hs.ok ? hs.n + " stories" : hs.err) : "not checked yet";
+
       const g = el("div", "g");
       const n = el("div", "n");
       n.style.display = "flex"; n.style.alignItems = "center"; n.style.gap = "7px";
@@ -933,27 +971,105 @@ function renderFeeds() {
       if (hs && hs.ok) {
         const rt = el("span", "route " + (hs.direct ? "direct" : "relay"));
         rt.textContent = hs.direct ? "direct" : "relay";
-        rt.title = hs.direct
-          ? "Fetched straight from the publisher - nobody in the middle."
-          : "Fetched through a relay, which saw your IP and this feed URL.";
         n.appendChild(rt);
       }
       g.appendChild(n);
-      if (hs && !hs.ok) {
-        const e = el("div", "e"); e.textContent = hs.err; g.appendChild(e);
-      } else {
-        const u = el("div", "u"); u.textContent = f.url; g.appendChild(u);
-      }
-      const x = el("button", "x"); x.innerHTML = "&times;";
-      x.setAttribute("aria-label", "Remove " + f.name);
-      x.onclick = () => {
-        cfg.feeds = cfg.feeds.filter(o => o.url !== f.url);
-        save(); pruneOrphans(); renderFeeds(); renderLibrary(); render();
-      };
+      const u = el("div", "u");
+      u.textContent = (hs && !hs.ok) ? hs.err : f.url;
+      if (hs && !hs.ok) u.className = "e";
+      g.appendChild(u);
+
+      const x = el("button", "x");
+      x.textContent = editing === f.id ? "\u2715" : "\u203a";
+      x.setAttribute("aria-label", "Edit " + f.name);
+
       r.append(d, g, x);
+      r.onclick = () => { editing = editing === f.id ? null : f.id; renderFeeds(); };
       box.appendChild(r);
+
+      if (editing === f.id) box.appendChild(feedEditor(f));
     });
   });
+}
+
+function feedEditor(f) {
+  const wrap = el("div", "editor");
+  const err = el("p", "err-msg"); err.style.display = "none"; wrap.appendChild(err);
+
+  const field = (label, node) => {
+    const l = el("label"); l.textContent = label;
+    wrap.append(l, node);
+  };
+
+  const name = el("input"); name.type = "text"; name.value = f.name;
+  field("Name", name);
+
+  // A textarea, not an input: feed URLs are long and worth seeing in full
+  // when you are checking whether one has changed.
+  const url = el("textarea"); url.value = f.url; url.spellcheck = false;
+  url.setAttribute("inputmode", "url");
+  field("Feed address", url);
+
+  const cat = el("select", "sel");
+  CAT_ORDER.forEach(c => {
+    const o = document.createElement("option");
+    o.value = c; o.textContent = c; o.selected = (f.cat || "Other") === c;
+    cat.appendChild(o);
+  });
+  field("Category", cat);
+
+  const btns = el("div", "btns");
+  const save_ = el("button", "btn primary"); save_.textContent = "Save";
+  const del = el("button", "btn danger");   del.textContent = "Delete";
+  btns.append(save_, del);
+  wrap.appendChild(btns);
+
+  save_.onclick = e => {
+    e.stopPropagation();
+    // safeLink resolves relative paths against this page - right for story
+    // links inside a feed, wrong here, where "bbc.co.uk/rss" would silently
+    // become an address on our own origin. A feed address must be absolute.
+    const raw = url.value.trim();
+    const nextUrl = /^https?:\/\//i.test(raw) ? safeLink(raw) : "";
+    if (!nextUrl) {
+      err.textContent = "That needs to be a full http:// or https:// address.";
+      err.style.display = ""; return;
+    }
+    if (cfg.feeds.some(o => o.id !== f.id && o.url === nextUrl)) {
+      err.textContent = "Another feed already uses that address.";
+      err.style.display = ""; return;
+    }
+    const nextName = name.value.trim() || f.name;
+    const oldUrl = f.url, oldName = f.name;
+
+    f.name = nextName; f.url = nextUrl; f.cat = cat.value;
+
+    // Stories are filed under the feed's name, so a rename would orphan them.
+    if (nextName !== oldName) items.forEach(i => { if (i.source === oldName) i.source = nextName; });
+    // A changed address invalidates what we learned about the old one.
+    if (nextUrl !== oldUrl) {
+      delete health[oldUrl]; delete routes[oldUrl];
+      saveHealth();
+      localStorage.setItem(KEY + ".routes", JSON.stringify(routes));
+    }
+    localStorage.setItem(KEY + ".items", JSON.stringify(items));
+    save(); editing = null;
+    renderFeeds(); renderLibrary(); render();
+  };
+
+  del.onclick = e => {
+    e.stopPropagation();
+    cfg.feeds = cfg.feeds.filter(o => o.id !== f.id);
+    delete health[f.url]; delete routes[f.url];
+    saveHealth();
+    localStorage.setItem(KEY + ".routes", JSON.stringify(routes));
+    save(); pruneOrphans(); editing = null;
+    renderFeeds(); renderLibrary(); render();
+  };
+
+  // taps inside the editor must not toggle the row shut
+  wrap.onclick = e => e.stopPropagation();
+  return wrap;
 }
 
 function renderLibrary() {
@@ -973,7 +1089,7 @@ function renderLibrary() {
       + "font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;padding:0";
     all.onclick = () => {
       if (allOn) cfg.feeds = cfg.feeds.filter(f => !list.some(c => c.url === f.url));
-      else list.forEach(f => { if (!have.has(f.url)) cfg.feeds.push({ ...f }); });
+      else list.forEach(f => { if (!have.has(f.url)) cfg.feeds.push({ ...f, id: newId() }); });
       save(); pruneOrphans(); renderFeeds(); renderLibrary(); render();
     };
     h.appendChild(all);
@@ -985,7 +1101,7 @@ function renderLibrary() {
       b.dataset.on = have.has(f.url) ? "1" : "0";
       b.onclick = () => {
         if (have.has(f.url)) cfg.feeds = cfg.feeds.filter(o => o.url !== f.url);
-        else cfg.feeds.push({ ...f });
+        else cfg.feeds.push({ ...f, id: newId() });
         save(); pruneOrphans(); renderFeeds(); renderLibrary(); render();
       };
       wrap.appendChild(b);
@@ -994,23 +1110,38 @@ function renderLibrary() {
   });
 }
 
-function openSettings(open) {
-  const s = $("#settings");
-  s.classList.toggle("open", open);
-  s.setAttribute("aria-hidden", String(!open));
+function showSheet(id, open) {
+  const el_ = $(id);
+  el_.classList.toggle("open", open);
+  el_.setAttribute("aria-hidden", String(!open));
+  if (open) el_.scrollTop = 0;
+}
+
+function openFeeds(open) {
   if (open) {
+    showSheet("#settings", false);
+    editing = null;
     renderFeeds();
     renderLibrary();
     const sel = $("#f-cat");
     if (!sel.options.length) {
       CAT_ORDER.forEach(c => {
-        const o = document.createElement("option"); o.value = c; o.textContent = c; sel.appendChild(o);
+        const o = document.createElement("option");
+        o.value = c; o.textContent = c; sel.appendChild(o);
       });
     }
-    $("#proxy").value   = cfg.proxies.join("\n");
+  }
+  showSheet("#feeds-sheet", open);
+  if (!open) refresh();
+}
+
+function openSettings(open) {
+  if (open) {
+    showSheet("#feeds-sheet", false);
+    $("#proxy").value      = cfg.proxies.join("\n");
     $("#s-auto").checked   = cfg.autoRefresh;
     $("#s-direct").checked = cfg.directOnly;
-    $("#s-idle").value = String(cfg.idleResetMin);
+    $("#s-idle").value     = String(cfg.idleResetMin);
     const checked = cfg.feeds.filter(f => health[f.url] && health[f.url].ok);
     const viaRelay = checked.filter(f => !health[f.url].direct);
     $("#relay-count").textContent = checked.length
@@ -1018,12 +1149,14 @@ function openSettings(open) {
         ? viaRelay.length + " of " + checked.length + " working feeds go through a relay: "
           + viaRelay.map(f => f.name).join(", ") + ". The rest are fetched directly."
         : "All " + checked.length + " working feeds are fetched directly. No relay involved."
-      : "Run Test all feeds to see which feeds need a relay.";
-  } else {
-    refresh();
+      : "Run Test all feeds on the Feeds page to see which feeds need a relay.";
   }
+  showSheet("#settings", open);
+  if (!open) refresh();
 }
 
+$("#open-feeds").onclick     = () => openFeeds(true);
+$("#close-feeds").onclick    = () => openFeeds(false);
 $("#open-settings").onclick  = () => openSettings(true);
 $("#close-settings").onclick = () => openSettings(false);
 $("#refresh").onclick        = () => refresh();
@@ -1034,7 +1167,7 @@ $("#f-add").onclick = () => {
     try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return "Feed"; }
   })();
   if (!url) return;
-  cfg.feeds.push({ name, url, cat: $("#f-cat").value || "Other" });
+  cfg.feeds.push({ id: newId(), name, url, cat: $("#f-cat").value || "Other" });
   save();
   $("#f-url").value = ""; $("#f-name").value = "";
   renderFeeds(); renderLibrary();
@@ -1066,8 +1199,8 @@ $("#f-test").onclick = async () => {
 $("#io-export").onclick = () => { $("#io").value = JSON.stringify(cfg, null, 2); };
 $("#io-import").onclick = () => {
   try {
-    cfg = { ...DEFAULTS, ...JSON.parse($("#io").value) };
-    save(); openSettings(true);
+    cfg = migrate({ ...DEFAULTS, ...JSON.parse($("#io").value) });
+    save(); pruneOrphans(); render();
     setStatus("Config imported");
   } catch { alert("That isn't valid JSON."); }
 };
@@ -1148,7 +1281,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-const BUILD = "2026-08-23.25";
+const BUILD = "2026-08-23.26";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
