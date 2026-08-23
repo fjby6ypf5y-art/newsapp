@@ -213,7 +213,9 @@ const KEY = "breaking.v1";
 /* Curated feed library. Everything here is a free, non-paywalled publisher
    that offers first-party RSS - no aggregator bridges (they go down) and no
    metered outlets whose links dead-end on a subscribe wall. */
-const CATS = ["World","US","UK & Europe","Business","Tech","Science","Sport"];
+const CATS = ["World","Business","Tech","US","UK & Europe","Science","Sport"];
+const CAT_ORDER = [...CATS, "Other"];
+const catRank = c => { const i = CAT_ORDER.indexOf(c); return i < 0 ? CAT_ORDER.length : i; };
 const CATALOG = [
   ["World", "BBC World",         "https://feeds.bbci.co.uk/news/world/rss.xml"],
   ["World", "NPR News",          "https://feeds.npr.org/1001/rss.xml"],
@@ -540,7 +542,7 @@ function render() {
   const catOf = {};
   cfg.feeds.forEach(f => { catOf[f.name] = f.cat || "Other"; });
   const cats = [...new Set(items.map(i => catOf[i.source]).filter(Boolean))]
-    .sort((a, b) => CATS.indexOf(a) - CATS.indexOf(b));
+    .sort((a, b) => catRank(a) - catRank(b));
   chips.innerHTML = "";
   [["all", "All"], ["alerts", "● Alerts"], ["unread", "Unread"],
    ...cats.map(c => ["cat:" + c, c])]
@@ -585,8 +587,10 @@ function render() {
     if (!buckets.has(c)) buckets.set(c, []);
     buckets.get(c).push(i);
   }
+  // Fixed category order - World, Business, Tech, then the rest - so the list
+  // reads the same way every time. Stories inside each stay hottest-first.
   const groups = [...buckets.entries()]
-    .sort((a, b) => b[1][0].ts - a[1][0].ts);
+    .sort((a, b) => catRank(a[0]) - catRank(b[0]));
 
   // A single-category filter is already its own heading - don't repeat it.
   const showHeads = !filter.startsWith("cat:") && groups.length > 1;
@@ -660,9 +664,8 @@ function renderFeeds() {
   if (!cfg.feeds.length) {
     const p = el("p", "hint"); p.textContent = "No feeds yet - add some from the library below."; box.appendChild(p); return;
   }
-  const order = [...CATS, "Other"];
   const groups = [...new Set(cfg.feeds.map(f => f.cat || "Other"))]
-    .sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    .sort((a, b) => catRank(a) - catRank(b));
 
   groups.forEach(cat => {
     const h = el("div", "cat"); h.textContent = cat; box.appendChild(h);
@@ -724,7 +727,7 @@ function openSettings(open) {
     renderLibrary();
     const sel = $("#f-cat");
     if (!sel.options.length) {
-      [...CATS, "Other"].forEach(c => {
+      CAT_ORDER.forEach(c => {
         const o = document.createElement("option"); o.value = c; o.textContent = c; sel.appendChild(o);
       });
     }

@@ -51,10 +51,13 @@ and shows your last stories even with no bars.
 ### Set up your feeds
 
 Stories are grouped into **categories**, each headed by a count and a dot in
-that category's hottest colour. Within a group, stories run hottest (newest)
-to coldest, and the categories themselves lead with whichever holds the newest
-story — so the most active category sits at the top. Tapping a category chip
-narrows to just that one.
+that category's hottest colour. Categories always appear in a fixed order —
+
+> World · Business · Tech · US · UK & Europe · Science · Sport
+
+— so the list reads the same way every time and you learn where to look.
+Within a group, stories run hottest (newest) to coldest. Tapping a category
+chip narrows to just that one. Categories with no stories are skipped.
 
 Sorting is strictly by time. Keyword hits are *not* floated above newer
 stories, because that would break the promise that the reddest item is the
