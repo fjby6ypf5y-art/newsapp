@@ -50,11 +50,24 @@ and shows your last stories even with no bars.
 
 ### Set up your feeds
 
-Tap the **⚙** button.
+Tap the **⚙** button. Stories are filtered by **category** from the chips under
+the header, not by individual outlet — with a couple of dozen feeds a
+per-source chip row gets longer than the story list.
 
-- **Feeds** — the app ships with a starter set. Delete what you don't want and
-  paste in any RSS or Atom URL. Most outlets publish one at `/rss`, `/feed`,
-  or `/rss.xml`.
+- **Your feeds** — grouped by category, each with a health dot. Green means the
+  feed answered on the last refresh; red shows the actual error. **Test all
+  feeds** re-checks every one on demand.
+- **Add from library** — 33 curated feeds across World, US, UK & Europe,
+  Business, Tech, Science and Sport. Tap to add or remove. Everything in it is
+  free and non-paywalled, published first-party — no aggregator bridges (they
+  go down) and no metered outlets whose links dead-end on a subscribe wall.
+- **Add by URL** — any other RSS or Atom feed, filed under a category you pick.
+  Most outlets publish one at `/rss`, `/feed`, or `/rss.xml`.
+
+**On feeds that fail:** whether a feed works depends on your network and on
+which relay can reach it, so the only place the answer is true is your phone.
+That's what the health dots are for. If one goes red, drop it and try another
+in the same category — that's why the library is deliberately over-stocked.
 - **Alert keywords** — comma-separated. Matching headlines get an `ALERT` tag,
   a gold hairline, and get pushed to the top of the list. Partial words work:
   `evacuat` catches both *evacuate* and *evacuation*.

@@ -117,6 +117,17 @@ textarea{min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospac
   background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:11px 12px;margin-bottom:8px}
 .sw label{font-size:14.5px}
 .sw input{width:44px;height:26px;flex:none}
+.hd{width:8px;height:8px;border-radius:50%;flex:none;background:var(--faint)}
+.hd.ok{background:#4bd76d}
+.hd.bad{background:var(--accent)}
+.row .e{font-size:11px;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cat{margin:14px 0 6px;font-size:11px;font-weight:800;letter-spacing:.9px;
+  text-transform:uppercase;color:var(--dim)}
+.lib{display:flex;flex-wrap:wrap;gap:6px}
+.lib button{padding:6px 11px;border-radius:999px;border:1px solid var(--line);
+  background:transparent;color:var(--dim);font-size:13px;text-align:left}
+.lib button[data-on="1"]{background:var(--panel2);border-color:var(--dim);color:var(--text);font-weight:600}
+.lib button[data-on="1"]::before{content:"✓ ";color:#4bd76d}
 </style>
 </head>
 <body>
@@ -141,13 +152,26 @@ textarea{min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospac
     <button class="iconbtn" id="close-settings" aria-label="Close">&times;</button>
   </div>
 
-  <h3>Feeds</h3>
+  <h3>Your feeds</h3>
   <div id="feeds"></div>
-  <input type="text" id="f-name" placeholder="Name (e.g. Reuters World)">
+  <button class="btn" id="f-test">Test all feeds</button>
+  <p class="hint">A green dot means the feed answered on the last refresh; red
+  shows what went wrong. Feeds are fetched from your phone, so this is the only
+  place the result is actually true &mdash; a feed that works on one network can
+  fail on another.</p>
+
+  <h3>Add from library</h3>
+  <p class="hint" style="margin-bottom:10px">Curated, no paywalls. Tap to add or
+  remove. If one turns red, drop it and try another in the same category.</p>
+  <div id="library"></div>
+
+  <h3>Add by URL</h3>
+  <input type="text" id="f-name" placeholder="Name (e.g. Local paper)">
   <input type="url" id="f-url" placeholder="RSS / Atom URL" inputmode="url">
+  <select id="f-cat" style="width:100%;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:11px 12px;margin-bottom:8px"></select>
   <button class="btn" id="f-add">Add feed</button>
-  <p class="hint">Paste any RSS or Atom URL. Most outlets publish one at
-  <code>/rss</code>, <code>/feed</code>, or <code>/rss.xml</code>.</p>
+  <p class="hint">Most outlets publish one at <code>/rss</code>, <code>/feed</code>,
+  or <code>/rss.xml</code>.</p>
 
   <h3>Alert keywords</h3>
   <input type="text" id="kw" placeholder="breaking, earthquake, evacuat">
@@ -180,13 +204,66 @@ textarea{min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospac
 
 /* ------------------------------------------------------------------ state */
 const KEY = "breaking.v1";
+
+/* Curated feed library. Everything here is a free, non-paywalled publisher
+   that offers first-party RSS - no aggregator bridges (they go down) and no
+   metered outlets whose links dead-end on a subscribe wall. */
+const CATS = ["World","US","UK & Europe","Business","Tech","Science","Sport"];
+const CATALOG = [
+  ["World", "BBC World",         "https://feeds.bbci.co.uk/news/world/rss.xml"],
+  ["World", "NPR News",          "https://feeds.npr.org/1001/rss.xml"],
+  ["World", "Al Jazeera",        "https://www.aljazeera.com/xml/rss/all.xml"],
+  ["World", "Deutsche Welle",    "https://rss.dw.com/rdf/rss-en-world"],
+  ["World", "France 24",         "https://www.france24.com/en/rss"],
+  ["World", "CBC World",         "https://rss.cbc.ca/lineup/world.xml"],
+  ["World", "ABC Australia",     "https://www.abc.net.au/news/feed/51120/rss.xml"],
+  ["World", "Guardian World",    "https://www.theguardian.com/world/rss"],
+  ["World", "Sky News",          "https://feeds.skynews.com/feeds/rss/world.xml"],
+
+  ["US",    "NPR Politics",      "https://feeds.npr.org/1014/rss.xml"],
+  ["US",    "PBS NewsHour",      "https://www.pbs.org/newshour/feeds/rss/headlines"],
+  ["US",    "CBS News",          "https://www.cbsnews.com/latest/rss/main"],
+  ["US",    "NBC News",          "https://feeds.nbcnews.com/nbcnews/public/news"],
+  ["US",    "The Hill",          "https://thehill.com/news/feed/"],
+
+  ["UK & Europe", "BBC UK",      "https://feeds.bbci.co.uk/news/uk/rss.xml"],
+  ["UK & Europe", "Guardian UK", "https://www.theguardian.com/uk-news/rss"],
+  ["UK & Europe", "Euronews",    "https://www.euronews.com/rss?level=theme&name=news"],
+
+  ["Business", "BBC Business",   "https://feeds.bbci.co.uk/news/business/rss.xml"],
+  ["Business", "CNBC",           "https://www.cnbc.com/id/100003114/device/rss/rss.html"],
+  ["Business", "Guardian Money", "https://www.theguardian.com/uk/business/rss"],
+
+  ["Tech",  "Ars Technica",      "https://feeds.arstechnica.com/arstechnica/index"],
+  ["Tech",  "The Verge",         "https://www.theverge.com/rss/index.xml"],
+  ["Tech",  "Hacker News",       "https://news.ycombinator.com/rss"],
+  ["Tech",  "TechCrunch",        "https://techcrunch.com/feed/"],
+  ["Tech",  "Engadget",          "https://www.engadget.com/rss.xml"],
+  ["Tech",  "BBC Technology",    "https://feeds.bbci.co.uk/news/technology/rss.xml"],
+
+  ["Science","Phys.org",         "https://phys.org/rss-feed/"],
+  ["Science","ScienceDaily",     "https://www.sciencedaily.com/rss/all.xml"],
+  ["Science","NASA",             "https://www.nasa.gov/rss/dyn/breaking_news.rss"],
+  ["Science","BBC Science",      "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml"],
+
+  ["Sport", "BBC Sport",         "https://feeds.bbci.co.uk/sport/rss.xml"],
+  ["Sport", "ESPN",              "https://www.espn.com/espn/rss/news"],
+  ["Sport", "Guardian Sport",    "https://www.theguardian.com/sport/rss"]
+].map(([cat, name, url]) => ({ cat, name, url }));
+
+const inCatalog = url => CATALOG.find(f => f.url === url);
 const DEFAULTS = {
   feeds: [
-    { name:"BBC World",     url:"https://feeds.bbci.co.uk/news/world/rss.xml" },
-    { name:"NPR",           url:"https://feeds.npr.org/1001/rss.xml" },
-    { name:"Al Jazeera",    url:"https://www.aljazeera.com/xml/rss/all.xml" },
-    { name:"Guardian World", url:"https://www.theguardian.com/world/rss" },
-    { name:"Sky News",       url:"https://feeds.skynews.com/feeds/rss/world.xml" }
+    { cat:"World", name:"BBC World",   url:"https://feeds.bbci.co.uk/news/world/rss.xml" },
+    { cat:"World", name:"NPR News",    url:"https://feeds.npr.org/1001/rss.xml" },
+    { cat:"World", name:"Al Jazeera",  url:"https://www.aljazeera.com/xml/rss/all.xml" },
+    { cat:"World", name:"France 24",   url:"https://www.france24.com/en/rss" },
+    { cat:"World", name:"CBC World",   url:"https://rss.cbc.ca/lineup/world.xml" },
+    { cat:"US",    name:"NPR Politics","url":"https://feeds.npr.org/1014/rss.xml" },
+    { cat:"US",    name:"PBS NewsHour",url:"https://www.pbs.org/newshour/feeds/rss/headlines" },
+    { cat:"Tech",  name:"Ars Technica",url:"https://feeds.arstechnica.com/arstechnica/index" },
+    { cat:"Tech",  name:"Hacker News", url:"https://news.ycombinator.com/rss" },
+    { cat:"Science",name:"Phys.org",   url:"https://phys.org/rss-feed/" }
   ],
   keywords: ["breaking","urgent","evacuat","earthquake"],
   proxies: [
@@ -209,21 +286,30 @@ const RETIRED = {
 };
 
 function migrate(c) {
-  if (c.migrated >= 1) return c;
+  if (c.migrated >= 2) {
+    c.feeds.forEach(f => { if (!f.cat) f.cat = (inCatalog(f.url) || {}).cat || "Other"; });
+    return c;
+  }
   const urls = new Set(c.feeds.map(f => f.url));
   c.feeds = c.feeds.flatMap(f => {
     const swap = RETIRED[f.url];
     if (!swap) return [f];
     return urls.has(swap.url) ? [] : [swap];   // don't create a duplicate
   });
-  c.migrated = 1;
+  // Backfill a category on every feed, including ones added by hand.
+  c.feeds.forEach(f => { if (!f.cat) f.cat = (inCatalog(f.url) || {}).cat || "Other"; });
+  c.migrated = 2;
   return c;
 }
 
 const load = () => { try { return migrate({...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || "{}")}); }
-                     catch { return {...DEFAULTS, migrated:1}; } };
+                     catch { return {...DEFAULTS, migrated:2}; } };
 const save = () => localStorage.setItem(KEY, JSON.stringify(cfg));
 let cfg = load();
+// Persist immediately: migrations rewrite feed URLs and backfill categories,
+// and without this they would be recomputed on every launch and lost the
+// moment the shipped defaults move on again.
+save();
 
 let items    = JSON.parse(localStorage.getItem(KEY + ".items") || "[]");
 let seen     = new Set(JSON.parse(localStorage.getItem(KEY + ".seen")  || "[]"));
@@ -238,6 +324,13 @@ const el = (t, c) => { const n = document.createElement(t); if (c) n.className =
 // already know fail. Nearly every feed rejects the direct request on CORS
 // grounds, and blindly retrying it first cost a full timeout per feed per
 // refresh - that was the slow second load.
+// Per-feed health from the last refresh. The phone is the only place that can
+// tell whether a feed really works, so the app records it rather than trusting
+// any list shipped with the code.
+let health = {};
+try { health = JSON.parse(localStorage.getItem(KEY + ".health") || "{}"); } catch {}
+const saveHealth = () => localStorage.setItem(KEY + ".health", JSON.stringify(health));
+
 let routes = {};
 try { routes = JSON.parse(localStorage.getItem(KEY + ".routes") || "{}"); } catch {}
 
@@ -347,8 +440,15 @@ async function refresh() {
   // Render each feed the moment it lands rather than blocking on the slowest.
   await Promise.all(cfg.feeds.map(f =>
     grab(f.url).then(x => parseFeed(x, f.name)).then(
-      list => { ok++; absorb(list); render(); },
-      ()   => { failed.push(f.name); }
+      list => {
+        ok++;
+        health[f.url] = { ok: true, at: Date.now(), n: list.length };
+        absorb(list); render();
+      },
+      err => {
+        failed.push(f.name);
+        health[f.url] = { ok: false, at: Date.now(), err: String(err && err.message || err) };
+      }
     ).finally(() => {
       done++;
       if (done < total) setStatus("Fetched " + done + "/" + total + " feeds…");
@@ -356,6 +456,7 @@ async function refresh() {
   ));
 
   localStorage.setItem(KEY + ".items", JSON.stringify(items));
+  saveHealth();
 
   if (ok === 0) {
     setStatus("No feeds reachable — check your connection or relays", true);
@@ -429,9 +530,15 @@ const keywordHit = i => {
 function render() {
   // filter chips
   const chips = $("#chips");
-  const sources = [...new Set(items.map(i => i.source))].sort();
+  // Group by category rather than by outlet - with a couple of dozen feeds a
+  // per-source chip row is longer than the story list.
+  const catOf = {};
+  cfg.feeds.forEach(f => { catOf[f.name] = f.cat || "Other"; });
+  const cats = [...new Set(items.map(i => catOf[i.source]).filter(Boolean))]
+    .sort((a, b) => CATS.indexOf(a) - CATS.indexOf(b));
   chips.innerHTML = "";
-  [["all", "All"], ["alerts", "● Alerts"], ["unread", "Unread"], ...sources.map(s => [s, s])]
+  [["all", "All"], ["alerts", "● Alerts"], ["unread", "Unread"],
+   ...cats.map(c => ["cat:" + c, c])]
     .forEach(([id, label]) => {
       const b = el("button", "chip");
       b.textContent = label;
@@ -441,9 +548,12 @@ function render() {
     });
 
   let view = items.slice();
-  if (filter === "alerts")      view = view.filter(keywordHit);
-  else if (filter === "unread") view = view.filter(i => !seen.has(i.id));
-  else if (filter !== "all")    view = view.filter(i => i.source === filter);
+  if (filter === "alerts")            view = view.filter(keywordHit);
+  else if (filter === "unread")       view = view.filter(i => !seen.has(i.id));
+  else if (filter.startsWith("cat:")) {
+    const want = filter.slice(4);
+    view = view.filter(i => (catOf[i.source] || "Other") === want);
+  }
 
   // fresh keyword hits float to the top
   view.sort((a, b) => {
@@ -516,18 +626,60 @@ function renderFeeds() {
   const box = $("#feeds");
   box.innerHTML = "";
   if (!cfg.feeds.length) {
-    const p = el("p", "hint"); p.textContent = "No feeds yet."; box.appendChild(p); return;
+    const p = el("p", "hint"); p.textContent = "No feeds yet - add some from the library below."; box.appendChild(p); return;
   }
-  cfg.feeds.forEach((f, idx) => {
-    const r = el("div", "row");
-    const g = el("div", "g");
-    const n = el("div", "n"); n.textContent = f.name;
-    const u = el("div", "u"); u.textContent = f.url;
-    g.append(n, u);
-    const x = el("button", "x"); x.innerHTML = "&times;"; x.setAttribute("aria-label", "Remove " + f.name);
-    x.onclick = () => { cfg.feeds.splice(idx, 1); save(); renderFeeds(); render(); };
-    r.append(g, x);
-    box.appendChild(r);
+  const order = [...CATS, "Other"];
+  const groups = [...new Set(cfg.feeds.map(f => f.cat || "Other"))]
+    .sort((a, b) => order.indexOf(a) - order.indexOf(b));
+
+  groups.forEach(cat => {
+    const h = el("div", "cat"); h.textContent = cat; box.appendChild(h);
+    cfg.feeds.filter(f => (f.cat || "Other") === cat).forEach(f => {
+      const r = el("div", "row");
+      const hs = health[f.url];
+      const d = el("span", "hd" + (hs ? (hs.ok ? " ok" : " bad") : ""));
+      d.title = hs ? (hs.ok ? hs.n + " stories" : hs.err) : "not checked yet";
+      const g = el("div", "g");
+      const n = el("div", "n"); n.textContent = f.name;
+      g.appendChild(n);
+      if (hs && !hs.ok) {
+        const e = el("div", "e"); e.textContent = hs.err; g.appendChild(e);
+      } else {
+        const u = el("div", "u"); u.textContent = f.url; g.appendChild(u);
+      }
+      const x = el("button", "x"); x.innerHTML = "&times;";
+      x.setAttribute("aria-label", "Remove " + f.name);
+      x.onclick = () => {
+        cfg.feeds = cfg.feeds.filter(o => o.url !== f.url);
+        save(); renderFeeds(); renderLibrary(); render();
+      };
+      r.append(d, g, x);
+      box.appendChild(r);
+    });
+  });
+}
+
+function renderLibrary() {
+  const box = $("#library");
+  box.innerHTML = "";
+  const have = new Set(cfg.feeds.map(f => f.url));
+  CATS.forEach(cat => {
+    const list = CATALOG.filter(f => f.cat === cat);
+    if (!list.length) return;
+    const h = el("div", "cat"); h.textContent = cat; box.appendChild(h);
+    const wrap = el("div", "lib");
+    list.forEach(f => {
+      const b = el("button");
+      b.textContent = f.name;
+      b.dataset.on = have.has(f.url) ? "1" : "0";
+      b.onclick = () => {
+        if (have.has(f.url)) cfg.feeds = cfg.feeds.filter(o => o.url !== f.url);
+        else cfg.feeds.push({ ...f });
+        save(); renderFeeds(); renderLibrary(); render();
+      };
+      wrap.appendChild(b);
+    });
+    box.appendChild(wrap);
   });
 }
 
@@ -537,6 +689,13 @@ function openSettings(open) {
   s.setAttribute("aria-hidden", String(!open));
   if (open) {
     renderFeeds();
+    renderLibrary();
+    const sel = $("#f-cat");
+    if (!sel.options.length) {
+      [...CATS, "Other"].forEach(c => {
+        const o = document.createElement("option"); o.value = c; o.textContent = c; sel.appendChild(o);
+      });
+    }
     $("#kw").value      = cfg.keywords.join(", ");
     $("#proxy").value   = cfg.proxies.join("\n");
     $("#s-auto").checked   = cfg.autoRefresh;
@@ -556,10 +715,10 @@ $("#f-add").onclick = () => {
     try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return "Feed"; }
   })();
   if (!url) return;
-  cfg.feeds.push({ name, url });
+  cfg.feeds.push({ name, url, cat: $("#f-cat").value || "Other" });
   save();
   $("#f-url").value = ""; $("#f-name").value = "";
-  renderFeeds();
+  renderFeeds(); renderLibrary();
 };
 
 $("#kw").oninput    = e => { cfg.keywords = e.target.value.split(",").map(s => s.trim()).filter(Boolean); save(); };
@@ -570,6 +729,21 @@ $("#s-notify").onchange = async e => {
   if (cfg.notify && "Notification" in window && Notification.permission === "default") {
     await Notification.requestPermission();
   }
+};
+
+$("#f-test").onclick = async () => {
+  const b = $("#f-test");
+  b.textContent = "Testing…"; b.disabled = true;
+  await Promise.all(cfg.feeds.map(f =>
+    grab(f.url).then(x => parseFeed(x, f.name)).then(
+      list => { health[f.url] = { ok: true, at: Date.now(), n: list.length }; },
+      err  => { health[f.url] = { ok: false, at: Date.now(), err: String(err && err.message || err) }; }
+    )
+  ));
+  saveHealth(); renderFeeds();
+  const bad = cfg.feeds.filter(f => health[f.url] && !health[f.url].ok).length;
+  b.textContent = bad ? bad + " of " + cfg.feeds.length + " failed" : "All " + cfg.feeds.length + " working";
+  b.disabled = false;
 };
 
 $("#io-export").onclick = () => { $("#io").value = JSON.stringify(cfg, null, 2); };
