@@ -108,6 +108,7 @@ h1{margin:0;font-size:1.375rem;font-weight:800;letter-spacing:-.4px}
 main{
   position:absolute;inset:0;
   overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  touch-action:pan-y;
   padding:0 0 calc(var(--safe-b) + 40px);
   background:var(--bg);
 }
@@ -1643,9 +1644,9 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
   // Sideways: the list resists for the first stretch of the drag and only
   // commits once the next category is genuinely half way across, so a
   // sideways nudge while reading cannot shift the category out from under you.
-  const SLOP = 16, STICK = 34, TRACK = 0.9, COMMIT = 0.5;
+  const SLOP = 16, STICK = 26, TRACK = 0.9, COMMIT = 0.34;
   let startX = 0, startY = 0, mode = null, dist = 0, dx = 0;
-  let lastX = 0, lastT = 0, startT = 0, vx = 0, animating = false;
+  let lastX = 0, lastT = 0, startT = 0, vx = 0, animating = false, held = 0;
 
   const paintPull = d => {
     list.style.transform = d ? "translateY(" + d + "px)" : "";
@@ -1691,7 +1692,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     if (ghost) ghost.style.transform = "translateX(" + (d + ghostDir * width()) + "px)";
   };
 
-  const SLIDE = 260, EASE = "cubic-bezier(.32,.72,0,1)";
+  const SLIDE = 190, EASE = "cubic-bezier(.22,.61,.36,1)";
 
   function slideTo(dir) {
     if (!ghost || ghostDir !== dir) makeGhost(dir);
@@ -1707,6 +1708,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
       // The preview was capped, so the real render takes over once it is home.
       step(dir);
       list.style.transform = "";
+      list.style.overflowY = "";
       killGhost();
       animating = false;
     }, SLIDE);
@@ -1721,6 +1723,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     }
     ptr.style.opacity = 0;
     setTimeout(() => { list.style.transition = ""; killGhost(); }, 280);
+    if (list.style.overflowY) { list.style.overflowY = ""; list.scrollTop = held; }
   };
 
   // Step through the categories currently on screen. catList is filled by
@@ -1760,7 +1763,14 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     // Decide once what this gesture is, then stick to it - switching mode
     // mid-drag is what makes gesture handling feel unreliable.
     if (mode === null) {
-      if (Math.abs(tx) > SLOP && Math.abs(tx) > Math.abs(ty) * 1.3) mode = "swipe";
+      if (Math.abs(tx) > SLOP && Math.abs(tx) > Math.abs(ty) * 1.3) {
+        mode = "swipe";
+        // Let the list scroll during a sideways drag and the rows slide under
+        // the panel that is supposed to be carrying them.
+        held = list.scrollTop;
+        list.style.overflowY = "hidden";
+        list.scrollTop = held;               // some engines clamp on the switch
+      }
       else if (Math.abs(ty) > SLOP) mode = (ty > 0 && list.scrollTop <= 0) ? "pull" : "off";
       else return;                            // not yet moved enough to tell
     }
@@ -1830,7 +1840,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.47";
+const BUILD = "2026-08-23.48";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
