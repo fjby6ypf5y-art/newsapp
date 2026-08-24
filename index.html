@@ -1769,13 +1769,27 @@ stagedRefresh(false, "app opened");
 const STALE_MIN = 5;
 const fetchedAt = () => +(localStorage.getItem(KEY + ".fetchedAt") || 0);
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) { markSeen(); return; }
+  if (document.hidden) {
+    markSeen();
+    if (window.releaseSides) window.releaseSides();
+    return;
+  }
   if (resetTabIfStale()) { render(); $("#list").scrollTop = 0; }
   markSeen();
   render();                                   // timestamps, at least, are stale
+  if (window.primeSides) window.primeSides();
   if (!cfg.autoRefresh) return;
   if (Date.now() - fetchedAt() < STALE_MIN * 60000) return;
   stagedRefresh(true, "back after a while");
+});
+
+// A web app iOS has held in the background comes back either as the page it
+// was, or - if the process was reclaimed - as a fresh load. Both arrive here;
+// the restored one needs its clocks and panels brought up to date.
+window.addEventListener("pageshow", e => {
+  if (!e.persisted) return;
+  markSeen(); render();
+  if (window.primeSides) window.primeSides();
 });
 
 // tick the relative timestamps
@@ -1868,6 +1882,15 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
   function queuePrime() { clearTimeout(primeTimer); primeTimer = setTimeout(prime, 250); }
   window.addEventListener("resize", park);
   window.primeSides = () => { holds["-1"] = holds["1"] = ""; queuePrime(); };
+  // Backgrounded, the two parked categories are hundreds of rows nobody is
+  // looking at. iOS reclaims a web app by how much memory it is holding, and
+  // an app it reclaims comes back as a blank page, so they are dropped on the
+  // way out and rebuilt on the way back in.
+  window.releaseSides = () => {
+    clearTimeout(primeTimer); primeTimer = 0; building = null;
+    panels["-1"].replaceChildren(); panels["1"].replaceChildren();
+    holds["-1"] = holds["1"] = "";
+  };
 
   const paintPull = d => {
     live.style.transform = "translateY(" + d + "px)";
@@ -2143,7 +2166,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.64";
+const BUILD = "2026-08-23.65";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

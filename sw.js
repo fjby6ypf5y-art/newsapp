@@ -1,7 +1,7 @@
 /* Caches the app shell so the app opens instantly and works with no signal.
    Feed responses are never cached here - they go through localStorage instead,
    so stale headlines can't be served as if they were fresh. */
-const SHELL = "news-shell-v64";
+const SHELL = "news-shell-v65";
 const FILES = [
   "./",
   "./index.html",
@@ -33,6 +33,24 @@ self.addEventListener("activate", e => {
   );
 });
 
+// How long a launch waits on the network before falling back to the copy in
+// the cache. An app reopened after iOS has evicted it reloads from scratch,
+// and on a slow or half-connected network that request can hang for many
+// seconds - which is the blank screen you have to pull to refresh out of. The
+// cached shell is a fraction of a second away, so past this point it wins and
+// the network updates the cache for next time.
+const NET_WAIT = 2500;
+
+async function fromNetwork(url, request, fresh) {
+  const res = fresh
+    ? await fetch(url.href, { cache: "no-store", credentials: "same-origin" })
+    : await fetch(request);
+  if (!res || !res.ok) throw new Error("HTTP " + (res && res.status));
+  const copy = res.clone();
+  caches.open(SHELL).then(c => c.put(request, copy)).catch(() => {});
+  return res;
+}
+
 self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
   // Only ever serve our own files from cache; feed + relay traffic goes to the network.
@@ -42,23 +60,18 @@ self.addEventListener("fetch", e => {
   const fresh = isVersioned(url) || navigating;
 
   e.respondWith((async () => {
-    try {
-      const res = fresh
-        ? await fetch(url.href, { cache: "no-store", credentials: "same-origin" })
-        : await fetch(e.request);
-      if (!res || !res.ok) throw new Error("HTTP " + (res && res.status));
-      const copy = res.clone();
-      caches.open(SHELL).then(c => c.put(e.request, copy)).catch(() => {});
-      return res;
-    } catch {
-      // Offline, or the server said no: fall back to whatever was cached.
-      const hit = await caches.match(e.request);
-      if (hit) return hit;
-      if (navigating) {
-        const shell = await caches.match("./index.html");
-        if (shell) return shell;
-      }
+    const net = fromNetwork(url, e.request, fresh).catch(() => null);
+    const hit = (await caches.match(e.request))
+      || (navigating ? await caches.match("./index.html") : null);
+
+    // Nothing cached yet: the network is the only answer there is.
+    if (!hit) {
+      const res = await net;
+      if (res) return res;
       throw new Error("unavailable");
     }
+
+    const res = await Promise.race([net, new Promise(r => setTimeout(() => r(null), NET_WAIT))]);
+    return res || hit;
   })());
 });

@@ -42,6 +42,7 @@ If Chromium is somewhere else, set `CHROMIUM_PATH`.
 | `testfeeds` `testdiscover` | Feed editing, and finding a feed from a page address |
 | `testcsp` `testsec` | The policy blocks what it should; a hostile feed gets nothing through |
 | `testsetup` | The setup link restores feeds and refuses a corrupt one |
+| `testresume` | Backgrounding releases the parked panels; a launch on a hanging network serves the cache rather than a blank page |
 | `testupdate` | Is a new build picked up rather than served from cache? |
 
 ## Writing another

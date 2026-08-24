@@ -106,6 +106,17 @@ as it was. So the refresh on return only happens once the stories are actually
 old — five minutes — and when it does it runs in the background, never greying
 anything out.
 
+**Coming back after iOS has put the app away.** A Home Screen web app can be
+evicted from memory while it is in the background, and what comes back is a
+fresh load, not the page you left. Two things make that survivable. The app
+lets go of the two parked category panels when it goes into the background —
+hundreds of rows nobody is reading, and memory is what iOS reclaims on — and
+rebuilds them on return. And the service worker waits at most 2.5 seconds for
+the network on a launch before serving the cached shell: with a hanging
+connection that is the difference between the app appearing in 2.7 seconds and
+sitting blank for as long as the request takes. Neither stops iOS reclaiming
+the app; they make the return cheap instead.
+
 **Closing a sheet is not a refresh.** Leaving the Feeds or Settings page used
 to refetch every feed, so looking at your feeds — or running Test all feeds,
 which has just fetched them — greyed the app out and did it all again. Now only
