@@ -679,7 +679,10 @@ function resetTabIfStale() {
   return true;
 }
 let loading  = false;
-let queued   = null, queuedScope;
+let queued   = null, queuedScope, queuedOpts;
+// One "cycle" is a staged refresh: the categories within reach first, the rest
+// behind them. Both passes report as one thing.
+let cycleStart = 0, cycleAdded = 0;
 
 // A refresh resolves feed by feed, and each arrival used to rebuild the whole
 // list - sixteen full DOM rebuilds of up to 400 rows for one refresh. Collapse
@@ -845,32 +848,40 @@ function parseXmlFeed(xml, source, feedUrl) {
   }).filter(i => i.title !== "(untitled)" || i.link);
 }
 
-// scope: an array of feeds to fetch, or omitted for all of them. The pull
-// gesture refreshes just the category on screen; the button does the lot.
-async function refresh(scope) {
+// scope: an array of feeds to fetch, or omitted for all of them.
+// opts.quiet   - do not hold the screen back; the reader is not waiting on it
+// opts.name    - category name for the status line, when the scope is one
+// opts.summary - report on every feed at the end, not just this pass
+async function refresh(scope, opts) {
   // A refresh requested while one is already running used to be dropped on the
   // floor. Opening the app starts an auto-refresh, so a pull a second later hit
   // exactly that: the gesture appeared to work, did nothing, and left the
   // running refresh's status on screen. Wait our turn instead of vanishing.
   if (loading) {
-    queuedScope = scope;                       // last request wins
+    queuedScope = scope; queuedOpts = opts;    // last request wins
     if (queued) return queued;
     queued = (async () => {
       while (loading) await new Promise(r => setTimeout(r, 100));
-      const s = queuedScope;
-      queued = null; queuedScope = undefined;
-      return refresh(s);
+      const s = queuedScope, o = queuedOpts;
+      queued = null; queuedScope = undefined; queuedOpts = undefined;
+      return refresh(s, o);
     })();
     return queued;
   }
+  const o = opts || {};
   const feeds = Array.isArray(scope) ? scope : cfg.feeds;
   const scoped = Array.isArray(scope);
+  const name = o.name ? o.name + " " : "";
   if (!feeds.length) { setStatus(scoped ? "No feeds in " + active : "No feeds yet"); return; }
   loading = true;
-  setBusy(true);
+  // A background pass is not something the reader is waiting on, so it does
+  // not hold the screen back.
+  if (!o.quiet) setBusy(true);
   $("#refresh").style.opacity = ".4";
-  setStatus("Fetching " + feeds.length + " " + (scoped ? active + " " : "")
-    + "feed" + (feeds.length === 1 ? "" : "s") + "…");
+  setStatus(o.quiet && o.summary
+    ? "Updating the rest in the background…"
+    : "Fetching " + feeds.length + " " + name
+      + "feed" + (feeds.length === 1 ? "" : "s") + "…");
 
   const merged = new Map(items.map(i => [i.id, i]));
   const total = feeds.length;
@@ -907,15 +918,33 @@ async function refresh(scope) {
       }
     ).finally(() => {
       done++;
-      if (done < total) setStatus("Fetched " + done + "/" + total + " "
-        + (scoped ? active + " " : "") + "feeds…");
+      if (done < total && !(o.quiet && o.summary))
+        setStatus("Fetched " + done + "/" + total + " " + name + "feeds…");
     })
   ));
 
   localStorage.setItem(KEY + ".items", JSON.stringify(items));
   saveHealth();
 
-  if (ok === 0) {
+  cycleAdded += added;
+  if (o.summary) {
+    // Both passes of this cycle, counted from what each feed last reported.
+    const all = cfg.feeds;
+    const seenNow = all.filter(f => health[f.url] && health[f.url].at >= cycleStart);
+    const okAll = seenNow.filter(f => health[f.url].ok);
+    const badAll = seenNow.filter(f => !health[f.url].ok).map(f => f.name);
+    setStatus(
+      okAll.length === 0
+        ? "No feeds reachable — check your connection or relays"
+        : "Updated " + timeAgo(Date.now()) + " · " + okAll.length + "/" + all.length + " feeds"
+          + (cycleAdded ? " · " + cycleAdded + " new" : "")
+          + (badAll.length
+              ? " · failed: " + (badAll.length > 2
+                  ? badAll.slice(0, 2).join(", ") + " +" + (badAll.length - 2) + " more"
+                  : badAll.join(", "))
+              : ""),
+      okAll.length === 0);
+  } else if (ok === 0) {
     setStatus("No feeds reachable — check your connection or relays", true);
   } else {
     // "new" counts what this refresh actually brought in. It used to count
@@ -923,7 +952,7 @@ async function refresh(scope) {
     // hundreds that ignored the scope of the refresh and told you nothing.
     setStatus(
       "Updated " + timeAgo(Date.now()) + " · " + ok + "/" + total + " "
-      + (scoped ? active + " " : "") + "feeds"
+      + name + "feeds"
       + (added ? " · " + added + " new" : "")
       + (failed.length
           ? " · failed: " + (failed.length > 2
@@ -936,8 +965,33 @@ async function refresh(scope) {
 
   render();
   loading = false;
+  if (ok > 0) { try { localStorage.setItem(KEY + ".fetchedAt", Date.now()); } catch {} }
   setBusy(false);
   $("#refresh").style.opacity = "";
+}
+
+// The categories you can reach without leaving the screen: the one you are
+// reading and the two a swipe away. Everything else can arrive later - waiting
+// on sixteen feeds to read the first one is the whole delay.
+function nearCats() {
+  const cats = catList.length
+    ? catList
+    : [...new Set(cfg.feeds.map(f => f.cat || "Other"))].sort((a, b) => catRank(a) - catRank(b));
+  const n = cats.length;
+  if (n <= 3) return new Set(cats);
+  const i = Math.max(0, cats.indexOf(active));
+  return new Set([cats[i], cats[(i + 1) % n], cats[(i - 1 + n) % n]]);
+}
+
+// Two passes: what is within reach, then the rest behind it.
+async function stagedRefresh(quiet) {
+  cycleStart = Date.now(); cycleAdded = 0;
+  const near = nearCats();
+  const first = cfg.feeds.filter(f => near.has(f.cat || "Other"));
+  const rest  = cfg.feeds.filter(f => !near.has(f.cat || "Other"));
+  if (!first.length) return refresh(undefined, { quiet, summary: true });
+  await refresh(first, { quiet, summary: !rest.length });
+  if (rest.length) await refresh(rest, { quiet: true, summary: true });
 }
 
 /* -------------------------------------------------------------- render */
@@ -1451,7 +1505,7 @@ $("#open-feeds").onclick     = () => openFeeds(true);
 $("#close-feeds").onclick    = () => openFeeds(false);
 $("#open-settings").onclick  = () => openSettings(true);
 $("#close-settings").onclick = () => openSettings(false);
-$("#refresh").onclick        = () => refresh();
+$("#refresh").onclick        = () => stagedRefresh(false);
 
 $("#f-add").onclick = async () => {
   const btn = $("#f-add"), msg = $("#f-add-msg");
@@ -1661,13 +1715,23 @@ resetTabIfStale();
 markSeen();
 render();
 if (items.length) setStatus(items.length + " stored stories · refreshing…");
-refresh();
+stagedRefresh(false);
 
+// Coming back to the app is not always a new reading session. Tapping a story
+// opens another app, and returning from it a minute later should hand back the
+// screen exactly as it was - not a greyed-out list refetching every feed. So
+// the return refresh only happens once the stories are actually old, and it
+// runs in the background either way.
+const STALE_MIN = 5;
+const fetchedAt = () => +(localStorage.getItem(KEY + ".fetchedAt") || 0);
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) { markSeen(); return; }
   if (resetTabIfStale()) { render(); $("#list").scrollTop = 0; }
   markSeen();
-  if (cfg.autoRefresh) refresh();
+  render();                                   // timestamps, at least, are stale
+  if (!cfg.autoRefresh) return;
+  if (Date.now() - fetchedAt() < STALE_MIN * 60000) return;
+  stagedRefresh(true);
 });
 
 // tick the relative timestamps
@@ -1993,7 +2057,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
       if (dist >= TRIGGER) {
         ptr.classList.add("busy");
         label.textContent = "Refreshing " + active + "…";
-        refresh(cfg.feeds.filter(f => (f.cat || "Other") === active))
+        refresh(cfg.feeds.filter(f => (f.cat || "Other") === active), { name: active })
           .finally(() => { ptr.classList.remove("busy"); settle(); });
       } else {
         settle();
@@ -2035,7 +2099,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.60";
+const BUILD = "2026-08-23.61";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

@@ -92,11 +92,19 @@ loop rather than a strip with dead ends. A gesture commits to being a swipe, a p
 as its direction is clear and stays that way — switching mid-drag is what makes
 gesture handling feel unreliable.
 
-**Held back while feeds land.** Stories arrive feed by feed, so mid-refresh the
-list is half built. The chips and the list dim and stop responding to taps and
-swipes until every feed has answered or failed; the status line stays at full
-strength, since it is the part worth reading at that moment. A category change
-made against a list that is about to rearrange itself is the thing this avoids.
+**Two passes, and only the first one waits.** Opening the app refreshes the
+category you are on and the two a swipe away — everything within reach — and
+holds the reading surface back while they land: the chips and the list dim and
+ignore taps, since a category change against a half-built list acts on
+something about to rearrange itself. The remaining feeds follow in the
+background with nothing dimmed. The status line stays at full strength
+throughout and reports on every feed at the end.
+
+**Coming back is not always a new session.** Tapping a story hands you to
+another app, and returning a minute later should give the screen back exactly
+as it was. So the refresh on return only happens once the stories are actually
+old — five minutes — and when it does it runs in the background, never greying
+anything out.
 
 **Two refreshes, deliberately different.** Pull down on the list to refresh
 **just the category you're reading** — quick, and it doesn't spend requests on
