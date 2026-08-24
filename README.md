@@ -69,9 +69,12 @@ of grouped sections rather than a single list — which made the whole row read
 as filters over one page instead of a set of pages.
 
 **Swipe left and right** on the list to move between categories, or tap a chip.
-The next category rides alongside the current one for the whole gesture, so
-the drag pulls a real list into place rather than emptying the screen and
-refilling it. The first 34px of movement barely register — the list resists,
+There are three panels: the category on screen and the two either side, built
+in advance and parked off screen. A page turn promotes the panel that arrived
+and demotes the one it replaced — no rows are built, moved or re-laid-out while
+the screen is animating, which is what used to cost a dropped frame at the end
+of every swipe. The panel that is left holding the wrong category is rebuilt
+afterwards, a couple of dozen rows per frame. The first 34px of movement barely register — the list resists,
 so a sideways nudge while reading cannot shift the category out from under
 you — and after that it follows your finger closely. It commits once the next
 category is a quarter of the way across, or on a genuine fast throw short of

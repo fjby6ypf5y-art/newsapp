@@ -105,18 +105,23 @@ h1{margin:0;font-size:1.375rem;font-weight:800;letter-spacing:-.4px}
     transition-duration:.001ms !important;scroll-behavior:auto !important;
   }
 }
-main{
+/* Three identical panels: the one on screen and the category either side.
+   Which is which is a matter of a class - the elements themselves are never
+   created, destroyed or reparented, so nothing is ever laid out twice. */
+.panel{
   position:absolute;inset:0;
   overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
   touch-action:pan-y;
   padding:0 0 calc(var(--safe-b) + 40px);
   background:var(--bg);
+  will-change:transform;
 }
-.ghost{
-  position:absolute;inset:0;overflow:hidden;
-  padding:0 0 calc(var(--safe-b) + 40px);
-  background:var(--bg);pointer-events:none;
-}
+/* The three panels are styled identically and never restyled. Changing a
+   class on one is a style recalculation for every row inside it - 22ms for a
+   long category, spent in the frame that finishes a page turn. Which panel is
+   the live one is carried by its id and aria-hidden alone, neither of which
+   any rule here selects on. */
+
 #ptr{
   position:absolute;left:0;right:0;top:0;height:70px;
   display:flex;align-items:center;justify-content:center;gap:8px;
@@ -234,7 +239,12 @@ body.busy .chips{filter:saturate(.3)}
 
 <div class="pane">
   <div id="ptr"><span class="spin">&#8635;</span><span id="ptr-text">Pull to refresh</span></div>
-  <main id="list"></main>
+  <div class="panel" id="list" role="main"></div>
+  <!-- The categories either side, built ahead of time and parked off screen.
+       A page turn promotes one of these to be the list and demotes the old
+       one in its place; no rows are ever moved between them. -->
+  <div class="panel" aria-hidden="true"></div>
+  <div class="panel" aria-hidden="true"></div>
 </div>
 
 <!-- ================= settings ================= -->
@@ -1124,6 +1134,7 @@ function renderList() {
   }
 
   for (const i of view) renderItem(i, list);
+  if (window.primeSides) window.primeSides();
 }
 
 // Strictly newest first, so the reddest story is always the first one.
@@ -1135,9 +1146,8 @@ function storiesIn(cat) {
     .sort((a, b) => b.ts - a.ts);
 }
 
-// Rows for one category, into any container. The swipe preview needs the
-// next category's list before it is the one on screen, and builds only a
-// screenful up front so the drag does not stall on a long category.
+// Rows for one category, into any container. The panels either side need
+// their category built before it is the one on screen.
 function fillList(box, cat, cap) {
   const view = storiesIn(cat);
   box.innerHTML = "";
@@ -1150,10 +1160,6 @@ function fillList(box, cat, cap) {
   view.slice(0, cap || Infinity).forEach(i => renderItem(i, box));
 }
 
-// The rest of a capped preview, added while the panel is sliding in.
-function topUp(box, cat, from) {
-  storiesIn(cat).slice(from).forEach(i => renderItem(i, box));
-}
 
 function renderItem(i, list) {
   {
@@ -1668,44 +1674,100 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
 
 /* ---- touch gestures: pull to refresh, swipe between categories ---------- */
 (function () {
-  const list = $("#list"), ptr = $("#ptr"), label = $("#ptr-text");
+  const pane = $(".pane"), ptr = $("#ptr"), label = $("#ptr-text");
   const TRIGGER = 64, MAX = 96;      // pull
   // Sideways: the list resists for the first stretch of the drag and only
-  // commits once the next category is genuinely half way across, so a
+  // commits once the next category is a quarter of the way across, so a
   // sideways nudge while reading cannot shift the category out from under you.
   const SLOP = 16, STICK = 26, TRACK = 0.9, COMMIT = 0.25;
   let startX = 0, startY = 0, mode = null, dist = 0, dx = 0;
   let lastX = 0, lastT = 0, startT = 0, vx = 0, animating = false, held = 0;
 
+  // Three panels that never move in the document: the category on screen and
+  // the two either side, built in advance and parked off screen. A page turn
+  // promotes one of the parked panels and demotes the one it replaces, so no
+  // rows are built, moved or laid out at the moment the screen is animating -
+  // which is what a swipe used to spend its last frames doing.
+  let live = $("#list");
+  const spare = [...document.querySelectorAll(".panel")].filter(p => p !== live);
+  const panels = { "-1": spare[0], "1": spare[1] };
+  const holds  = { "-1": "", "1": "" };     // category each parked panel shows
+  const width = () => live.clientWidth || 390;
+  let dir0 = 0;                             // side this gesture is using
+
+  const park = () => {
+    panels["-1"].style.transform = "translateX(" + (-width()) + "px)";
+    panels["1"].style.transform  = "translateX(" + width() + "px)";
+    live.style.transform = "translateX(0px)";
+  };
+
+  function neighbour(dir) {
+    const i = catList.indexOf(active);
+    if (i < 0 || catList.length < 2) return "";
+    return catList[(i + dir + catList.length) % catList.length];
+  }
+
+  // Building both neighbours is real work, so it happens once the screen has
+  // gone quiet - never during a gesture, never in the frame that ends one.
+  let primeTimer = 0, building = null;
+
+  // A long category is 200 rows; building one in a single go is a visible
+  // stall a moment after a page turn. Built a slice per frame instead, and
+  // finished on the spot if a gesture needs the panel before it is done.
+  const CHUNK = 24;
+  function build(dir, cat) {
+    const box = panels[dir], view = storiesIn(cat);
+    box.replaceChildren();
+    if (!view.length) {
+      const e = el("div", "empty"), d = el("div");
+      d.textContent = "Nothing in " + cat + " yet.";
+      e.appendChild(d); box.appendChild(e);
+      holds[dir] = cat;
+      return;
+    }
+    let at = 0;
+    const job = {
+      dir, cat,
+      flush() {
+        while (at < view.length) renderItem(view[at++], box);
+        holds[dir] = cat;
+        if (building === job) building = null;
+      },
+      slice() {
+        if (building !== job) return;             // superseded
+        const end = Math.min(at + CHUNK, view.length);
+        while (at < end) renderItem(view[at++], box);
+        if (at >= view.length) { holds[dir] = cat; building = null; return; }
+        requestAnimationFrame(job.slice);
+      }
+    };
+    building = job;
+    job.slice();
+  }
+
+  function prime() {
+    primeTimer = 0;
+    if (mode === "swipe" || animating || building) { queuePrime(); return; }
+    for (const dir of [-1, 1]) {
+      const cat = neighbour(dir), box = panels[dir];
+      if (holds[dir] === cat && cat) continue;
+      if (!cat) { box.replaceChildren(); holds[dir] = ""; continue; }
+      build(dir, cat);
+      break;                                      // one panel per pass
+    }
+    park();
+    if (holds["-1"] !== neighbour(-1) || holds["1"] !== neighbour(1)) queuePrime();
+  }
+  function queuePrime() { clearTimeout(primeTimer); primeTimer = setTimeout(prime, 250); }
+  window.addEventListener("resize", park);
+  window.primeSides = () => { holds["-1"] = holds["1"] = ""; queuePrime(); };
+
   const paintPull = d => {
-    list.style.transform = d ? "translateY(" + d + "px)" : "";
+    live.style.transform = "translateY(" + d + "px)";
     ptr.style.opacity = Math.min(1, d / TRIGGER);
     ptr.classList.toggle("ready", d >= TRIGGER);
     label.textContent = d >= TRIGGER ? "Release to refresh" : "Pull to refresh";
   };
-
-  // The next category rides alongside the current one for the whole gesture,
-  // so the swipe drags a real list into place instead of emptying the screen
-  // and refilling it. Only the rows that could be on screen are built.
-  const GHOST_ROWS = 30;
-  let ghost = null, ghostDir = 0, ghostCat = "";
-  const width = () => list.clientWidth || 390;
-
-  let ghostFull = false;
-  function killGhost() { if (ghost) { ghost.remove(); ghost = null; } ghostDir = 0; }
-
-  function makeGhost(dir) {
-    killGhost();
-    const i = catList.indexOf(active);
-    if (i < 0 || catList.length < 2) return;
-    ghost = el("div", "ghost");
-    ghost.setAttribute("aria-hidden", "true");
-    ghostCat = catList[(i + dir + catList.length) % catList.length];
-    fillList(ghost, ghostCat, GHOST_ROWS);
-    list.parentNode.appendChild(ghost);
-    ghostDir = dir;
-    ghostFull = false;
-  }
 
   // Past the sticky first stretch the panel follows the finger almost exactly;
   // inside it, barely at all. With one category there is nowhere to go, so it
@@ -1719,47 +1781,19 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
 
   const paintSwipe = d => {
     const dir = d < 0 ? 1 : -1;
-    // A finger held near the start of a drag crosses back and forth over zero
-    // constantly. Rebuilding the preview on every crossing made the two
-    // neighbouring categories flicker at the edge of the screen, so the
-    // direction only changes once the drag has clearly gone the other way.
-    if (ghostDir === 0 ? d !== 0 : (ghostDir !== dir && Math.abs(d) > 20)) makeGhost(dir);
-    list.style.transform = "translateX(" + d + "px)";
-    if (ghost) ghost.style.transform = "translateX(" + (d + ghostDir * width()) + "px)";
+    // A finger held near the start of a drag crosses back and forth over
+    // zero. The side in play only changes once the drag has clearly gone the
+    // other way, so the two neighbours cannot alternate at the screen edge.
+    if (dir0 === 0 ? d !== 0 : (dir0 !== dir && Math.abs(d) > 20)) { dir0 = dir; park(); }
+    live.style.transform = "translateX(" + d + "px)";
+    const box = panels[dir0];
+    if (box) box.style.transform = "translateX(" + (d + dir0 * width()) + "px)";
   };
-
-  function slideTo(dir) {
-    if (!ghost || ghostDir !== dir) makeGhost(dir);
-    if (!ghost) { settle(); return; }
-    animating = true;
-    ptr.style.opacity = 0;
-    const panel = ghost, cat = ghostCat;
-    const done = Promise.all([
-      glide(list, "translateX(" + (-dir * width()) + "px)"),
-      glide(panel, "")
-    ]);
-    // Fill in the rest of the category while it is on its way in, off the
-    // frame that has to complete the handover.
-    requestAnimationFrame(() => {
-      if (panel === ghost && !ghostFull) { topUp(panel, cat, GHOST_ROWS); ghostFull = true; }
-    });
-    done.then(() => {
-      // An empty category gets the full render instead: the preview only says
-      // "nothing yet", where the real one explains which feeds are failing.
-      step(dir, ghostFull && panel.querySelector(".item") ? panel : null);
-      list.style.transform = "";
-      list.style.overflowY = "";
-      killGhost();
-      animating = false;
-    });
-  }
 
   // Animated by hand rather than with a CSS transition. The reduced-motion
   // rule in the stylesheet flattens every transition on the page to nothing,
-  // which is right for decoration but turns the page itself into a cut - and
-  // it also caught the reset that puts the newly rendered list back at zero,
-  // sliding it in from the wrong side. These animations are shortened under
-  // reduced motion instead of removed.
+  // which is right for decoration but turns the page itself into a cut.
+  // These are shortened under reduced motion instead of removed.
   const SLIDE = 260, EASE = "cubic-bezier(.25,.6,.2,1)";
   const calm = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -1768,7 +1802,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     box.style.transform = to;                 // where it must end up regardless
     if (!box.animate) return Promise.resolve();
     return box.animate(
-      [{ transform: from }, { transform: to || "none" }],
+      [{ transform: from }, { transform: to }],
       { duration: calm() ? 140 : SLIDE, easing: EASE }
     ).finished.catch(() => {});
   }
@@ -1781,7 +1815,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
 
   function spring(box, rest) {
     const from = atX(box);
-    box.style.transform = rest ? "translateX(" + rest + "px)" : "";
+    box.style.transform = "translateX(" + rest + "px)";
     if (!box.animate) return Promise.resolve();
     const past = rest - (from - rest) * OVERSHOOT;
     return box.animate([
@@ -1792,51 +1826,83 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
   }
 
   const settle = springy => {
-    const home = g => { if (g === ghost) killGhost(); else g.remove(); };
-    if (springy && ghost) {
-      const g = ghost;                        // may be replaced before this ends
-      spring(list, 0);
-      spring(g, ghostDir * width()).then(() => home(g));
-      ptr.style.opacity = 0;
-      if (list.style.overflowY) { list.style.overflowY = ""; list.scrollTop = held; }
-      return;
-    }
-    glide(list, "");
-    if (ghost) {
-      const g = ghost;
-      glide(g, "translateX(" + (ghostDir * width()) + "px)").then(() => home(g));
+    const box = dir0 ? panels[dir0] : null;
+    if (springy) {
+      spring(live, 0);
+      if (box) spring(box, dir0 * width());
+    } else {
+      glide(live, "translateX(0px)");
+      if (box) glide(box, "translateX(" + (dir0 * width()) + "px)");
     }
     ptr.style.opacity = 0;
-    if (list.style.overflowY) { list.style.overflowY = ""; list.scrollTop = held; }
+    if (live.style.overflowY) { live.style.overflowY = ""; live.scrollTop = held; }
   };
+
+  // The page turn itself: the panel that arrived becomes the list, the list
+  // becomes the panel on the side you came from, and the far panel is left
+  // holding a category that is now wrong for it - prime() rebuilds that one.
+  function promote(dir, leaving) {
+    const incoming = panels[dir], demoted = live, far = panels[-dir];
+    if (building) building = null;              // its panel is about to move
+    demoted.removeAttribute("id");
+    demoted.removeAttribute("role");
+    demoted.setAttribute("aria-hidden", "true");
+    demoted.style.overflowY = "";
+    incoming.removeAttribute("aria-hidden");
+    incoming.id = "list";
+    incoming.setAttribute("role", "main");
+    live = incoming;
+    panels[-dir] = demoted; holds[-dir] = leaving;
+    panels[dir]  = far;     holds[dir]  = "";
+  }
+
+  function slideTo(dir) {
+    const box = panels[dir];
+    if (dir0 !== dir) { dir0 = dir; park(); }
+    if (!box) { settle(true); return; }
+    // Half-built is worse than late: if the panel being dragged in is still
+    // filling, finish it now rather than turning to a short page.
+    if (building && building.dir === dir) building.flush();
+    const ready = holds[dir] === neighbour(dir);
+    animating = true;
+    ptr.style.opacity = 0;
+    Promise.all([
+      glide(live, "translateX(" + (-dir * width()) + "px)"),
+      glide(box, "translateX(0px)")
+    ]).then(() => {
+      live.style.overflowY = "";
+      step(dir);
+      // A panel that was never primed - or a category with nothing in it,
+      // where the full render is the one that explains failing feeds.
+      if (!ready || !live.querySelector(".item")) renderList();
+      live.scrollTop = 0;
+      dir0 = 0;
+      park();
+      animating = false;
+      queuePrime();
+    });
+  }
 
   // Step through the categories currently on screen. catList is filled by
   // render(), so it always matches the chips.
-  // adopt: a panel already showing the destination category. Moving its rows
-  // across costs a fraction of building them again, and the rebuild used to
-  // land in the same frame as the handover - long enough to drop it.
-  function step(delta, adopt) {
+  function step(delta) {
     const i = catList.indexOf(active);
     if (i < 0) return false;
     // Wrap around: swiping past the last category lands on the first, so the
     // categories behave like a loop rather than a strip with dead ends.
     const next = catList[(i + delta + catList.length) % catList.length];
     if (!next || next === active) return false;
+    const leaving = active;
     active = next;
     localStorage.setItem(KEY + ".tab", active);
-    if (adopt && adopt.firstChild) {
-      list.replaceChildren(...adopt.childNodes);
-      renderChips();
-    } else {
-      render();
-    }
-    list.scrollTop = 0;
+    promote(delta, leaving);
+    renderChips();
     const chip = [...document.querySelectorAll(".chip")].find(c => c.textContent === active);
     if (chip) chip.scrollIntoView({ block: "nearest", inline: "center" });
     return true;
   }
 
-  list.addEventListener("touchstart", e => {
+  pane.addEventListener("touchstart", e => {
     if (e.touches.length !== 1 || animating || loading) { mode = "off"; return; }
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
@@ -1844,7 +1910,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     lastX = startX; lastT = startT = Date.now(); vx = 0;
   }, { passive: true });
 
-  list.addEventListener("touchmove", e => {
+  pane.addEventListener("touchmove", e => {
     if (mode === "off") return;
     const x = e.touches[0].clientX;
     const tx = x - startX;
@@ -1859,22 +1925,20 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
         mode = "swipe";
         // Let the list scroll during a sideways drag and the rows slide under
         // the panel that is supposed to be carrying them.
-        held = list.scrollTop;
-        list.style.overflowY = "hidden";
-        list.scrollTop = held;               // some engines clamp on the switch
+        held = live.scrollTop;
+        live.style.overflowY = "hidden";
+        live.scrollTop = held;               // some engines clamp on the switch
       }
-      else if (Math.abs(ty) > SLOP) mode = (ty > 0 && list.scrollTop <= 0) ? "pull" : "off";
+      else if (Math.abs(ty) > SLOP) mode = (ty > 0 && live.scrollTop <= 0) ? "pull" : "off";
       else return;                            // not yet moved enough to tell
     }
 
     if (mode === "swipe") {
       e.preventDefault();                     // keep the list from scrolling sideways
-      // Only one category means there is nowhere to go; resist so the list
-      // does not slide off into nothing.
       dx = resist(tx);
       paintSwipe(dx);
     } else if (mode === "pull") {
-      if (ty <= 0 || list.scrollTop > 0) { mode = "off"; settle(); return; }
+      if (ty <= 0 || live.scrollTop > 0) { mode = "off"; settle(); return; }
       e.preventDefault();
       dist = Math.min(MAX, ty * 0.5);
       paintPull(dist);
@@ -1884,9 +1948,9 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
   const release = () => {
     if (mode === "swipe") {
       // Swiping left moves forward through the categories, as the content
-      // follows the finger.
-      // A committed flick counts short of the quarter, but it has to be a
-      // real throw: fast, sustained, and already meaningfully across.
+      // follows the finger. A committed flick counts short of the quarter,
+      // but it has to be a real throw: fast, sustained, already meaningfully
+      // across.
       const w = width();
       const flick = Math.abs(vx) > 1.4 && Math.abs(dx) > w * 0.15
         && (vx < 0) === (dx < 0) && Date.now() - startT >= 30;
@@ -1904,8 +1968,9 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     }
     mode = null; dist = 0; dx = 0;
   };
-  list.addEventListener("touchend", release);
-  list.addEventListener("touchcancel", release);
+  pane.addEventListener("touchend", release);
+  pane.addEventListener("touchcancel", release);
+  queuePrime();
 })();
 
 if ("serviceWorker" in navigator) {
@@ -1932,7 +1997,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.55";
+const BUILD = "2026-08-23.59";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
