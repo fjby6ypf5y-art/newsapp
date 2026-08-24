@@ -83,6 +83,12 @@ loop rather than a strip with dead ends. A gesture commits to being a swipe, a p
 as its direction is clear and stays that way — switching mid-drag is what makes
 gesture handling feel unreliable.
 
+**Held back while feeds land.** Stories arrive feed by feed, so mid-refresh the
+list is half built. The chips and the list dim and stop responding to taps and
+swipes until every feed has answered or failed; the status line stays at full
+strength, since it is the part worth reading at that moment. A category change
+made against a list that is about to rearrange itself is the thing this avoids.
+
 **Two refreshes, deliberately different.** Pull down on the list to refresh
 **just the category you're reading** — quick, and it doesn't spend requests on
 categories you aren't looking at. The **↻** button refreshes **every**

@@ -209,6 +209,13 @@ select.sel{width:100%;background:var(--panel);border:1px solid var(--line);
   background:transparent;color:var(--dim);font-size:0.8125rem;text-align:left}
 .lib button[data-on="1"]{background:var(--panel2);border-color:var(--dim);color:var(--text);font-weight:600}
 .lib button[data-on="1"]::before{content:"✓ ";color:#4bd76d}
+/* ---------- loading ---------- */
+/* While feeds are still arriving the stories are half built, so the whole
+   reading surface is held back: dimmed, and deaf to taps and swipes. The
+   status line stays at full strength - it is the part worth reading. */
+body.busy .chips,body.busy .pane{opacity:.4;pointer-events:none}
+body.busy .chips{filter:saturate(.3)}
+.chips,.pane{transition:opacity .18s linear}
 </style>
 </head>
 <body>
@@ -850,6 +857,7 @@ async function refresh(scope) {
   const scoped = Array.isArray(scope);
   if (!feeds.length) { setStatus(scoped ? "No feeds in " + active : "No feeds yet"); return; }
   loading = true;
+  setBusy(true);
   $("#refresh").style.opacity = ".4";
   setStatus("Fetching " + feeds.length + " " + (scoped ? active + " " : "")
     + "feed" + (feeds.length === 1 ? "" : "s") + "…");
@@ -918,6 +926,7 @@ async function refresh(scope) {
 
   render();
   loading = false;
+  setBusy(false);
   $("#refresh").style.opacity = "";
 }
 
@@ -991,6 +1000,15 @@ function feedTitle(body) {
   } catch { return ""; }
 }
 
+// Everything but the status line is held back while feeds are still landing:
+// half the stories are missing, so switching category or opening one means
+// acting on a list that is about to change under you.
+function setBusy(on) {
+  document.body.classList.toggle("busy", on);
+  const pane = $(".pane");
+  if (pane) pane.setAttribute("aria-busy", on ? "true" : "false");
+}
+
 // Age -> ramp step. Buckets, not a continuous blend: a handful of legible
 // tiers beats 400 near-identical shades nobody can tell apart.
 // Upper bound of each band, in minutes. Roughly doubling, so the hot end has
@@ -1060,6 +1078,8 @@ function render() {
     b.textContent = c;
     b.setAttribute("aria-pressed", c === active);
     b.onclick = () => {
+      // Dimming the chips keeps a finger out, but not a synthetic click.
+      if (loading) return;
       if (active === c) { $("#list").scrollTop = 0; return; }
       active = c;
       localStorage.setItem(KEY + ".tab", active);
@@ -1766,7 +1786,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
   }
 
   list.addEventListener("touchstart", e => {
-    if (e.touches.length !== 1 || animating) { mode = "off"; return; }
+    if (e.touches.length !== 1 || animating || loading) { mode = "off"; return; }
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
     mode = null; dist = 0; dx = 0;
@@ -1861,7 +1881,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.51";
+const BUILD = "2026-08-23.52";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
