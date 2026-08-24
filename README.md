@@ -69,8 +69,11 @@ of grouped sections rather than a single list — which made the whole row read
 as filters over one page instead of a set of pages.
 
 **Swipe left and right** on the list to move between categories, or tap a chip.
-Swiping wraps around: past the last category you land on the first, so the row
-behaves like a loop rather than a strip with dead ends. A gesture commits to being a swipe, a pull or a scroll as soon
+The list tracks your finger as you drag; past about a third of a screen — or
+on a quick flick — it carries the rest of the way off and the next category
+comes in from the other side, rather than cutting straight to it. Swiping wraps
+around: past the last category you land on the first, so the row behaves like a
+loop rather than a strip with dead ends. A gesture commits to being a swipe, a pull or a scroll as soon
 as its direction is clear and stays that way — switching mid-drag is what makes
 gesture handling feel unreliable.
 

@@ -1618,6 +1618,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
   const TRIGGER = 64, MAX = 96;      // pull
   const SWIPE = 60, SLOP = 12;       // sideways
   let startX = 0, startY = 0, mode = null, dist = 0, dx = 0;
+  let lastX = 0, lastT = 0, vx = 0, animating = false;
 
   const paintPull = d => {
     list.style.transform = d ? "translateY(" + d + "px)" : "";
@@ -1627,6 +1628,29 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
   };
 
   const paintSwipe = d => { list.style.transform = "translateX(" + d + "px)"; };
+
+  // Committing a swipe used to snap the old category back to centre and swap
+  // the text underneath it, which read as an abrupt cut. Carry the outgoing
+  // list the rest of the way off screen, then bring the new one in from the
+  // other side, so the categories feel like panels being pulled past.
+  const OUT = 150, IN = 230;
+  function slideTo(dir) {
+    animating = true;
+    const w = list.clientWidth || 390;
+    list.style.transition = "transform " + OUT + "ms cubic-bezier(.4,0,1,1), opacity " + OUT + "ms linear";
+    list.style.transform = "translateX(" + (-dir * w) + "px)";
+    list.style.opacity = "0";
+    setTimeout(() => {
+      list.style.transition = "";
+      if (!step(dir)) { settle(); list.style.opacity = ""; animating = false; return; }
+      list.style.transform = "translateX(" + (dir * w) + "px)";
+      void list.offsetWidth;                  // commit the jump before animating back
+      list.style.transition = "transform " + IN + "ms cubic-bezier(.32,.72,0,1), opacity " + IN + "ms linear";
+      list.style.transform = "";
+      list.style.opacity = "";
+      setTimeout(() => { list.style.transition = ""; animating = false; }, IN + 30);
+    }, OUT);
+  }
 
   const settle = () => {
     list.style.transition = "transform .25s cubic-bezier(.32,.72,0,1)";
@@ -1654,16 +1678,20 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
   }
 
   list.addEventListener("touchstart", e => {
-    if (e.touches.length !== 1) { mode = "off"; return; }
+    if (e.touches.length !== 1 || animating) { mode = "off"; return; }
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
     mode = null; dist = 0; dx = 0;
+    lastX = startX; lastT = Date.now(); vx = 0;
   }, { passive: true });
 
   list.addEventListener("touchmove", e => {
     if (mode === "off") return;
-    const tx = e.touches[0].clientX - startX;
+    const x = e.touches[0].clientX;
+    const tx = x - startX;
     const ty = e.touches[0].clientY - startY;
+    const now = Date.now(), dt = now - lastT;
+    if (dt > 0) { vx = (x - lastX) / dt; lastX = x; lastT = now; }
 
     // Decide once what this gesture is, then stick to it - switching mode
     // mid-drag is what makes gesture handling feel unreliable.
@@ -1678,7 +1706,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
       dx = tx;
       // Only one category means there is nowhere to go; resist so the list
       // does not slide off into nothing.
-      paintSwipe(catList.length > 1 ? tx * 0.6 : tx * 0.25);
+      paintSwipe(catList.length > 1 ? tx * 0.85 : tx * 0.25);
     } else if (mode === "pull") {
       if (ty <= 0 || list.scrollTop > 0) { mode = "off"; settle(); return; }
       e.preventDefault();
@@ -1691,8 +1719,11 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     if (mode === "swipe") {
       // Swiping left moves forward through the categories, as the content
       // follows the finger.
-      if (Math.abs(dx) >= SWIPE) step(dx < 0 ? 1 : -1);
-      settle();
+      // A quick flick counts even if it did not travel far - waiting for the
+      // full distance is what made the gesture feel like it needed convincing.
+      const flick = Math.abs(vx) > 0.45 && Math.abs(dx) > 24 && (vx < 0) === (dx < 0);
+      if (catList.length > 1 && (Math.abs(dx) >= SWIPE || flick)) slideTo(dx < 0 ? 1 : -1);
+      else settle();
     } else if (mode === "pull") {
       if (dist >= TRIGGER) {
         ptr.classList.add("busy");
@@ -1733,7 +1764,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.44";
+const BUILD = "2026-08-23.45";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
