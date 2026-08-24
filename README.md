@@ -106,6 +106,12 @@ as it was. So the refresh on return only happens once the stories are actually
 old — five minutes — and when it does it runs in the background, never greying
 anything out.
 
+**Closing a sheet is not a refresh.** Leaving the Feeds or Settings page used
+to refetch every feed, so looking at your feeds — or running Test all feeds,
+which has just fetched them — greyed the app out and did it all again. Now only
+feeds you actually added or edited are fetched, in the background. The circular
+arrow is the only thing that refreshes everything.
+
 **The chip row holds still.** Landing on a category that is already visible
 moves nothing; only a category off the end of the row scrolls it, and then by
 the least it can, leaving a neighbour peeking so the row still reads as a row.

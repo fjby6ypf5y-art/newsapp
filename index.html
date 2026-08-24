@@ -1476,6 +1476,25 @@ function renderLibrary() {
   });
 }
 
+// What the feed list looked like when a sheet was opened. Closing one used to
+// refetch everything, so a look at the Feeds page - or a Test all feeds, which
+// has already fetched them - left the app greying out and doing it all again.
+// Only feeds that are actually new or changed are fetched now, and quietly;
+// the circular arrow remains the only thing that refreshes the lot.
+let sheetSnapshot = null;
+const feedPrint = () => cfg.feeds.map(f => f.id + "|" + f.url + "|" + f.name + "|" + (f.cat || "")).join("\n");
+
+function refreshChanged() {
+  const before = sheetSnapshot; sheetSnapshot = null;
+  if (before === null) return;
+  const was = new Map(before.split("\n").filter(Boolean).map(l => [l.split("|")[0], l]));
+  const fresh = cfg.feeds.filter(f => was.get(f.id) !== (f.id + "|" + f.url + "|" + f.name + "|" + (f.cat || "")));
+  if (feedPrint() === before) return;                  // nothing was touched
+  pruneOrphans();
+  render();
+  if (fresh.length) refresh(fresh, { quiet: true });
+}
+
 function showSheet(id, open) {
   const el_ = $(id);
   el_.classList.toggle("open", open);
@@ -1497,8 +1516,9 @@ function openFeeds(open) {
       });
     }
   }
+  if (open) sheetSnapshot = feedPrint();
   showSheet("#feeds-sheet", open);
-  if (!open) refresh();
+  if (!open) refreshChanged();
 }
 
 function openSettings(open) {
@@ -1517,8 +1537,9 @@ function openSettings(open) {
         : "All " + checked.length + " working feeds are fetched directly. No relay involved."
       : "Run Test all feeds on the Feeds page to see which feeds need a relay.";
   }
+  if (open) sheetSnapshot = feedPrint();
   showSheet("#settings", open);
-  if (!open) refresh();
+  if (!open) refreshChanged();
 }
 
 $("#open-feeds").onclick     = () => openFeeds(true);
@@ -2118,7 +2139,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.62";
+const BUILD = "2026-08-23.63";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
