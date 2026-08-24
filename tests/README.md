@@ -1,0 +1,59 @@
+# Tests
+
+Playwright driving the real `index.html` in an iPhone 14 Pro viewport, with
+every network request intercepted — feeds are served from the test itself, so
+nothing here depends on a publisher being up, and the sandbox has no outbound
+network anyway.
+
+```
+npm install playwright     # once; the browser is already on the image
+node tests/run.mjs         # everything
+node tests/run.mjs swipe   # just the ones matching "swipe"
+node tests/testtension.mjs # one test, full output
+```
+
+`run.mjs` treats a test as failed if it throws, logs a JS error, or prints a
+line containing `***`. Beyond that, **read the output**: many of these measure
+rather than assert — frame times, how far a drag travels, which feeds were
+fetched and why — because that is what the questions behind them were. A test
+that prints a table of numbers is doing its job.
+
+If Chromium is somewhere else, set `CHROMIUM_PATH`.
+
+## What each one is for
+
+| Test | What it answers |
+| --- | --- |
+| `testswipe` | Do swipes move between categories, wrap around, and leave pull-to-refresh alone? |
+| `testtension` | How far must a drag travel before the page turns, and what springs back? |
+| `teststuck` | A second finger, a refresh, backgrounding, `touchcancel`, a lost touchend — do the panels always come home? |
+| `testrotate` | After repeated swipes, do the three panels still hold the right categories? |
+| `testchips` | Does the chip row stay still unless the category is off screen? |
+| `testlock` | Is the list's scroll frozen during a sideways drag and restored afterwards? |
+| `testslide` `testspringback` `testmidbuild` | The page turn, the spring back, and a swipe taken while a panel is still filling |
+| `testcost2` `testhandover` | Frame times through a committed swipe; is the screen ever blank? |
+| `teststaged` | Near categories first behind the dimmed screen, the rest in the background |
+| `testsheets` | Closing Feeds or Settings fetches only what changed |
+| `testwhy` | Traces every `refresh()` and what asked for it, on the real default feed list |
+| `testbusy` | Is the reading surface held back while feeds land? |
+| `testnew` | Does "N new" mean what this refresh brought in? |
+| `testptr` `testscoped` | Pull to refresh, the idle reset, and category-scoped fetching |
+| `testformats` | RSS, Atom, RDF, JSON Feed, and what a broken feed does |
+| `testfeeds` `testdiscover` | Feed editing, and finding a feed from a page address |
+| `testcsp` `testsec` | The policy blocks what it should; a hostile feed gets nothing through |
+| `testsetup` | The setup link restores feeds and refuses a corrupt one |
+| `testupdate` | Is a new build picked up rather than served from cache? |
+
+## Writing another
+
+Copy the nearest one. They are deliberately self-contained — own port, own
+feed fixtures, no shared harness — so a test can be read top to bottom without
+chasing helpers, and changing one cannot break another.
+
+Two things worth knowing:
+
+- Synthetic `TouchEvent`s do not drive native scrolling in headless Chromium,
+  so a test can prove a scroll lock engages but not how ordinary scrolling
+  feels. That part needs a phone.
+- Dispatching touch moves in a tight loop produces speeds no finger can reach,
+  which is why flick detection requires a gesture to have lasted 30ms.
