@@ -1696,37 +1696,54 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     if (ghost) ghost.style.transform = "translateX(" + (d + ghostDir * width()) + "px)";
   };
 
-  const SLIDE = 190, EASE = "cubic-bezier(.22,.61,.36,1)";
-
   function slideTo(dir) {
     if (!ghost || ghostDir !== dir) makeGhost(dir);
     if (!ghost) { settle(); return; }
     animating = true;
-    const w = width();
-    list.style.transition = ghost.style.transition = "transform " + SLIDE + "ms " + EASE;
-    list.style.transform = "translateX(" + (-dir * w) + "px)";
-    ghost.style.transform = "";
     ptr.style.opacity = 0;
-    setTimeout(() => {
-      list.style.transition = "";
-      // The preview was capped, so the real render takes over once it is home.
+    Promise.all([
+      glide(list, "translateX(" + (-dir * width()) + "px)"),
+      glide(ghost, "")
+    ]).then(() => {
+      // The preview was capped at a screenful, so the real render takes over
+      // once it has arrived - by which point the two are identical on screen.
       step(dir);
       list.style.transform = "";
       list.style.overflowY = "";
       killGhost();
       animating = false;
-    }, SLIDE);
+    });
+  }
+
+  // Animated by hand rather than with a CSS transition. The reduced-motion
+  // rule in the stylesheet flattens every transition on the page to nothing,
+  // which is right for decoration but turns the page itself into a cut - and
+  // it also caught the reset that puts the newly rendered list back at zero,
+  // sliding it in from the wrong side. These animations are shortened under
+  // reduced motion instead of removed.
+  const SLIDE = 260, EASE = "cubic-bezier(.25,.6,.2,1)";
+  const calm = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function glide(box, to) {
+    const from = getComputedStyle(box).transform;
+    box.style.transform = to;                 // where it must end up regardless
+    if (!box.animate) return Promise.resolve();
+    return box.animate(
+      [{ transform: from }, { transform: to || "none" }],
+      { duration: calm() ? 140 : SLIDE, easing: EASE }
+    ).finished.catch(() => {});
   }
 
   const settle = () => {
-    list.style.transition = "transform .25s cubic-bezier(.32,.72,0,1)";
-    list.style.transform = "";
+    glide(list, "");
     if (ghost) {
-      ghost.style.transition = list.style.transition;
-      ghost.style.transform = "translateX(" + (ghostDir * width()) + "px)";
+      const g = ghost;                        // may be replaced before this ends
+      glide(g, "translateX(" + (ghostDir * width()) + "px)").then(() => {
+        if (g === ghost) killGhost();
+        else g.remove();
+      });
     }
     ptr.style.opacity = 0;
-    setTimeout(() => { list.style.transition = ""; killGhost(); }, 280);
     if (list.style.overflowY) { list.style.overflowY = ""; list.scrollTop = held; }
   };
 
@@ -1844,7 +1861,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.49";
+const BUILD = "2026-08-23.51";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
