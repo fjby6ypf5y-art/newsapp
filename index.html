@@ -1664,7 +1664,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
   // Sideways: the list resists for the first stretch of the drag and only
   // commits once the next category is genuinely half way across, so a
   // sideways nudge while reading cannot shift the category out from under you.
-  const SLOP = 16, STICK = 26, TRACK = 0.9, COMMIT = 0.34;
+  const SLOP = 16, STICK = 26, TRACK = 0.9, COMMIT = 0.25;
   let startX = 0, startY = 0, mode = null, dist = 0, dx = 0;
   let lastX = 0, lastT = 0, startT = 0, vx = 0, animating = false, held = 0;
 
@@ -1834,10 +1834,10 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     if (mode === "swipe") {
       // Swiping left moves forward through the categories, as the content
       // follows the finger.
-      // A committed flick still counts short of half way, but it has to be a
-      // real throw: fast, sustained, and already a quarter of the way across.
+      // A committed flick counts short of the quarter, but it has to be a
+      // real throw: fast, sustained, and already meaningfully across.
       const w = width();
-      const flick = Math.abs(vx) > 1.4 && Math.abs(dx) > w * 0.25
+      const flick = Math.abs(vx) > 1.4 && Math.abs(dx) > w * 0.15
         && (vx < 0) === (dx < 0) && Date.now() - startT >= 30;
       if (catList.length > 1 && (Math.abs(dx) >= w * COMMIT || flick)) slideTo(dx < 0 ? 1 : -1);
       else settle();
@@ -1881,7 +1881,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.52";
+const BUILD = "2026-08-23.53";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

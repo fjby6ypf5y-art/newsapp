@@ -74,8 +74,8 @@ the drag pulls a real list into place rather than emptying the screen and
 refilling it. The first 34px of movement barely register — the list resists,
 so a sideways nudge while reading cannot shift the category out from under
 you — and after that it follows your finger closely. It commits once the next
-category is a third of the way across, or on a genuine fast throw past a
-quarter; short of that both panels spring back. The list cannot scroll while a
+category is a quarter of the way across, or on a genuine fast throw short of
+that; otherwise both panels spring back. The list cannot scroll while a
 sideways drag is in progress (and the browser is told never to pan it
 sideways), so the rows can't slide under the panel that is carrying them. Swiping wraps
 around: past the last category you land on the first, so the row behaves like a
