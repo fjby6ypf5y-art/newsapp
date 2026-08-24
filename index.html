@@ -878,10 +878,13 @@ async function refresh(scope, opts) {
   // not hold the screen back.
   if (!o.quiet) setBusy(true);
   $("#refresh").style.opacity = ".4";
+  // The status line names what asked for the fetch. Without it, a refresh you
+  // did not expect is indistinguishable from one you did.
+  const why = o.why ? " · " + o.why : "";
   setStatus(o.quiet && o.summary
-    ? "Updating the rest in the background…"
+    ? "Updating the rest in the background" + why + "…"
     : "Fetching " + feeds.length + " " + name
-      + "feed" + (feeds.length === 1 ? "" : "s") + "…");
+      + "feed" + (feeds.length === 1 ? "" : "s") + why + "…");
 
   const merged = new Map(items.map(i => [i.id, i]));
   const total = feeds.length;
@@ -984,14 +987,14 @@ function nearCats() {
 }
 
 // Two passes: what is within reach, then the rest behind it.
-async function stagedRefresh(quiet) {
+async function stagedRefresh(quiet, why) {
   cycleStart = Date.now(); cycleAdded = 0;
   const near = nearCats();
   const first = cfg.feeds.filter(f => near.has(f.cat || "Other"));
   const rest  = cfg.feeds.filter(f => !near.has(f.cat || "Other"));
-  if (!first.length) return refresh(undefined, { quiet, summary: true });
-  await refresh(first, { quiet, summary: !rest.length });
-  if (rest.length) await refresh(rest, { quiet: true, summary: true });
+  if (!first.length) return refresh(undefined, { quiet, summary: true, why });
+  await refresh(first, { quiet, summary: !rest.length, why });
+  if (rest.length) await refresh(rest, { quiet: true, summary: true, why });
 }
 
 /* -------------------------------------------------------------- render */
@@ -1492,7 +1495,7 @@ function refreshChanged() {
   if (feedPrint() === before) return;                  // nothing was touched
   pruneOrphans();
   render();
-  if (fresh.length) refresh(fresh, { quiet: true });
+  if (fresh.length) refresh(fresh, { quiet: true, why: "feeds changed" });
 }
 
 function showSheet(id, open) {
@@ -1546,7 +1549,7 @@ $("#open-feeds").onclick     = () => openFeeds(true);
 $("#close-feeds").onclick    = () => openFeeds(false);
 $("#open-settings").onclick  = () => openSettings(true);
 $("#close-settings").onclick = () => openSettings(false);
-$("#refresh").onclick        = () => stagedRefresh(false);
+$("#refresh").onclick        = () => stagedRefresh(false, "you tapped refresh");
 
 $("#f-add").onclick = async () => {
   const btn = $("#f-add"), msg = $("#f-add-msg");
@@ -1756,7 +1759,7 @@ resetTabIfStale();
 markSeen();
 render();
 if (items.length) setStatus(items.length + " stored stories · refreshing…");
-stagedRefresh(false);
+stagedRefresh(false, "app opened");
 
 // Coming back to the app is not always a new reading session. Tapping a story
 // opens another app, and returning from it a minute later should hand back the
@@ -1772,7 +1775,7 @@ document.addEventListener("visibilitychange", () => {
   render();                                   // timestamps, at least, are stale
   if (!cfg.autoRefresh) return;
   if (Date.now() - fetchedAt() < STALE_MIN * 60000) return;
-  stagedRefresh(true);
+  stagedRefresh(true, "back after a while");
 });
 
 // tick the relative timestamps
@@ -2097,7 +2100,8 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
       if (dist >= TRIGGER) {
         ptr.classList.add("busy");
         label.textContent = "Refreshing " + active + "…";
-        refresh(cfg.feeds.filter(f => (f.cat || "Other") === active), { name: active })
+        refresh(cfg.feeds.filter(f => (f.cat || "Other") === active),
+                { name: active, why: "you pulled to refresh" })
           .finally(() => { ptr.classList.remove("busy"); settle(); });
       } else {
         settle();
@@ -2139,7 +2143,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.63";
+const BUILD = "2026-08-23.64";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
