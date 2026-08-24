@@ -1687,7 +1687,11 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
 
   const paintSwipe = d => {
     const dir = d < 0 ? 1 : -1;
-    if (d && ghostDir !== dir) makeGhost(dir);
+    // A finger held near the start of a drag crosses back and forth over zero
+    // constantly. Rebuilding the preview on every crossing made the two
+    // neighbouring categories flicker at the edge of the screen, so the
+    // direction only changes once the drag has clearly gone the other way.
+    if (ghostDir === 0 ? d !== 0 : (ghostDir !== dir && Math.abs(d) > 20)) makeGhost(dir);
     list.style.transform = "translateX(" + d + "px)";
     if (ghost) ghost.style.transform = "translateX(" + (d + ghostDir * width()) + "px)";
   };
@@ -1840,7 +1844,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.48";
+const BUILD = "2026-08-23.49";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
