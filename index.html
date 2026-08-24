@@ -1640,8 +1640,10 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
   function step(delta) {
     const i = catList.indexOf(active);
     if (i < 0) return false;
-    const next = catList[i + delta];
-    if (!next) return false;                 // no wrap: the ends should feel like ends
+    // Wrap around: swiping past the last category lands on the first, so the
+    // categories behave like a loop rather than a strip with dead ends.
+    const next = catList[(i + delta + catList.length) % catList.length];
+    if (!next || next === active) return false;
     active = next;
     localStorage.setItem(KEY + ".tab", active);
     render();
@@ -1674,10 +1676,9 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     if (mode === "swipe") {
       e.preventDefault();                     // keep the list from scrolling sideways
       dx = tx;
-      // Resist at the ends so the list does not slide off into nothing.
-      const i = catList.indexOf(active);
-      const atEnd = (tx > 0 && i <= 0) || (tx < 0 && i >= catList.length - 1);
-      paintSwipe(atEnd ? tx * 0.25 : tx * 0.6);
+      // Only one category means there is nowhere to go; resist so the list
+      // does not slide off into nothing.
+      paintSwipe(catList.length > 1 ? tx * 0.6 : tx * 0.25);
     } else if (mode === "pull") {
       if (ty <= 0 || list.scrollTop > 0) { mode = "off"; settle(); return; }
       e.preventDefault();
@@ -1732,7 +1733,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.43";
+const BUILD = "2026-08-23.44";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
