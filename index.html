@@ -1014,6 +1014,7 @@ function feedTitle(body) {
 // half the stories are missing, so switching category or opening one means
 // acting on a list that is about to change under you.
 function setBusy(on) {
+  if (on && window.endGesture) window.endGesture();
   document.body.classList.toggle("busy", on);
   const pane = $(".pane");
   if (pane) pane.setAttribute("aria-busy", on ? "true" : "false");
@@ -1679,8 +1680,8 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
   // Sideways: the list resists for the first stretch of the drag and only
   // commits once the next category is a quarter of the way across, so a
   // sideways nudge while reading cannot shift the category out from under you.
-  const SLOP = 16, STICK = 26, TRACK = 0.9, COMMIT = 0.25;
-  let startX = 0, startY = 0, mode = null, dist = 0, dx = 0;
+  const SLOP = 16, STICK = 26, TRACK = 0.9, COMMIT = 1 / 6;
+  let startX = 0, startY = 0, mode = null, dist = 0, dx = 0, tracking = false;
   let lastX = 0, lastT = 0, startT = 0, vx = 0, animating = false, held = 0;
 
   // Three panels that never move in the document: the category on screen and
@@ -1727,17 +1728,15 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     }
     let at = 0;
     const job = {
-      dir, cat,
-      flush() {
-        while (at < view.length) renderItem(view[at++], box);
-        holds[dir] = cat;
-        if (building === job) building = null;
-      },
+      dir, cat, box,
+      get done() { return at >= view.length; },
       slice() {
         if (building !== job) return;             // superseded
         const end = Math.min(at + CHUNK, view.length);
         while (at < end) renderItem(view[at++], box);
-        if (at >= view.length) { holds[dir] = cat; building = null; return; }
+        // dir 0 means the panel became the list mid-build: nothing parked to
+        // record, it just finishes filling in place.
+        if (at >= view.length) { if (job.dir) holds[job.dir] = cat; building = null; return; }
         requestAnimationFrame(job.slice);
       }
     };
@@ -1843,7 +1842,10 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
   // holding a category that is now wrong for it - prime() rebuilds that one.
   function promote(dir, leaving) {
     const incoming = panels[dir], demoted = live, far = panels[-dir];
-    if (building) building = null;              // its panel is about to move
+    // A build still running on the panel coming in carries on into the list;
+    // one running on any other panel is about to be pointed at the wrong
+    // category, so it stops here.
+    if (building) { if (building.box === incoming) building.dir = 0; else building = null; }
     demoted.removeAttribute("id");
     demoted.removeAttribute("role");
     demoted.setAttribute("aria-hidden", "true");
@@ -1860,10 +1862,12 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     const box = panels[dir];
     if (dir0 !== dir) { dir0 = dir; park(); }
     if (!box) { settle(true); return; }
-    // Half-built is worse than late: if the panel being dragged in is still
-    // filling, finish it now rather than turning to a short page.
-    if (building && building.dir === dir) building.flush();
-    const ready = holds[dir] === neighbour(dir);
+    // A panel still filling keeps filling - through the slide and, if it is
+    // still going, after it has become the list. Finishing it in one go here
+    // would be a stall in the frame the gesture is released on.
+    const cat = neighbour(dir);
+    const ready = holds[dir] === cat
+      || (building && building.dir === dir && building.cat === cat);
     animating = true;
     ptr.style.opacity = 0;
     Promise.all([
@@ -1874,7 +1878,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
       step(dir);
       // A panel that was never primed - or a category with nothing in it,
       // where the full render is the one that explains failing feeds.
-      if (!ready || !live.querySelector(".item")) renderList();
+      if (!ready || !live.firstChild) { building = null; renderList(); }
       live.scrollTop = 0;
       dir0 = 0;
       park();
@@ -1903,15 +1907,25 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
   }
 
   pane.addEventListener("touchstart", e => {
-    if (e.touches.length !== 1 || animating || loading) { mode = "off"; return; }
+    // A second finger arriving mid-drag used to stop the gesture dead without
+    // putting the panels back - the page stuck half way across.
+    if (e.touches.length !== 1) { abandon(); tracking = true; return; }
+    tracking = true;
+    if (animating || loading) { mode = "off"; return; }
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
     mode = null; dist = 0; dx = 0;
     lastX = startX; lastT = startT = Date.now(); vx = 0;
   }, { passive: true });
 
-  pane.addEventListener("touchmove", e => {
-    if (mode === "off") return;
+  // Bound to the window, not the panel. A gesture that began on the list has
+  // to be finished no matter what happens to the list underneath it - a
+  // refresh starting and making the pane untouchable, a second finger landing,
+  // the panel being promoted - or the page is left sitting half way across
+  // with nothing to snap it back.
+  window.addEventListener("touchmove", e => {
+    if (!tracking || mode === "off") return;
+    if (e.touches.length !== 1) { abandon(); return; }
     const x = e.touches[0].clientX;
     const tx = x - startX;
     const ty = e.touches[0].clientY - startY;
@@ -1945,6 +1959,25 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     }
   }, { passive: false });
 
+  // Whatever state the gesture was in, put the panels back where they belong.
+  function abandon() {
+    if (mode === "swipe" || mode === "pull") settle(mode === "swipe");
+    mode = "off"; dist = 0; dx = 0;
+  }
+  // A refresh dims and disables the pane; if that lands mid-drag the events
+  // stop arriving at it, so the gesture is ended here instead.
+  window.endGesture = () => { if (tracking) abandon(); };
+
+  // Last resort. Whatever else swallows the end of a gesture - an OS gesture,
+  // a lost event, a finger lifted outside the web view - the panels are never
+  // left parked half way across the screen.
+  setInterval(() => {
+    if (tracking && (mode === "swipe" || mode === "pull") && Date.now() - lastT > 3000) {
+      abandon();
+      tracking = false;
+    }
+  }, 1000);
+
   const release = () => {
     if (mode === "swipe") {
       // Swiping left moves forward through the categories, as the content
@@ -1952,7 +1985,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
       // but it has to be a real throw: fast, sustained, already meaningfully
       // across.
       const w = width();
-      const flick = Math.abs(vx) > 1.4 && Math.abs(dx) > w * 0.15
+      const flick = Math.abs(vx) > 1.4 && Math.abs(dx) > w * 0.1
         && (vx < 0) === (dx < 0) && Date.now() - startT >= 30;
       if (catList.length > 1 && (Math.abs(dx) >= w * COMMIT || flick)) slideTo(dx < 0 ? 1 : -1);
       else settle(true);
@@ -1966,10 +1999,15 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
         settle();
       }
     }
-    mode = null; dist = 0; dx = 0;
+    mode = null; dist = 0; dx = 0; tracking = false;
   };
-  pane.addEventListener("touchend", release);
-  pane.addEventListener("touchcancel", release);
+  window.addEventListener("touchend", e => { if (tracking) release(); });
+  window.addEventListener("touchcancel", e => { if (tracking) release(); });
+  // Backgrounding the app in mid-drag never delivers a touchend at all.
+  window.addEventListener("blur", () => { if (tracking) release(); });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && tracking) release();
+  });
   queuePrime();
 })();
 
@@ -1997,7 +2035,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.59";
+const BUILD = "2026-08-23.60";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

@@ -74,10 +74,15 @@ in advance and parked off screen. A page turn promotes the panel that arrived
 and demotes the one it replaced — no rows are built, moved or re-laid-out while
 the screen is animating, which is what used to cost a dropped frame at the end
 of every swipe. The panel that is left holding the wrong category is rebuilt
-afterwards, a couple of dozen rows per frame. The first 34px of movement barely register — the list resists,
+afterwards, a couple of dozen rows per frame.
+
+A gesture is finished from the window rather than from the list, so anything
+that interrupts it — a second finger, a refresh dimming the pane, the app being
+backgrounded, an OS gesture taking over — still puts the panels back. A
+three-second watchdog catches whatever is left. The first 34px of movement barely register — the list resists,
 so a sideways nudge while reading cannot shift the category out from under
 you — and after that it follows your finger closely. It commits once the next
-category is a quarter of the way across, or on a genuine fast throw short of
+category is a sixth of the way across, or on a genuine fast throw short of
 that; otherwise both panels spring back — easing home, drifting a little past
 centre and settling, rather than snapping. The list cannot scroll while a
 sideways drag is in progress (and the browser is told never to pan it
