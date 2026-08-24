@@ -151,6 +151,10 @@ h1{margin:0;font-size:1.375rem;font-weight:800;letter-spacing:-.4px}
   padding:0.875rem 1rem;background:var(--panel2);border-bottom:1px solid var(--line);
   font-size:0.875rem;line-height:1.45}
 .restore .btns{margin-top:10px}
+.restore .warn{color:var(--accent)}
+.relay-offer{display:flex;gap:9px;align-items:flex-start;margin-top:10px;
+  font-size:0.8125rem;line-height:1.4;color:var(--dim)}
+.relay-offer input{margin:2px 0 0 0;flex:0 0 auto;width:18px;height:18px;accent-color:var(--accent)}
 .empty{padding:60px 30px;text-align:center;color:var(--faint);font-size:0.875rem;line-height:1.6}
 
 /* ---------- sheet ---------- */
@@ -171,6 +175,7 @@ input[type=text],input[type=url],textarea{
   width:100%;background:var(--panel);border:1px solid var(--line);border-radius:11px;
   padding:11px 12px;font-size:0.9375rem;margin-bottom:8px}
 textarea{min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.7812rem;line-height:1.5}
+#proxy{min-height:74px}          /* a relay list is two or three lines, not a config dump */
 .btn{width:100%;border:0;border-radius:11px;padding:12px;font-size:0.9375rem;font-weight:600;background:var(--panel2)}
 /* Red is reserved for destructive actions. A red Save sitting above a red
    Delete made the two read as the same kind of thing. */
@@ -306,11 +311,14 @@ body.busy .chips{filter:saturate(.3)}
   <p class="hint" id="relay-count"></p>
 
   <h3>Fetch relay</h3>
-  <input type="text" id="proxy" placeholder="https://api.allorigins.win/raw?url=">
+  <textarea id="proxy" spellcheck="false" placeholder="https://api.allorigins.win/raw?url="></textarea>
+  <p class="hint" id="relay-msg"></p>
   <p class="hint">News sites block direct browser requests (CORS). Each feed is tried
   directly first, then through these relays in order, one URL-prefix per line.
   A relay sees your IP address and which feeds you fetch, so the fewer feeds
-  that need one, the less anybody learns about your reading. Feeds on a relay
+  that need one, the less anybody learns about your reading. Only full
+  <code>https://</code> prefixes are kept; leave the box empty to use no relay
+  at all. Feeds on a relay
   are re-tested directly every few hours, in case the publisher adds CORS
   support.</p>
 
@@ -483,6 +491,10 @@ const DEFAULTS = {
   directOnly: false
 };
 
+// Every relay in the list is another party that gets to see a feed request, so
+// the list is short by design and anything past this is dropped on the way in.
+const MAX_RELAYS = 5;
+
 // How often to re-test a direct fetch for a feed currently going via a relay.
 // Publishers do add CORS headers over time, and without this a feed would stay
 // on the relay forever just because the relay answered first, once.
@@ -636,9 +648,41 @@ function normalise(c) {
   return c;
 }
 
-const load = () => { try { return normalise(migrate({...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || "{}")})); }
-                     catch { return normalise({...DEFAULTS, migrated:11}); } };
-const save = () => localStorage.setItem(KEY, JSON.stringify(cfg));
+// localStorage throws once the quota is gone, and one feed serving huge titles
+// can fill it in a single refresh. Every write goes through here so a full disk
+// is a thing that failed, not an exception thrown out of the middle of a
+// refresh - which used to leave the app dimmed and loading forever.
+function store(key, value) {
+  try { localStorage.setItem(key, value); return true; }
+  catch { return false; }
+}
+
+// Cached stories are the only thing here big enough to exhaust the quota, so
+// they are also the only thing worth dropping to get back under it. Better a
+// shorter list than a wedged app holding a list it can never write.
+function storeItems() {
+  if (store(KEY + ".items", JSON.stringify(items))) return true;
+  for (const keep of [200, 100, 50, 20, 0]) {
+    items = items.slice(0, keep);
+    if (store(KEY + ".items", JSON.stringify(items))) return true;
+  }
+  return false;
+}
+
+// A config that will not parse is not a config to throw away: the feed list may
+// be the only copy on the device, and the setup link that would restore it is
+// generated from exactly what would be discarded. Keep the raw text under a
+// side key and say so, rather than silently starting over on the defaults.
+let configBroken = false;
+const load = () => {
+  const raw = localStorage.getItem(KEY);
+  try { return normalise(migrate({...DEFAULTS, ...JSON.parse(raw || "{}")})); }
+  catch {
+    if (raw) { configBroken = true; store(KEY + ".broken", raw); }
+    return normalise({...DEFAULTS, migrated:11});
+  }
+};
+const save = () => store(KEY, JSON.stringify(cfg));
 let cfg = load();
 // Persist immediately: migrations rewrite feed URLs and backfill categories,
 // and without this they would be recomputed on every launch and lost the
@@ -658,7 +702,7 @@ function pruneOrphans() {
   const live = new Set(cfg.feeds.map(f => f.name));
   const before = items.length;
   items = items.filter(i => live.has(i.source));
-  if (items.length !== before) localStorage.setItem(KEY + ".items", JSON.stringify(items));
+  if (items.length !== before) storeItems();
   return before - items.length;
 }
 let seen     = new Set(JSON.parse(localStorage.getItem(KEY + ".seen")  || "[]"));
@@ -707,7 +751,7 @@ const el = (t, c) => { const n = document.createElement(t); if (c) n.className =
 // any list shipped with the code.
 let health = {};
 try { health = JSON.parse(localStorage.getItem(KEY + ".health") || "{}"); } catch {}
-const saveHealth = () => localStorage.setItem(KEY + ".health", JSON.stringify(health));
+const saveHealth = () => store(KEY + ".health", JSON.stringify(health));
 // Route index 0 is the publisher itself; anything else went through a relay,
 // which means a third party saw that you fetched it.
 const isDirect = url => {
@@ -753,12 +797,12 @@ async function grab(url) {
     try {
       const text = await tryOnce(all[idx]);
       routes[url] = { i: idx, t: Date.now() };
-      localStorage.setItem(KEY + ".routes", JSON.stringify(routes));
+      store(KEY + ".routes", JSON.stringify(routes));
       return text;
     } catch (e) { lastErr = e; }
   }
   delete routes[url];
-  localStorage.setItem(KEY + ".routes", JSON.stringify(routes));
+  store(KEY + ".routes", JSON.stringify(routes));
   throw lastErr || new Error("unreachable");
 }
 
@@ -768,6 +812,15 @@ const txt = (node, ...names) => {
     if (found && found.textContent.trim()) return found.textContent.trim();
   }
   return "";
+};
+
+// A story's id is stored on every item and in the seen list, so it is capped -
+// but capping it by truncation swallowed a whole feed once: 400 stories whose
+// URLs differed only past the 300th character all collapsed onto a single id
+// and 399 of them vanished. Keep both ends instead.
+const shortId = raw => {
+  const t = String(raw);
+  return t.length <= 300 ? t : t.slice(0, 240) + "\u2026" + t.slice(-59);
 };
 
 // Strip markup and entities down to plain text for the one-line summary.
@@ -801,13 +854,16 @@ function parseJsonFeed(text, source, feedUrl) {
     const body = stripMarkup(it.summary || it.content_text || it.content_html);
     // JSON Feed titles are optional - microblog-style items carry none - so
     // fall back to the opening of the body rather than dropping the item.
-    const title = String(it.title || "").trim() || body.slice(0, 120) || "(untitled)";
+    // Capped like everything else off a feed: an uncapped title is 400 rows of
+    // whatever a publisher feels like sending, and that is enough to fill the
+    // storage quota in one refresh.
+    const title = (String(it.title || "").trim() || body.slice(0, 120) || "(untitled)").slice(0, 300);
 
     let ts = Date.parse(it.date_published || it.date_modified || "");
     if (isNaN(ts)) ts = 0;
 
     return {
-      id: String(link || it.id || title).slice(0, 300),
+      id: shortId(link || it.id || title),
       title, link, snip: body.slice(0, 220), ts, source
     };
   }).filter(i => i.title !== "(untitled)" || i.link);
@@ -831,7 +887,7 @@ function parseXmlFeed(xml, source, feedUrl) {
       if (alt) link = alt.getAttribute("href");
     }
 
-    const title = txt(n, "title") || "(untitled)";
+    const title = (txt(n, "title") || "(untitled)").slice(0, 300);
     // dc:date covers RSS 1.0/RDF and the many RSS 2.0 feeds that use Dublin
     // Core instead of pubDate. Without it those stories arrive undated, which
     // paints them coldest and sinks them to the bottom of the list.
@@ -844,7 +900,7 @@ function parseXmlFeed(xml, source, feedUrl) {
     // Relative hrefs resolve against the feed's own address. Resolving them
     // against this app produced links back into the app itself.
     link = safeLink(link, feedUrl);
-    return { id: (link || title).slice(0, 300), title, link, snip, ts, source };
+    return { id: shortId(link || title), title, link, snip, ts, source };
   }).filter(i => i.title !== "(untitled)" || i.link);
 }
 
@@ -874,103 +930,110 @@ async function refresh(scope, opts) {
   const name = o.name ? o.name + " " : "";
   if (!feeds.length) { setStatus(scoped ? "No feeds in " + active : "No feeds yet"); return; }
   loading = true;
-  // A background pass is not something the reader is waiting on, so it does
-  // not hold the screen back.
-  if (!o.quiet) setBusy(true);
-  $("#refresh").style.opacity = ".4";
-  // The status line names what asked for the fetch. Without it, a refresh you
-  // did not expect is indistinguishable from one you did.
-  const why = o.why ? " · " + o.why : "";
-  setStatus(o.quiet && o.summary
-    ? "Updating the rest in the background" + why + "…"
-    : "Fetching " + feeds.length + " " + name
-      + "feed" + (feeds.length === 1 ? "" : "s") + why + "…");
+  // Whatever happens in here, the flag has to come back down. It did not:
+  // an oversized feed threw on the way to storage, `loading` stayed true, the
+  // pane stayed dimmed and untappable, every later refresh queued behind a turn
+  // that never ended - and relaunching met the same feed again.
+  try {
+    // A background pass is not something the reader is waiting on, so it does
+    // not hold the screen back.
+    if (!o.quiet) setBusy(true);
+    $("#refresh").style.opacity = ".4";
+    // The status line names what asked for the fetch. Without it, a refresh you
+    // did not expect is indistinguishable from one you did.
+    const why = o.why ? " · " + o.why : "";
+    setStatus(o.quiet && o.summary
+      ? "Updating the rest in the background" + why + "…"
+      : "Fetching " + feeds.length + " " + name
+        + "feed" + (feeds.length === 1 ? "" : "s") + why + "…");
 
-  const merged = new Map(items.map(i => [i.id, i]));
-  const total = feeds.length;
-  let ok = 0, done = 0, added = 0;
-  const failed = [];
+    const merged = new Map(items.map(i => [i.id, i]));
+    const total = feeds.length;
+    let ok = 0, done = 0, added = 0;
+    const failed = [];
 
-  const absorb = list => {
-    list.forEach(it => {
-      // Two feeds often carry the same story under one link. Keep whichever
-      // copy is newer, so a fresher (possibly re-headlined) version wins
-      // instead of whichever feed simply resolved last.
-      const prev = merged.get(it.id);
-      if (!prev) added++;
-      if (!prev || it.ts >= prev.ts) merged.set(it.id, it);
-    });
-    const cutoff = Date.now() - 1000 * 60 * 60 * 72;
-    items = [...merged.values()]
-      .filter(i => !i.ts || i.ts > cutoff)
-      .sort((a, b) => b.ts - a.ts)
-      .slice(0, 400);
-  };
+    const absorb = list => {
+      list.forEach(it => {
+        // Two feeds often carry the same story under one link. Keep whichever
+        // copy is newer, so a fresher (possibly re-headlined) version wins
+        // instead of whichever feed simply resolved last.
+        const prev = merged.get(it.id);
+        if (!prev) added++;
+        if (!prev || it.ts >= prev.ts) merged.set(it.id, it);
+      });
+      const cutoff = Date.now() - 1000 * 60 * 60 * 72;
+      items = [...merged.values()]
+        .filter(i => !i.ts || i.ts > cutoff)
+        .sort((a, b) => b.ts - a.ts)
+        .slice(0, 400);
+    };
 
-  // Render each feed the moment it lands rather than blocking on the slowest.
-  await Promise.all(feeds.map(f =>
-    grab(f.url).then(x => parseFeed(x, f.name, f.url)).then(
-      list => {
-        ok++;
-        health[f.url] = { ok: true, at: Date.now(), n: list.length, direct: isDirect(f.url) };
-        absorb(list); scheduleRender();
-      },
-      err => {
-        failed.push(f.name);
-        health[f.url] = { ok: false, at: Date.now(), err: String(err && err.message || err) };
-      }
-    ).finally(() => {
-      done++;
-      if (done < total && !(o.quiet && o.summary))
-        setStatus("Fetched " + done + "/" + total + " " + name + "feeds…");
-    })
-  ));
+    // Render each feed the moment it lands rather than blocking on the slowest.
+    await Promise.all(feeds.map(f =>
+      grab(f.url).then(x => parseFeed(x, f.name, f.url)).then(
+        list => {
+          ok++;
+          health[f.url] = { ok: true, at: Date.now(), n: list.length, direct: isDirect(f.url) };
+          absorb(list); scheduleRender();
+        },
+        err => {
+          failed.push(f.name);
+          health[f.url] = { ok: false, at: Date.now(), err: String(err && err.message || err) };
+        }
+      ).finally(() => {
+        done++;
+        if (done < total && !(o.quiet && o.summary))
+          setStatus("Fetched " + done + "/" + total + " " + name + "feeds…");
+      })
+    ));
 
-  localStorage.setItem(KEY + ".items", JSON.stringify(items));
-  saveHealth();
+    storeItems();
+    saveHealth();
 
-  cycleAdded += added;
-  if (o.summary) {
-    // Both passes of this cycle, counted from what each feed last reported.
-    const all = cfg.feeds;
-    const seenNow = all.filter(f => health[f.url] && health[f.url].at >= cycleStart);
-    const okAll = seenNow.filter(f => health[f.url].ok);
-    const badAll = seenNow.filter(f => !health[f.url].ok).map(f => f.name);
-    setStatus(
-      okAll.length === 0
-        ? "No feeds reachable — check your connection or relays"
-        : "Updated " + timeAgo(Date.now()) + " · " + okAll.length + "/" + all.length + " feeds"
-          + (cycleAdded ? " · " + cycleAdded + " new" : "")
-          + (badAll.length
-              ? " · failed: " + (badAll.length > 2
-                  ? badAll.slice(0, 2).join(", ") + " +" + (badAll.length - 2) + " more"
-                  : badAll.join(", "))
-              : ""),
-      okAll.length === 0);
-  } else if (ok === 0) {
-    setStatus("No feeds reachable — check your connection or relays", true);
-  } else {
-    // "new" counts what this refresh actually brought in. It used to count
-    // every story never tapped, across the whole cache - a number in the
-    // hundreds that ignored the scope of the refresh and told you nothing.
-    setStatus(
-      "Updated " + timeAgo(Date.now()) + " · " + ok + "/" + total + " "
-      + name + "feeds"
-      + (added ? " · " + added + " new" : "")
-      + (failed.length
-          ? " · failed: " + (failed.length > 2
-              ? failed.slice(0, 2).join(", ") + " +" + (failed.length - 2) + " more"
-              : failed.join(", "))
-          : ""),
-      failed.length > 0 && ok === 0
-    );
+    cycleAdded += added;
+    if (o.summary) {
+      // Both passes of this cycle, counted from what each feed last reported.
+      const all = cfg.feeds;
+      const seenNow = all.filter(f => health[f.url] && health[f.url].at >= cycleStart);
+      const okAll = seenNow.filter(f => health[f.url].ok);
+      const badAll = seenNow.filter(f => !health[f.url].ok).map(f => f.name);
+      setStatus(
+        okAll.length === 0
+          ? "No feeds reachable — check your connection or relays"
+          : "Updated " + timeAgo(Date.now()) + " · " + okAll.length + "/" + all.length + " feeds"
+            + (cycleAdded ? " · " + cycleAdded + " new" : "")
+            + (badAll.length
+                ? " · failed: " + (badAll.length > 2
+                    ? badAll.slice(0, 2).join(", ") + " +" + (badAll.length - 2) + " more"
+                    : badAll.join(", "))
+                : ""),
+        okAll.length === 0);
+    } else if (ok === 0) {
+      setStatus("No feeds reachable — check your connection or relays", true);
+    } else {
+      // "new" counts what this refresh actually brought in. It used to count
+      // every story never tapped, across the whole cache - a number in the
+      // hundreds that ignored the scope of the refresh and told you nothing.
+      setStatus(
+        "Updated " + timeAgo(Date.now()) + " · " + ok + "/" + total + " "
+        + name + "feeds"
+        + (added ? " · " + added + " new" : "")
+        + (failed.length
+            ? " · failed: " + (failed.length > 2
+                ? failed.slice(0, 2).join(", ") + " +" + (failed.length - 2) + " more"
+                : failed.join(", "))
+            : ""),
+        failed.length > 0 && ok === 0
+      );
+    }
+
+    render();
+    if (ok > 0) store(KEY + ".fetchedAt", Date.now());
+  } finally {
+    loading = false;
+    setBusy(false);
+    $("#refresh").style.opacity = "";
   }
-
-  render();
-  loading = false;
-  if (ok > 0) { try { localStorage.setItem(KEY + ".fetchedAt", Date.now()); } catch {} }
-  setBusy(false);
-  $("#refresh").style.opacity = "";
 }
 
 // The categories you can reach without leaving the screen: the one you are
@@ -1124,6 +1187,28 @@ function safeLink(raw, base) {
   } catch { return ""; }
 }
 
+// A feed address arriving from outside - a setup link, an OPML file - must be
+// absolute. safeLink resolves a relative one against this page, which is right
+// for a story link inside a feed and wrong here: "bbc.co.uk/rss" would quietly
+// become an address on our own origin. The feed editor has always required
+// this; the two import paths did not.
+const absFeed = raw => {
+  const t = String(raw || "").trim();
+  return /^https?:\/\//i.test(t) ? safeLink(t) : "";
+};
+
+// A relay prefix is not a link: it is a string every feed URL gets appended to,
+// so whatever it points at sees the phone's IP and everything it reads. Only an
+// absolute https prefix is accepted, which also stops a stored value becoming a
+// path on this origin.
+const safeRelay = raw => {
+  const t = String(raw || "").trim();
+  if (!/^https:\/\//i.test(t) || t.length > 300) return "";
+  try { new URL(t); } catch { return ""; }
+  return t;
+};
+const relayHost = pfx => { try { return new URL(pfx).host; } catch { return pfx; } };
+
 function render() { renderChips(); renderList(); }
 
 function renderChips() {
@@ -1152,7 +1237,7 @@ function renderChips() {
       if (loading) return;
       if (active === c) { $("#list").scrollTop = 0; return; }
       active = c;
-      localStorage.setItem(KEY + ".tab", active);
+      store(KEY + ".tab", active);
       render();
       $("#list").scrollTop = 0;     // direct assignment, not a scroll request
       revealChip([...document.querySelectorAll(".chip")].find(x => x.textContent === c));
@@ -1244,9 +1329,10 @@ function renderItem(i, list) {
     const a = el("a", "item");
     const href = safeLink(i.link);
     a.href = href || "#";
-    if (!href) { a.removeAttribute("target"); a.style.pointerEvents = "none"; }
     a.target = "_blank";
     a.rel = "noopener noreferrer";
+    // A story whose link did not survive safeLink opens nothing at all.
+    if (!href) { a.removeAttribute("target"); a.style.pointerEvents = "none"; }
     if (!seen.has(i.id)) a.classList.add("unseen");
     a.style.setProperty("--heat", heat(i.ts));
 
@@ -1266,7 +1352,7 @@ function renderItem(i, list) {
 
     a.addEventListener("click", () => {
       seen.add(i.id);
-      localStorage.setItem(KEY + ".seen", JSON.stringify([...seen].slice(-1200)));
+      store(KEY + ".seen", JSON.stringify([...seen].slice(-1200)));
       a.classList.remove("unseen");
     });
 
@@ -1393,11 +1479,7 @@ function feedEditor(f) {
 
   save_.onclick = e => {
     e.stopPropagation();
-    // safeLink resolves relative paths against this page - right for story
-    // links inside a feed, wrong here, where "bbc.co.uk/rss" would silently
-    // become an address on our own origin. A feed address must be absolute.
-    const raw = url.value.trim();
-    const nextUrl = /^https?:\/\//i.test(raw) ? safeLink(raw) : "";
+    const nextUrl = absFeed(url.value);   // absolute only; see absFeed
     if (!nextUrl) {
       err.textContent = "That needs to be a full http:// or https:// address.";
       err.style.display = ""; return;
@@ -1417,9 +1499,9 @@ function feedEditor(f) {
     if (nextUrl !== oldUrl) {
       delete health[oldUrl]; delete routes[oldUrl];
       saveHealth();
-      localStorage.setItem(KEY + ".routes", JSON.stringify(routes));
+      store(KEY + ".routes", JSON.stringify(routes));
     }
-    localStorage.setItem(KEY + ".items", JSON.stringify(items));
+    storeItems();
     save(); editing = null;
     renderFeeds(); renderLibrary(); render();
   };
@@ -1431,7 +1513,7 @@ function feedEditor(f) {
     cfg.feeds = cfg.feeds.filter(o => o.id !== f.id);
     delete health[f.url]; delete routes[f.url];
     saveHealth();
-    localStorage.setItem(KEY + ".routes", JSON.stringify(routes));
+    store(KEY + ".routes", JSON.stringify(routes));
     save(); pruneOrphans(); editing = null;
     renderFeeds(); renderLibrary(); render();
   };
@@ -1528,6 +1610,7 @@ function openSettings(open) {
   if (open) {
     showSheet("#feeds-sheet", false);
     $("#proxy").value      = cfg.proxies.join("\n");
+    showRelayCount();
     $("#s-auto").checked   = cfg.autoRefresh;
     $("#s-direct").checked = cfg.directOnly;
     $("#s-idle").value     = String(cfg.idleResetMin);
@@ -1578,11 +1661,38 @@ $("#f-add").onclick = async () => {
   }
 };
 
+// The relay box was filled in from the config and read back by nothing at all:
+// you could clear it, close Settings, reopen, and every relay was still there.
+// That mattered most for a relay you had not chosen yourself, which was the one
+// thing you could not get rid of.
+const showRelayCount = (extra) => {
+  const n = cfg.proxies.length;
+  $("#relay-msg").textContent = (n
+    ? n + " relay" + (n === 1 ? "" : "s") + " in use: "
+      + [...new Set(cfg.proxies.map(relayHost))].join(", ")
+    : "No relay. Feeds that refuse a direct request will fail.")
+    + (extra || "");
+};
+$("#proxy").onchange = () => {
+  const lines = $("#proxy").value.split("\n").map(x => x.trim()).filter(Boolean);
+  const good  = lines.map(safeRelay).filter(Boolean).slice(0, MAX_RELAYS);
+  const drop  = lines.length - good.length;
+  cfg.proxies = good;
+  save();
+  // The route memo records which entry answered by position, so it means
+  // something different the moment the list changes.
+  routes = {}; store(KEY + ".routes", "{}");
+  $("#proxy").value = good.join("\n");
+  showRelayCount(drop
+    ? " · " + drop + " ignored: a relay must be a full https:// prefix"
+    : " · saved");
+};
+
 $("#s-auto").onchange   = e => { cfg.autoRefresh = e.target.checked; save(); };
 $("#s-idle").onchange   = e => { cfg.idleResetMin = +e.target.value || 0; save(); markSeen(); };
 $("#s-direct").onchange = e => {
   cfg.directOnly = e.target.checked; save();
-  routes = {}; localStorage.setItem(KEY + ".routes", "{}");   // re-probe from scratch
+  routes = {}; store(KEY + ".routes", "{}");   // re-probe from scratch
 };
 
 $("#f-test").onclick = async () => {
@@ -1626,16 +1736,31 @@ function setupLink() {
   return base + "#s=" + b64e(JSON.stringify(setupPayload()));
 }
 
-function applySetup(payload) {
+// The relays in a setup link are adopted only when the offer was accepted with
+// them ticked. Nothing else in the app can hand a third party this much: a
+// relay sees the phone's IP and every feed routed through it, and can rewrite
+// what comes back. It is not something a link should be able to do quietly.
+const setupRelays = payload =>
+  (Array.isArray(payload && payload.s && payload.s.p) ? payload.s.p : [])
+    .map(safeRelay).filter(Boolean).slice(0, MAX_RELAYS);
+
+function applySetup(payload, opts) {
   if (!payload || payload.v !== 1 || !Array.isArray(payload.f)) throw new Error("not a setup link");
   cfg.feeds = payload.f
-    .filter(row => Array.isArray(row) && safeLink(row[2]))
-    .map(row => ({ id: newId(), cat: row[0] || "Other", name: String(row[1] || "Feed"), url: safeLink(row[2]) }));
+    .filter(row => Array.isArray(row) && absFeed(row[2]))
+    .map(row => ({ id: newId(), cat: row[0] || "Other",
+                   name: String(row[1] || "Feed").slice(0, 80), url: absFeed(row[2]) }));
   const st = payload.s || {};
   if ("a" in st) cfg.autoRefresh  = !!st.a;
-  if ("d" in st) cfg.directOnly   = !!st.d;
+  // Tighter only. A link can turn direct-only on; turning it off is what puts a
+  // relay back in front of every feed, and that stays a decision made on the
+  // Privacy switch rather than by a URL somebody sent you.
+  if (st.d) cfg.directOnly = true;
   if ("i" in st) cfg.idleResetMin = +st.i || 0;
-  if (Array.isArray(st.p) && st.p.length) cfg.proxies = st.p.filter(x => typeof x === "string");
+  if (opts && opts.relays) {
+    const p = setupRelays(payload);
+    if (p.length) cfg.proxies = p;
+  }
   save();
 }
 
@@ -1662,7 +1787,7 @@ function fromOPML(text) {
   if (doc.querySelector("parsererror")) throw new Error("not valid OPML");
   const found = [];
   for (const o of doc.querySelectorAll("outline[xmlUrl]")) {
-    const url = safeLink(o.getAttribute("xmlUrl"));
+    const url = absFeed(o.getAttribute("xmlUrl"));
     if (!url) continue;
     // The enclosing outline is the folder, which maps onto our categories.
     const parent = o.parentElement;
@@ -1728,9 +1853,33 @@ function offerSetupFromHash() {
   }
 
   const bar = el("div", "restore");
-  const line = t => { const d = el("div"); d.textContent = t; bar.appendChild(d); };
+  const line = (t, cls) => { const d = el("div", cls); d.textContent = t; bar.appendChild(d); };
+  const hosts = [...new Set(payload.f.map(r => {
+    try { return new URL(r[2]).host; } catch { return String(r[2] || "").slice(0, 40); }
+  }))];
   line("This link holds a saved setup: " + payload.f.length + " feeds.");
-  line("Restoring replaces the feeds on this device.");
+  line("Restoring replaces the feeds on this device with: " + (hosts.length > 6
+    ? hosts.slice(0, 6).join(", ") + " +" + (hosts.length - 6) + " more"
+    : hosts.join(", ")));
+
+  // A link used to be able to repoint every fetch through a relay of its own
+  // choosing - and turn the direct-only switch off on the way past - while
+  // saying nothing but "N feeds". Adopting a relay is now a separate, unticked
+  // decision, and the box names the host it would be handing your reading to.
+  const relays = setupRelays(payload);
+  const differs = relays.length && relays.join("\n") !== cfg.proxies.join("\n");
+  let relayBox = null;
+  if (differs) {
+    const w = el("label", "relay-offer");
+    relayBox = document.createElement("input");
+    relayBox.type = "checkbox";
+    const t = el("span");
+    t.textContent = "Also use this link's fetch relay ("
+      + [...new Set(relays.map(relayHost))].join(", ")
+      + "). It would see your IP address and every feed sent through it.";
+    w.append(relayBox, t);
+    bar.appendChild(w);
+  }
   const btns = el("div", "btns");
   const no = el("button", "btn");          no.textContent = "Ignore";
   const yes = el("button", "btn primary"); yes.textContent = "Restore";
@@ -1741,7 +1890,7 @@ function offerSetupFromHash() {
   no.onclick = () => { clearHash(); bar.remove(); };
   yes.onclick = () => {
     try {
-      applySetup(payload);
+      applySetup(payload, { relays: !!(relayBox && relayBox.checked) });
       clearHash();
       bar.remove();
       pruneOrphans();
@@ -1752,8 +1901,26 @@ function offerSetupFromHash() {
   return true;
 }
 
+// Starting over on the defaults after a failed load used to happen in silence,
+// which reads as "the app forgot my feeds" - and the setup link that would put
+// them back is made from the very thing that was discarded. The unreadable copy
+// is kept under .broken, and the app says where it went.
+function warnIfConfigBroken() {
+  if (!configBroken) return;
+  const bar = el("div", "restore");
+  const line = (t, cls) => { const d = el("div", cls); d.textContent = t; bar.appendChild(d); };
+  line("Your saved settings could not be read, so the defaults are back.", "warn");
+  line("The unreadable copy is kept on this device as " + KEY + ".broken.");
+  const btns = el("div", "btns");
+  const ok = el("button", "btn primary"); ok.textContent = "OK";
+  btns.appendChild(ok); bar.appendChild(btns);
+  ok.onclick = () => bar.remove();
+  document.querySelector(".pane").prepend(bar);
+}
+
 /* ------------------------------------------------------------------ boot */
 pruneOrphans();
+warnIfConfigBroken();
 offerSetupFromHash();
 resetTabIfStale();
 markSeen();
@@ -2006,7 +2173,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     if (!next || next === active) return false;
     const leaving = active;
     active = next;
-    localStorage.setItem(KEY + ".tab", active);
+    store(KEY + ".tab", active);
     promote(delta, leaving);
     renderChips();
     revealChip([...document.querySelectorAll(".chip")].find(c => c.textContent === active));
@@ -2143,7 +2310,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.64";
+const BUILD = "2026-08-24.65";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
