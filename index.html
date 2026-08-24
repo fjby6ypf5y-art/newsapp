@@ -1136,6 +1136,9 @@ function renderChips() {
   catList = cats;
 
   const chips = $("#chips");
+  // Rebuilding the row would otherwise snap it back to the left every time a
+  // refresh lands, which is movement nobody asked for.
+  const wasAt = chips.scrollLeft;
   chips.innerHTML = "";
   cats.forEach(c => {
     const b = el("button", "chip");
@@ -1149,10 +1152,27 @@ function renderChips() {
       localStorage.setItem(KEY + ".tab", active);
       render();
       $("#list").scrollTop = 0;     // direct assignment, not a scroll request
-      b.scrollIntoView({ block: "nearest", inline: "center" });
+      revealChip([...document.querySelectorAll(".chip")].find(x => x.textContent === c));
     };
     chips.appendChild(b);
   });
+  chips.scrollLeft = wasAt;
+}
+
+// The row only moves when it has to: if the chip you have landed on is
+// already on screen it stays exactly where it is, and if it is not, the row
+// moves the least it can to bring it in with a neighbour still showing.
+function revealChip(chip) {
+  if (!chip) return;
+  const row = $("#chips");
+  const c = chip.getBoundingClientRect(), r = row.getBoundingClientRect();
+  const pad = 28;                             // leave the next chip peeking
+  let by = 0;
+  if (c.left  < r.left  + pad) by = c.left  - (r.left  + pad);
+  else if (c.right > r.right - pad) by = c.right - (r.right - pad);
+  if (!by) return;
+  const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  row.scrollTo({ left: row.scrollLeft + by, behavior: smooth ? "smooth" : "auto" });
 }
 
 function renderList() {
@@ -1965,8 +1985,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     localStorage.setItem(KEY + ".tab", active);
     promote(delta, leaving);
     renderChips();
-    const chip = [...document.querySelectorAll(".chip")].find(c => c.textContent === active);
-    if (chip) chip.scrollIntoView({ block: "nearest", inline: "center" });
+    revealChip([...document.querySelectorAll(".chip")].find(c => c.textContent === active));
     return true;
   }
 
@@ -2099,7 +2118,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.61";
+const BUILD = "2026-08-23.62";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

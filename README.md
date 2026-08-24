@@ -106,6 +106,11 @@ as it was. So the refresh on return only happens once the stories are actually
 old — five minutes — and when it does it runs in the background, never greying
 anything out.
 
+**The chip row holds still.** Landing on a category that is already visible
+moves nothing; only a category off the end of the row scrolls it, and then by
+the least it can, leaving a neighbour peeking so the row still reads as a row.
+A refresh rebuilding the chips no longer snaps them back to the left either.
+
 **Two refreshes, deliberately different.** Pull down on the list to refresh
 **just the category you're reading** — quick, and it doesn't spend requests on
 categories you aren't looking at. The **↻** button refreshes **every**
