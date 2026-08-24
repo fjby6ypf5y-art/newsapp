@@ -1056,10 +1056,9 @@ function safeLink(raw, base) {
   } catch { return ""; }
 }
 
-function render() {
-  const catOf = {};
-  cfg.feeds.forEach(f => { catOf[f.name] = f.cat || "Other"; });
+function render() { renderChips(); renderList(); }
 
+function renderChips() {
   // Chips come from the feeds you have configured, not from the stories that
   // arrived. A category whose feeds all failed would otherwise vanish
   // silently, which reads as "my feeds were never added".
@@ -1089,11 +1088,11 @@ function render() {
     };
     chips.appendChild(b);
   });
+}
 
-  // Strictly newest first, so the reddest story is always the first one.
-  const view = items
-    .filter(i => (i.source in catOf) && (catOf[i.source] || "Other") === active)
-    .sort((a, b) => b.ts - a.ts);
+function renderList() {
+  const view = storiesIn(active);
+  const cats = catList;
 
   const list = $("#list");
   list.innerHTML = "";
@@ -1127,15 +1126,20 @@ function render() {
   for (const i of view) renderItem(i, list);
 }
 
-// Rows for one category, into any container. The swipe preview needs the
-// next category's list before it is the one on screen.
-function fillList(box, cat, cap) {
+// Strictly newest first, so the reddest story is always the first one.
+function storiesIn(cat) {
   const catOf = {};
   cfg.feeds.forEach(f => { catOf[f.name] = f.cat || "Other"; });
-  const view = items
+  return items
     .filter(i => (i.source in catOf) && (catOf[i.source] || "Other") === cat)
-    .sort((a, b) => b.ts - a.ts)
-    .slice(0, cap || Infinity);
+    .sort((a, b) => b.ts - a.ts);
+}
+
+// Rows for one category, into any container. The swipe preview needs the
+// next category's list before it is the one on screen, and builds only a
+// screenful up front so the drag does not stall on a long category.
+function fillList(box, cat, cap) {
+  const view = storiesIn(cat);
   box.innerHTML = "";
   if (!view.length) {
     const e = el("div", "empty"), d = el("div");
@@ -1143,7 +1147,12 @@ function fillList(box, cat, cap) {
     e.appendChild(d); box.appendChild(e);
     return;
   }
-  for (const i of view) renderItem(i, box);
+  view.slice(0, cap || Infinity).forEach(i => renderItem(i, box));
+}
+
+// The rest of a capped preview, added while the panel is sliding in.
+function topUp(box, cat, from) {
+  storiesIn(cat).slice(from).forEach(i => renderItem(i, box));
 }
 
 function renderItem(i, list) {
@@ -1679,9 +1688,10 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
   // so the swipe drags a real list into place instead of emptying the screen
   // and refilling it. Only the rows that could be on screen are built.
   const GHOST_ROWS = 30;
-  let ghost = null, ghostDir = 0;
+  let ghost = null, ghostDir = 0, ghostCat = "";
   const width = () => list.clientWidth || 390;
 
+  let ghostFull = false;
   function killGhost() { if (ghost) { ghost.remove(); ghost = null; } ghostDir = 0; }
 
   function makeGhost(dir) {
@@ -1690,9 +1700,11 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     if (i < 0 || catList.length < 2) return;
     ghost = el("div", "ghost");
     ghost.setAttribute("aria-hidden", "true");
-    fillList(ghost, catList[(i + dir + catList.length) % catList.length], GHOST_ROWS);
+    ghostCat = catList[(i + dir + catList.length) % catList.length];
+    fillList(ghost, ghostCat, GHOST_ROWS);
     list.parentNode.appendChild(ghost);
     ghostDir = dir;
+    ghostFull = false;
   }
 
   // Past the sticky first stretch the panel follows the finger almost exactly;
@@ -1721,13 +1733,20 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     if (!ghost) { settle(); return; }
     animating = true;
     ptr.style.opacity = 0;
-    Promise.all([
+    const panel = ghost, cat = ghostCat;
+    const done = Promise.all([
       glide(list, "translateX(" + (-dir * width()) + "px)"),
-      glide(ghost, "")
-    ]).then(() => {
-      // The preview was capped at a screenful, so the real render takes over
-      // once it has arrived - by which point the two are identical on screen.
-      step(dir);
+      glide(panel, "")
+    ]);
+    // Fill in the rest of the category while it is on its way in, off the
+    // frame that has to complete the handover.
+    requestAnimationFrame(() => {
+      if (panel === ghost && !ghostFull) { topUp(panel, cat, GHOST_ROWS); ghostFull = true; }
+    });
+    done.then(() => {
+      // An empty category gets the full render instead: the preview only says
+      // "nothing yet", where the real one explains which feeds are failing.
+      step(dir, ghostFull && panel.querySelector(".item") ? panel : null);
       list.style.transform = "";
       list.style.overflowY = "";
       killGhost();
@@ -1793,7 +1812,10 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
 
   // Step through the categories currently on screen. catList is filled by
   // render(), so it always matches the chips.
-  function step(delta) {
+  // adopt: a panel already showing the destination category. Moving its rows
+  // across costs a fraction of building them again, and the rebuild used to
+  // land in the same frame as the handover - long enough to drop it.
+  function step(delta, adopt) {
     const i = catList.indexOf(active);
     if (i < 0) return false;
     // Wrap around: swiping past the last category lands on the first, so the
@@ -1802,7 +1824,12 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     if (!next || next === active) return false;
     active = next;
     localStorage.setItem(KEY + ".tab", active);
-    render();
+    if (adopt && adopt.firstChild) {
+      list.replaceChildren(...adopt.childNodes);
+      renderChips();
+    } else {
+      render();
+    }
     list.scrollTop = 0;
     const chip = [...document.querySelectorAll(".chip")].find(c => c.textContent === active);
     if (chip) chip.scrollIntoView({ block: "nearest", inline: "center" });
@@ -1905,7 +1932,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.54";
+const BUILD = "2026-08-23.55";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
