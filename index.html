@@ -111,6 +111,11 @@ main{
   padding:0 0 calc(var(--safe-b) + 40px);
   background:var(--bg);
 }
+.ghost{
+  position:absolute;inset:0;overflow:hidden;
+  padding:0 0 calc(var(--safe-b) + 40px);
+  background:var(--bg);pointer-events:none;
+}
 #ptr{
   position:absolute;left:0;right:0;top:0;height:70px;
   display:flex;align-items:center;justify-content:center;gap:8px;
@@ -1101,6 +1106,25 @@ function render() {
   for (const i of view) renderItem(i, list);
 }
 
+// Rows for one category, into any container. The swipe preview needs the
+// next category's list before it is the one on screen.
+function fillList(box, cat, cap) {
+  const catOf = {};
+  cfg.feeds.forEach(f => { catOf[f.name] = f.cat || "Other"; });
+  const view = items
+    .filter(i => (i.source in catOf) && (catOf[i.source] || "Other") === cat)
+    .sort((a, b) => b.ts - a.ts)
+    .slice(0, cap || Infinity);
+  box.innerHTML = "";
+  if (!view.length) {
+    const e = el("div", "empty"), d = el("div");
+    d.textContent = "Nothing in " + cat + " yet.";
+    e.appendChild(d); box.appendChild(e);
+    return;
+  }
+  for (const i of view) renderItem(i, box);
+}
+
 function renderItem(i, list) {
   {
     const a = el("a", "item");
@@ -1618,7 +1642,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
   const TRIGGER = 64, MAX = 96;      // pull
   const SWIPE = 60, SLOP = 12;       // sideways
   let startX = 0, startY = 0, mode = null, dist = 0, dx = 0;
-  let lastX = 0, lastT = 0, vx = 0, animating = false;
+  let lastX = 0, lastT = 0, startT = 0, vx = 0, animating = false;
 
   const paintPull = d => {
     list.style.transform = d ? "translateY(" + d + "px)" : "";
@@ -1627,36 +1651,63 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     label.textContent = d >= TRIGGER ? "Release to refresh" : "Pull to refresh";
   };
 
-  const paintSwipe = d => { list.style.transform = "translateX(" + d + "px)"; };
+  // The next category rides alongside the current one for the whole gesture,
+  // so the swipe drags a real list into place instead of emptying the screen
+  // and refilling it. Only the rows that could be on screen are built.
+  const GHOST_ROWS = 30;
+  let ghost = null, ghostDir = 0;
+  const width = () => list.clientWidth || 390;
 
-  // Committing a swipe used to snap the old category back to centre and swap
-  // the text underneath it, which read as an abrupt cut. Carry the outgoing
-  // list the rest of the way off screen, then bring the new one in from the
-  // other side, so the categories feel like panels being pulled past.
-  const OUT = 150, IN = 230;
+  function killGhost() { if (ghost) { ghost.remove(); ghost = null; } ghostDir = 0; }
+
+  function makeGhost(dir) {
+    killGhost();
+    const i = catList.indexOf(active);
+    if (i < 0 || catList.length < 2) return;
+    ghost = el("div", "ghost");
+    ghost.setAttribute("aria-hidden", "true");
+    fillList(ghost, catList[(i + dir + catList.length) % catList.length], GHOST_ROWS);
+    list.parentNode.appendChild(ghost);
+    ghostDir = dir;
+  }
+
+  const paintSwipe = d => {
+    const dir = d < 0 ? 1 : -1;
+    if (d && ghostDir !== dir) makeGhost(dir);
+    list.style.transform = "translateX(" + d + "px)";
+    if (ghost) ghost.style.transform = "translateX(" + (d + ghostDir * width()) + "px)";
+  };
+
+  const SLIDE = 260, EASE = "cubic-bezier(.32,.72,0,1)";
+
   function slideTo(dir) {
+    if (!ghost || ghostDir !== dir) makeGhost(dir);
+    if (!ghost) { settle(); return; }
     animating = true;
-    const w = list.clientWidth || 390;
-    list.style.transition = "transform " + OUT + "ms cubic-bezier(.4,0,1,1), opacity " + OUT + "ms linear";
+    const w = width();
+    list.style.transition = ghost.style.transition = "transform " + SLIDE + "ms " + EASE;
     list.style.transform = "translateX(" + (-dir * w) + "px)";
-    list.style.opacity = "0";
+    ghost.style.transform = "";
+    ptr.style.opacity = 0;
     setTimeout(() => {
       list.style.transition = "";
-      if (!step(dir)) { settle(); list.style.opacity = ""; animating = false; return; }
-      list.style.transform = "translateX(" + (dir * w) + "px)";
-      void list.offsetWidth;                  // commit the jump before animating back
-      list.style.transition = "transform " + IN + "ms cubic-bezier(.32,.72,0,1), opacity " + IN + "ms linear";
+      // The preview was capped, so the real render takes over once it is home.
+      step(dir);
       list.style.transform = "";
-      list.style.opacity = "";
-      setTimeout(() => { list.style.transition = ""; animating = false; }, IN + 30);
-    }, OUT);
+      killGhost();
+      animating = false;
+    }, SLIDE);
   }
 
   const settle = () => {
     list.style.transition = "transform .25s cubic-bezier(.32,.72,0,1)";
     list.style.transform = "";
+    if (ghost) {
+      ghost.style.transition = list.style.transition;
+      ghost.style.transform = "translateX(" + (ghostDir * width()) + "px)";
+    }
     ptr.style.opacity = 0;
-    setTimeout(() => { list.style.transition = ""; }, 280);
+    setTimeout(() => { list.style.transition = ""; killGhost(); }, 280);
   };
 
   // Step through the categories currently on screen. catList is filled by
@@ -1682,7 +1733,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
     mode = null; dist = 0; dx = 0;
-    lastX = startX; lastT = Date.now(); vx = 0;
+    lastX = startX; lastT = startT = Date.now(); vx = 0;
   }, { passive: true });
 
   list.addEventListener("touchmove", e => {
@@ -1721,7 +1772,10 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
       // follows the finger.
       // A quick flick counts even if it did not travel far - waiting for the
       // full distance is what made the gesture feel like it needed convincing.
-      const flick = Math.abs(vx) > 0.45 && Math.abs(dx) > 24 && (vx < 0) === (dx < 0);
+      // A real flick is fast but not instantaneous; the duration check keeps a
+      // small deliberate nudge from being read as one.
+      const flick = Math.abs(vx) > 0.8 && Math.abs(dx) > 30
+        && (vx < 0) === (dx < 0) && Date.now() - startT >= 30;
       if (catList.length > 1 && (Math.abs(dx) >= SWIPE || flick)) slideTo(dx < 0 ? 1 : -1);
       else settle();
     } else if (mode === "pull") {
@@ -1764,7 +1818,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.45";
+const BUILD = "2026-08-23.46";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
