@@ -1640,7 +1640,10 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
 (function () {
   const list = $("#list"), ptr = $("#ptr"), label = $("#ptr-text");
   const TRIGGER = 64, MAX = 96;      // pull
-  const SWIPE = 60, SLOP = 12;       // sideways
+  // Sideways: the list resists for the first stretch of the drag and only
+  // commits once the next category is genuinely half way across, so a
+  // sideways nudge while reading cannot shift the category out from under you.
+  const SLOP = 16, STICK = 34, TRACK = 0.9, COMMIT = 0.5;
   let startX = 0, startY = 0, mode = null, dist = 0, dx = 0;
   let lastX = 0, lastT = 0, startT = 0, vx = 0, animating = false;
 
@@ -1670,6 +1673,16 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     list.parentNode.appendChild(ghost);
     ghostDir = dir;
   }
+
+  // Past the sticky first stretch the panel follows the finger almost exactly;
+  // inside it, barely at all. With one category there is nowhere to go, so it
+  // stays rubbery the whole way.
+  const resist = tx => {
+    const sign = tx < 0 ? -1 : 1, m = Math.abs(tx);
+    if (catList.length < 2) return tx * 0.2;
+    return m <= STICK ? sign * m * 0.12
+                      : sign * (STICK * 0.12 + (m - STICK) * TRACK);
+  };
 
   const paintSwipe = d => {
     const dir = d < 0 ? 1 : -1;
@@ -1754,10 +1767,10 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
 
     if (mode === "swipe") {
       e.preventDefault();                     // keep the list from scrolling sideways
-      dx = tx;
       // Only one category means there is nowhere to go; resist so the list
       // does not slide off into nothing.
-      paintSwipe(catList.length > 1 ? tx * 0.85 : tx * 0.25);
+      dx = resist(tx);
+      paintSwipe(dx);
     } else if (mode === "pull") {
       if (ty <= 0 || list.scrollTop > 0) { mode = "off"; settle(); return; }
       e.preventDefault();
@@ -1770,13 +1783,12 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     if (mode === "swipe") {
       // Swiping left moves forward through the categories, as the content
       // follows the finger.
-      // A quick flick counts even if it did not travel far - waiting for the
-      // full distance is what made the gesture feel like it needed convincing.
-      // A real flick is fast but not instantaneous; the duration check keeps a
-      // small deliberate nudge from being read as one.
-      const flick = Math.abs(vx) > 0.8 && Math.abs(dx) > 30
+      // A committed flick still counts short of half way, but it has to be a
+      // real throw: fast, sustained, and already a quarter of the way across.
+      const w = width();
+      const flick = Math.abs(vx) > 1.4 && Math.abs(dx) > w * 0.25
         && (vx < 0) === (dx < 0) && Date.now() - startT >= 30;
-      if (catList.length > 1 && (Math.abs(dx) >= SWIPE || flick)) slideTo(dx < 0 ? 1 : -1);
+      if (catList.length > 1 && (Math.abs(dx) >= w * COMMIT || flick)) slideTo(dx < 0 ? 1 : -1);
       else settle();
     } else if (mode === "pull") {
       if (dist >= TRIGGER) {
@@ -1818,7 +1830,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.46";
+const BUILD = "2026-08-23.47";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
