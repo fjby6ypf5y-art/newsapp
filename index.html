@@ -1754,14 +1754,38 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     ).finished.catch(() => {});
   }
 
-  const settle = () => {
+  // An abandoned page turn is a weight coming back to rest, not a lid
+  // snapping shut: it eases home, drifts a little past, and settles. Both
+  // panels run the same curve so they stay locked to each other.
+  const SPRING = 420, OVERSHOOT = 0.09;
+  const atX = box => new DOMMatrix(getComputedStyle(box).transform).m41;
+
+  function spring(box, rest) {
+    const from = atX(box);
+    box.style.transform = rest ? "translateX(" + rest + "px)" : "";
+    if (!box.animate) return Promise.resolve();
+    const past = rest - (from - rest) * OVERSHOOT;
+    return box.animate([
+      { transform: "translateX(" + from + "px)", easing: "cubic-bezier(.17,.67,.3,1)" },
+      { transform: "translateX(" + past + "px)", offset: 0.7, easing: "cubic-bezier(.45,0,.35,1)" },
+      { transform: "translateX(" + rest + "px)" }
+    ], { duration: calm() ? 180 : SPRING }).finished.catch(() => {});
+  }
+
+  const settle = springy => {
+    const home = g => { if (g === ghost) killGhost(); else g.remove(); };
+    if (springy && ghost) {
+      const g = ghost;                        // may be replaced before this ends
+      spring(list, 0);
+      spring(g, ghostDir * width()).then(() => home(g));
+      ptr.style.opacity = 0;
+      if (list.style.overflowY) { list.style.overflowY = ""; list.scrollTop = held; }
+      return;
+    }
     glide(list, "");
     if (ghost) {
-      const g = ghost;                        // may be replaced before this ends
-      glide(g, "translateX(" + (ghostDir * width()) + "px)").then(() => {
-        if (g === ghost) killGhost();
-        else g.remove();
-      });
+      const g = ghost;
+      glide(g, "translateX(" + (ghostDir * width()) + "px)").then(() => home(g));
     }
     ptr.style.opacity = 0;
     if (list.style.overflowY) { list.style.overflowY = ""; list.scrollTop = held; }
@@ -1840,7 +1864,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
       const flick = Math.abs(vx) > 1.4 && Math.abs(dx) > w * 0.15
         && (vx < 0) === (dx < 0) && Date.now() - startT >= 30;
       if (catList.length > 1 && (Math.abs(dx) >= w * COMMIT || flick)) slideTo(dx < 0 ? 1 : -1);
-      else settle();
+      else settle(true);
     } else if (mode === "pull") {
       if (dist >= TRIGGER) {
         ptr.classList.add("busy");
@@ -1881,7 +1905,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.53";
+const BUILD = "2026-08-23.54";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
