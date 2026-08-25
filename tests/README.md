@@ -44,6 +44,7 @@ If Chromium is somewhere else, set `CHROMIUM_PATH`.
 | `testsetup` | The setup link restores feeds and refuses a corrupt one |
 | `testresume` | Backgrounding releases the parked panels; a launch on a hanging network serves the cache rather than a blank page |
 | `testupdate` | Is a new build picked up rather than served from cache? |
+| `testpaywall` | Does the Yahoo Finance swap reach a saved feed list without pushing feeds at anyone who never had it, and are paywalled feeds marked and skipped by "Add all"? |
 
 ## Writing another
 

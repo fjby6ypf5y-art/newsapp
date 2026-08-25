@@ -206,6 +206,9 @@ select.sel{width:100%;background:var(--panel);border:1px solid var(--line);
   border-radius:4px;padding:1px 5px;flex:none}
 .route.direct{color:#4bd76d;border:1px solid rgba(75,215,109,.35)}
 .route.relay{color:#f5a623;border:1px solid rgba(245,166,35,.35)}
+/* A feed whose links land on a subscribe wall. Marked everywhere it can be
+   chosen, so a dead-end link is never a surprise. */
+.route.paywall{color:#c9a227;border:1px solid rgba(201,162,39,.4)}
 .row .e{font-size:0.6875rem;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cat{margin:14px 0 6px;font-size:0.6875rem;font-weight:800;letter-spacing:.9px;
   text-transform:uppercase;color:var(--dim)}
@@ -214,6 +217,7 @@ select.sel{width:100%;background:var(--panel);border:1px solid var(--line);
   background:transparent;color:var(--dim);font-size:0.8125rem;text-align:left}
 .lib button[data-on="1"]{background:var(--panel2);border-color:var(--dim);color:var(--text);font-weight:600}
 .lib button[data-on="1"]::before{content:"✓ ";color:#4bd76d}
+.lib button[data-pay="1"]::after{content:" $";color:#c9a227;font-weight:700}
 /* ---------- loading ---------- */
 /* While feeds are still arriving the stories are half built, so the whole
    reading surface is held back: dimmed, and deaf to taps and swipes. The
@@ -346,9 +350,12 @@ body.busy .chips{filter:saturate(.3)}
 // list, cached stories and settings on every device that already has them.
 const KEY = "breaking.v1";
 
-/* Curated feed library. Everything here is a free, non-paywalled publisher
-   that offers first-party RSS - no aggregator bridges (they go down) and no
-   metered outlets whose links dead-end on a subscribe wall. */
+/* Curated feed library. Everything offers first-party RSS - no aggregator
+   bridges, they go down. Most of it is free to read; the handful of metered
+   outlets whose links dead-end on a subscribe wall carry a fourth field,
+   `paywall`, and are marked wherever they can be chosen. They are here because
+   a headline is worth reading even when the article is not: the markets desks
+   that charge for the story also tend to write the plainest titles. */
 const CATS = ["World","Business","Tech","Canada",
               "Science","Sport","Entertainment"];
 const CAT_ORDER = [...CATS, "Other"];
@@ -384,8 +391,32 @@ const CATALOG = [
   ["Business", "Investing.com",   "https://www.investing.com/rss/news.rss"],
   ["Business", "ProPublica",      "https://www.propublica.org/feeds/propublica/main"],
   ["Business", "Conversation Biz","https://theconversation.com/us/business/articles.atom"],
+
+  // Investing and markets, free to read. These are written for people who
+  // already hold the position rather than for people who might click: the
+  // titles say what the post is about, and none of them run a "you won't
+  // believe what this stock did" desk.
+  ["Business", "The Big Picture", "https://ritholtz.com/feed/"],
+  ["Business", "A Wealth of Common Sense", "https://awealthofcommonsense.com/feed/"],
+  ["Business", "Abnormal Returns","https://abnormalreturns.com/feed/"],
+  ["Business", "Musings on Markets","https://aswathdamodaran.substack.com/feed"],
+  ["Business", "Klement on Investing","https://klementoninvesting.substack.com/feed"],
+  ["Business", "Calculated Risk", "https://www.calculatedriskblog.com/feeds/posts/default?alt=rss"],
+
+  // Primary sources. The least clickbaitable headlines there are - a release
+  // titled "Consumer Price Index - July 2026" is the whole story.
   ["Business", "Federal Reserve", "https://www.federalreserve.gov/feeds/press_all.xml"],
   ["Business", "SEC Press",       "https://www.sec.gov/news/pressreleases.rss"],
+  ["Business", "BLS Releases",    "https://www.bls.gov/feed/bls_latest.rss"],
+
+  // Paywalled. The story is metered or gated; the headline is not, and these
+  // desks write the plainest ones in the business. Added only on purpose -
+  // "Add all" skips them.
+  ["Business", "FT Markets",      "https://www.ft.com/markets?format=rss", true],
+  ["Business", "WSJ Markets",     "https://feeds.a.dj.com/rss/RSSMarketsMain.xml", true],
+  ["Business", "Bloomberg Markets","https://feeds.bloomberg.com/markets/news.rss", true],
+  ["Business", "Financial Post",  "https://financialpost.com/feed/", true],
+  ["Business", "Economist Finance","https://www.economist.com/finance-and-economics/rss.xml", true],
 
   ["Tech",  "Ars Technica",       "https://feeds.arstechnica.com/arstechnica/index"],
   ["Tech",  "The Verge",          "https://www.theverge.com/rss/index.xml"],
@@ -448,9 +479,15 @@ const CATALOG = [
   ["Entertainment","The A.V. Club",   "https://www.avclub.com/rss"],
   ["Entertainment","Polygon",         "https://www.polygon.com/rss/index.xml"],
   ["Entertainment","Aftermath",       "https://aftermath.site/feed"]
-].map(([cat, name, url]) => ({ cat, name, url }));
+].map(([cat, name, url, paywall]) => paywall ? { cat, name, url, paywall:true }
+                                        : { cat, name, url });
 
 const inCatalog = url => CATALOG.find(f => f.url === url);
+
+// Whether a feed's links land on a subscribe wall. Read from the library
+// rather than from the stored feed, so a feed saved before the flag existed
+// still gets marked.
+const isPaywalled = f => !!(f.paywall || (inCatalog(f.url) || {}).paywall);
 
 let idSeq = 0;
 const newId = () => "f" + Date.now().toString(36) + (idSeq++).toString(36);
@@ -516,6 +553,24 @@ const DEAD_FEEDS = [
   "https://www.ctvnews.ca/rss/ctvnews-ca-top-stories-public-rss-1.822009"
 ];
 
+// Retired on how they write rather than on whether they answer. These fetch
+// fine; the headlines are built to be clicked rather than read, which is the
+// one thing a list of headlines cannot absorb. Delivery is the same problem as
+// DEAD_FEEDS - the URL is already in localStorage on the phone, so dropping it
+// from the library alone would change nothing there. It stays in the library,
+// so putting it back is one tap.
+const CLICKBAIT_FEEDS = [
+  "https://finance.yahoo.com/news/rssindex"
+];
+
+// Put in its place. Investing and markets writing whose titles describe the
+// piece; daily or near-daily, so Business does not go quiet without Yahoo.
+const CALMER_BUSINESS = [
+  { cat:"Business", name:"The Big Picture", url:"https://ritholtz.com/feed/" },
+  { cat:"Business", name:"A Wealth of Common Sense", url:"https://awealthofcommonsense.com/feed/" },
+  { cat:"Business", name:"Abnormal Returns", url:"https://abnormalreturns.com/feed/" }
+];
+
 // Feeds added to an existing install when a category is requested but empty.
 // Only the publishers already proven reachable in the field.
 const SEED_BUSINESS = [
@@ -538,6 +593,15 @@ const SEED_ENTERTAINMENT = [
   { cat:"Entertainment", name:"Guardian Culture",  url:"https://www.theguardian.com/culture/rss" },
   { cat:"Entertainment", name:"Variety",           url:"https://variety.com/feed/" }
 ];
+
+// Add feeds regardless of what the category already holds. Unlike
+// seedCategory this ignores "removed on purpose", so it is only for a change
+// that was asked for by name - here, replacing a feed the reader complained
+// about. Never duplicates a URL already in the list.
+function addFeeds(c, feeds) {
+  const have = new Set(c.feeds.map(f => f.url));
+  feeds.forEach(f => { if (!have.has(f.url)) c.feeds.push({ ...f, id: newId() }); });
+}
 
 // Seed a category only when it is empty, so anything removed on purpose stays
 // removed. Without this a new category is invisible until it is tapped, which
@@ -621,6 +685,17 @@ function migrate(c) {
     delete c.groupDupes;
     c.migrated = 11;
   }
+
+  // Yahoo Finance out, calmer markets writing in. Both halves have to happen
+  // here: the reader already has the Yahoo URL saved, and a new library entry
+  // is invisible until someone goes looking for it.
+  if (c.migrated < 12) {
+    const noisy = new Set(CLICKBAIT_FEEDS);
+    const dropped = c.feeds.some(f => noisy.has(f.url));
+    c.feeds = c.feeds.filter(f => !noisy.has(f.url));
+    if (dropped) addFeeds(c, CALMER_BUSINESS);
+    c.migrated = 12;
+  }
   return c;
 }
 
@@ -637,7 +712,7 @@ function normalise(c) {
 }
 
 const load = () => { try { return normalise(migrate({...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || "{}")})); }
-                     catch { return normalise({...DEFAULTS, migrated:11}); } };
+                     catch { return normalise({...DEFAULTS, migrated:12}); } };
 const save = () => localStorage.setItem(KEY, JSON.stringify(cfg));
 let cfg = load();
 // Persist immediately: migrations rewrite feed URLs and backfill categories,
@@ -1306,6 +1381,12 @@ function renderFeeds() {
         rt.textContent = hs.direct ? "direct" : "relay";
         n.appendChild(rt);
       }
+      if (isPaywalled(f)) {
+        const pw = el("span", "route paywall");
+        pw.textContent = "paywall";
+        pw.title = "Headlines are free; the article asks for a subscription";
+        n.appendChild(pw);
+      }
       g.appendChild(n);
       const u = el("div", "u");
       u.textContent = (hs && !hs.ok) ? hs.err : f.url;
@@ -1452,13 +1533,17 @@ function renderLibrary() {
     h.style.display = "flex"; h.style.alignItems = "center";
     const label = el("span"); label.textContent = cat; h.appendChild(label);
     const all = el("button");
-    const allOn = list.every(f => have.has(f.url));
+    // "Add all" is a shortcut, not a decision to start paying for five
+    // newspapers, so it works on the free feeds only. "Remove all" still
+    // clears the category, paywalled ones included.
+    const free = list.filter(f => !f.paywall);
+    const allOn = free.every(f => have.has(f.url));
     all.textContent = allOn ? "Remove all" : "Add all";
     all.style.cssText = "margin-left:auto;background:transparent;border:0;color:var(--dim);"
       + "font-size:0.6875rem;font-weight:700;letter-spacing:.6px;text-transform:uppercase;padding:0";
     all.onclick = () => {
       if (allOn) cfg.feeds = cfg.feeds.filter(f => !list.some(c => c.url === f.url));
-      else list.forEach(f => { if (!have.has(f.url)) cfg.feeds.push({ ...f, id: newId() }); });
+      else free.forEach(f => { if (!have.has(f.url)) cfg.feeds.push({ ...f, id: newId() }); });
       save(); pruneOrphans(); renderFeeds(); renderLibrary(); render();
     };
     h.appendChild(all);
@@ -1468,6 +1553,10 @@ function renderLibrary() {
       const b = el("button");
       b.textContent = f.name;
       b.dataset.on = have.has(f.url) ? "1" : "0";
+      if (f.paywall) {
+        b.dataset.pay = "1";
+        b.title = "Headlines are free; the article asks for a subscription";
+      }
       b.onclick = () => {
         if (have.has(f.url)) cfg.feeds = cfg.feeds.filter(o => o.url !== f.url);
         else cfg.feeds.push({ ...f, id: newId() });
@@ -2166,7 +2255,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-23.65";
+const BUILD = "2026-08-25.66";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

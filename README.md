@@ -217,12 +217,36 @@ and arts. There are no US or UK/Europe desks — stories from those regions that
 carry real weight arrive through the World feeds anyway, and a dedicated desk
 for each mostly added routine domestic politics.
 
-**Business** is deliberately the deepest category, and every entry is free to
-read with no metering: BBC, NPR and CBC business desks, Marketplace, CNBC,
-Yahoo Finance, Investing.com, ProPublica, The Conversation, plus Federal
-Reserve and SEC press releases as primary sources. The FT, WSJ, Bloomberg,
-Economist, Business Insider and Reuters are all left out on purpose — their
-RSS may fetch fine, but the links dead-end on a subscribe wall.
+**Business** is deliberately the deepest category. Most of it is free to read
+with no metering: BBC, NPR and CBC business desks, Marketplace, CNBC,
+Investing.com, ProPublica and The Conversation for news; The Big Picture, A
+Wealth of Common Sense, Abnormal Returns, Musings on Markets, Klement on
+Investing and Calculated Risk for investing and markets writing; Federal
+Reserve, SEC and BLS releases as primary sources — the least clickbaitable
+headlines there are, since a release called "Consumer Price Index — July 2026"
+is the whole story.
+
+**Clickbait is a reason to retire a feed.** Yahoo Finance fetched perfectly
+well and was dropped anyway: the titles were written to be clicked rather than
+read, which is the one thing a screen that is nothing but titles cannot
+absorb. Its URL is in `CLICKBAIT_FEEDS` and a migration removes it from every
+installed feed list, in the same way `DEAD_FEEDS` handles a feed that stopped
+answering — shipping a change to the library alone does nothing for a phone
+that already has the URL saved. Because a removal is only half an answer, the
+same migration adds `CALMER_BUSINESS` in its place, and only for readers who
+actually had Yahoo. It stays in the library, so putting it back is one tap.
+Investing.com is the other feed in that genre and is still there, untouched.
+
+**Paywalled feeds are offered, and marked.** The FT, WSJ, Bloomberg, Financial
+Post and Economist used to be left out because their links dead-end on a
+subscribe wall. They are in the library now, because a headline is worth
+reading even when the article is not — the desks that charge for the story
+tend to write the plainest titles. A catalogue entry carries a fourth field,
+`paywall`, and it shows up everywhere the feed can be chosen: a `$` on the
+library chip and a `paywall` tag on the feed's row, next to `direct`/`relay`.
+None is on by default, and **"Add all" adds the free feeds only** — it is a
+shortcut, not a decision to start paying for five newspapers. "Remove all"
+still clears the category, paywalled entries included.
 
 **Removing a feed removes its stories.** Cached stories live in local storage
 for 72 hours independently of the feed list, so deleting a feed used to leave
