@@ -353,9 +353,10 @@ const KEY = "breaking.v1";
 /* Curated feed library. Everything offers first-party RSS - no aggregator
    bridges, they go down. Most of it is free to read; the handful of metered
    outlets whose links dead-end on a subscribe wall carry a fourth field,
-   `paywall`, and are marked wherever they can be chosen. They are here because
-   a headline is worth reading even when the article is not: the markets desks
-   that charge for the story also tend to write the plainest titles. */
+   `paywall`, and are marked wherever they can be chosen so that a dead-end
+   link is a choice rather than a surprise. Nothing here is ranked or filtered
+   by how a publisher writes - that is the reader's call, and the reader can
+   make it with one tap. */
 const CATS = ["World","Business","Tech","Canada",
               "Science","Sport","Entertainment"];
 const CAT_ORDER = [...CATS, "Other"];
@@ -392,10 +393,8 @@ const CATALOG = [
   ["Business", "ProPublica",      "https://www.propublica.org/feeds/propublica/main"],
   ["Business", "Conversation Biz","https://theconversation.com/us/business/articles.atom"],
 
-  // Investing and markets, free to read. These are written for people who
-  // already hold the position rather than for people who might click: the
-  // titles say what the post is about, and none of them run a "you won't
-  // believe what this stock did" desk.
+  // Investing and markets specifically, rather than business news at large.
+  // Free to read.
   ["Business", "The Big Picture", "https://ritholtz.com/feed/"],
   ["Business", "A Wealth of Common Sense", "https://awealthofcommonsense.com/feed/"],
   ["Business", "Abnormal Returns","https://abnormalreturns.com/feed/"],
@@ -403,15 +402,13 @@ const CATALOG = [
   ["Business", "Klement on Investing","https://klementoninvesting.substack.com/feed"],
   ["Business", "Calculated Risk", "https://www.calculatedriskblog.com/feeds/posts/default?alt=rss"],
 
-  // Primary sources. The least clickbaitable headlines there are - a release
-  // titled "Consumer Price Index - July 2026" is the whole story.
+  // Primary sources: the release itself, ahead of anyone's write-up of it.
   ["Business", "Federal Reserve", "https://www.federalreserve.gov/feeds/press_all.xml"],
   ["Business", "SEC Press",       "https://www.sec.gov/news/pressreleases.rss"],
   ["Business", "BLS Releases",    "https://www.bls.gov/feed/bls_latest.rss"],
 
-  // Paywalled. The story is metered or gated; the headline is not, and these
-  // desks write the plainest ones in the business. Added only on purpose -
-  // "Add all" skips them.
+  // Paywalled: the headline arrives, the article asks for a subscription.
+  // Off by default and added only on purpose - "Add all" skips them.
   ["Business", "FT Markets",      "https://www.ft.com/markets?format=rss", true],
   ["Business", "WSJ Markets",     "https://feeds.a.dj.com/rss/RSSMarketsMain.xml", true],
   ["Business", "Bloomberg Markets","https://feeds.bloomberg.com/markets/news.rss", true],
@@ -553,21 +550,23 @@ const DEAD_FEEDS = [
   "https://www.ctvnews.ca/rss/ctvnews-ca-top-stories-public-rss-1.822009"
 ];
 
-// Investing and markets writing whose titles describe the piece rather than
-// bait the tap; daily or near-daily, so they actually show up in the list.
-// These supplement the Business desks already there - nothing is replaced.
-const CALMER_BUSINESS = [
+// Investing and markets feeds added to the Business list by the migration
+// below, rather than left in the library where a new entry is invisible until
+// someone goes looking for it. They go in alongside what is already there;
+// nothing is removed to make room.
+const MORE_BUSINESS = [
   { cat:"Business", name:"The Big Picture", url:"https://ritholtz.com/feed/" },
   { cat:"Business", name:"A Wealth of Common Sense", url:"https://awealthofcommonsense.com/feed/" },
   { cat:"Business", name:"Abnormal Returns", url:"https://abnormalreturns.com/feed/" }
 ];
 
-// Build .66 removed Yahoo Finance, reading a complaint about its headlines as
-// a request to drop it. It was not: the ask was to supplement it. Anything
-// that ran .66 gets it back. Fresh installs never see this - DEFAULTS carries
-// no `migrated`, so `undefined < n` is false and every migration is skipped -
-// and addFeeds will not duplicate it for the lists that still have it.
-const RESTORED_BUSINESS = [
+// Build .66 dropped Yahoo Finance from the feed list on the grounds that its
+// headlines were clickbait. The app has no business making that call - which
+// feeds are worth reading is the reader's, and it is one tap either way - so
+// this puts it back on anything that ran .66. Fresh installs never see it:
+// DEFAULTS carries no `migrated`, so `undefined < n` is false and every
+// migration is skipped. addFeeds will not duplicate it where it never left.
+const RESTORE_66 = [
   { cat:"Business", name:"Yahoo Finance", url:"https://finance.yahoo.com/news/rssindex" }
 ];
 
@@ -686,16 +685,13 @@ function migrate(c) {
     c.migrated = 11;
   }
 
-  // Yahoo Finance out, calmer markets writing in. Both halves have to happen
-  // here: the reader already has the Yahoo URL saved, and a new library entry
-  // is invisible until someone goes looking for it.
   // 12 was a Yahoo Finance removal, withdrawn before it reached main. The
   // number is burnt rather than reused: a phone that ran build .66 is already
   // sitting at 12, and reusing it would leave that phone the one device the
-  // repair below never runs on.
+  // repair never runs on.
   if (c.migrated < 13) {
-    addFeeds(c, CALMER_BUSINESS);
-    addFeeds(c, RESTORED_BUSINESS);
+    addFeeds(c, MORE_BUSINESS);
+    addFeeds(c, RESTORE_66);
     c.migrated = 13;
   }
   return c;
@@ -2257,7 +2253,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-25.67";
+const BUILD = "2026-08-25.68";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

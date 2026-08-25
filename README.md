@@ -221,32 +221,32 @@ for each mostly added routine domestic politics.
 with no metering: BBC, NPR and CBC business desks, Marketplace, CNBC, Yahoo
 Finance, Investing.com, ProPublica and The Conversation for news; The Big Picture, A
 Wealth of Common Sense, Abnormal Returns, Musings on Markets, Klement on
-Investing and Calculated Risk for investing and markets writing; Federal
-Reserve, SEC and BLS releases as primary sources — the least clickbaitable
-headlines there are, since a release called "Consumer Price Index — July 2026"
-is the whole story.
+Investing and Calculated Risk for investing and markets specifically; Federal
+Reserve, SEC and BLS releases as primary sources, ahead of anyone's write-up
+of them.
 
-**Supplementing beats replacing.** The investing feeds above were added
-because Yahoo Finance and Investing.com write for the tap rather than the
-read, and a screen that is nothing but titles cannot absorb that. Neither was
-removed: a complaint about how a feed writes is a reason to put something
-calmer next to it, not to take it away — that call belongs to whoever is
-reading, and it is one tap either way. `CALMER_BUSINESS` is added to the
-Business list by migration rather than left in the library, since a new
-library entry is invisible until someone goes looking for it.
+**The app does not grade feeds on how they write.** There is no notion of a
+noisy feed or a serious one, no scoring and no filtering by tone. A feed is a
+URL that either answers or doesn't; whether its headlines are worth reading is
+the reader's call, made with one tap on the Feeds page, and it can change
+without a release. So a request for calmer investing coverage adds feeds — the
+three in `MORE_BUSINESS`, put in the Business list by migration rather than
+left in the library, where a new entry is invisible until someone goes looking
+for it — and removes nothing.
 
-Build `.66` did remove Yahoo Finance, misreading the complaint as a request to
-drop it. `.67` puts it back via `RESTORED_BUSINESS` and burns migration number
-12 rather than reusing it — a phone that ran `.66` is already sitting at 12,
-and reusing the number would leave that phone the one device the repair never
-runs on. Fresh installs are unaffected either way: `DEFAULTS` carries no
-`migrated`, so `undefined < n` is false and every migration is skipped.
+Build `.66` got this wrong: it dropped Yahoo Finance outright and shipped a
+`CLICKBAIT_FEEDS` list to make the removal reach the phone. Both are gone.
+`.67` restores Yahoo via `RESTORE_66` and burns migration number 12 rather
+than reusing it — a phone that ran `.66` is already sitting at 12, and reusing
+the number would leave that phone the one device the repair never runs on.
+Fresh installs are unaffected either way: `DEFAULTS` carries no `migrated`, so
+`undefined < n` is false and every migration is skipped.
 
 **Paywalled feeds are offered, and marked.** The FT, WSJ, Bloomberg, Financial
 Post and Economist used to be left out because their links dead-end on a
-subscribe wall. They are in the library now, because a headline is worth
-reading even when the article is not — the desks that charge for the story
-tend to write the plainest titles. A catalogue entry carries a fourth field,
+subscribe wall. They are in the library now: a headline is worth having even
+when the article is out of reach, and that trade is the reader's to make as
+long as it is visible. A catalogue entry carries a fourth field,
 `paywall`, and it shows up everywhere the feed can be chosen: a `$` on the
 library chip and a `paywall` tag on the feed's row, next to `direct`/`relay`.
 None is on by default, and **"Add all" adds the free feeds only** — it is a

@@ -1,6 +1,6 @@
 // Supplementing Business, and the paywall marking
 //
-//   - the calmer markets feeds reach a feed list that already exists
+//   - the added markets feeds reach a feed list that already exists
 //   - nothing already in that list is removed - Yahoo Finance in particular,
 //     which build .66 dropped by mistake and .67 puts back
 //   - a feed removed by hand afterwards stays removed
