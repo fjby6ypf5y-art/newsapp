@@ -32,8 +32,8 @@ something that went wrong on the device.
 - **Feed URLs cannot be verified from here.** The sandbox has no outbound
   network, so any feed shipped in the catalogue is a guess until the phone
   says otherwise. That is why there are health dots, a "Test all feeds"
-  button, and the `DEAD_FEEDS`/`SWAPPED`/`CLICKBAIT_FEEDS` migration
-  mechanisms. Do not claim a feed works.
+  button, and the `DEAD_FEEDS`/`SWAPPED` migration mechanisms. Do not claim a
+  feed works.
 - **Cached stories outlive the feed they came from.** Removing a feed without
   `pruneOrphans()` leaves its headlines on screen.
 - **The three panels are never created, destroyed, reparented or restyled.**

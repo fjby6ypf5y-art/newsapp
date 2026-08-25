@@ -1,9 +1,9 @@
-// The clickbait swap and the paywall marking
+// Supplementing Business, and the paywall marking
 //
-//   - a stored feed list holding Yahoo Finance loses it on upgrade, and gains
-//     the calmer markets feeds in its place
-//   - Yahoo's cached stories go with it, rather than lingering for 72h
-//   - a reader who had already removed Yahoo gets nothing pushed at them
+//   - the calmer markets feeds reach a feed list that already exists
+//   - nothing already in that list is removed - Yahoo Finance in particular,
+//     which build .66 dropped by mistake and .67 puts back
+//   - a feed removed by hand afterwards stays removed
 //   - paywalled library entries are marked, and "Add all" leaves them alone
 //
 // Run with:  node tests/testpaywall.mjs
@@ -35,7 +35,7 @@ const names=async()=>(await cfg()).feeds.map(f=>f.name);
 const YAHOO='https://finance.yahoo.com/news/rssindex';
 const CALM=['The Big Picture','A Wealth of Common Sense','Abnormal Returns'];
 
-console.log('=== a reader who had Yahoo Finance ===');
+console.log('=== a reader who has Yahoo Finance ===');
 await page.addInitScript(y=>{
   // Runs on every navigation, reloads included - seed once, or the reload
   // below would restore the pre-migration config and prove nothing.
@@ -45,23 +45,47 @@ await page.addInitScript(y=>{
     {id:'a',cat:'World',name:'BBC World',url:'https://feeds.bbci.co.uk/news/world/rss.xml'},
     {id:'b',cat:'Business',name:'Yahoo Finance',url:y},
     {id:'c',cat:'Business',name:'CBC Business',url:'https://rss.cbc.ca/lineup/business.xml'}]}));
-  // a cached headline from the feed about to be retired
   localStorage.setItem('breaking.v1.items',JSON.stringify([
-    {source:'Yahoo Finance',title:'You Won’t Believe This Stock',link:'https://x/y',ts:Date.now()},
+    {source:'Yahoo Finance',title:'One stock, up',link:'https://x/y',ts:Date.now()},
     {source:'CBC Business',title:'Bank holds rate',link:'https://x/c',ts:Date.now()}]));
 },YAHOO);
 await page.goto('http://localhost:8083/index.html');await page.waitForTimeout(3500);
 
 const c1=await cfg();
 console.log('  migrated to      :',c1.migrated);
-console.log('  Yahoo still there:',c1.feeds.some(f=>f.url===YAHOO),'(must be false)');
-console.log('  added in its place:',CALM.filter(n=>c1.feeds.some(f=>f.name===n)));
+console.log('  Yahoo still there:',c1.feeds.some(f=>f.url===YAHOO),'(must be true - supplement, not replace)');
+console.log('  added alongside  :',CALM.filter(n=>c1.feeds.some(f=>f.name===n)));
+console.log('  Yahoo duplicated :',c1.feeds.filter(f=>f.url===YAHOO).length,'(must be 1)');
 console.log('  full list        :',await names());
 const left=await page.evaluate(()=>[...new Set(JSON.parse(localStorage.getItem('breaking.v1.items')).map(i=>i.source))]);
-console.log('  cached sources   :',left,'(Yahoo Finance must be gone - pruneOrphans)');
-if(c1.feeds.some(f=>f.url===YAHOO)) console.log('*** Yahoo Finance survived the migration');
-if(CALM.some(n=>!c1.feeds.some(f=>f.name===n))) console.log('*** replacement feeds were not added');
-if(left.includes('Yahoo Finance')) console.log('*** Yahoo headlines outlived the feed');
+console.log('  cached sources   :',left,'(Yahoo headlines must survive - its feed is still here)');
+if(!c1.feeds.some(f=>f.url===YAHOO)) console.log('*** Yahoo Finance was removed');
+if(c1.feeds.filter(f=>f.url===YAHOO).length!==1) console.log('*** Yahoo Finance was duplicated');
+if(CALM.some(n=>!c1.feeds.some(f=>f.name===n))) console.log('*** the supplementary feeds were not added');
+if(!left.includes('Yahoo Finance')) console.log('*** Yahoo headlines were pruned from a feed that is still subscribed');
+
+console.log('\n=== a phone that already ran build .66 gets Yahoo back ===');
+const ctx3=await b.newContext({...devices['iPhone 14 Pro']});const p3=await ctx3.newPage();
+await ctx3.route('**/*',route=>{const u=route.request().url();
+ if(u.startsWith('http://localhost:8083'))return route.continue();
+ if(!u.includes('allorigins'))return route.abort('failed');
+ return route.fulfill({status:200,contentType:'application/xml',
+  body:`<?xml version="1.0"?><rss version="2.0"><channel><title>t</title></channel></rss>`});});
+p3.on('pageerror',e=>errs.push(e.message));
+// exactly what .66 left behind: migrated 12, Yahoo gone, the three added
+await p3.addInitScript(()=>localStorage.setItem('breaking.v1',JSON.stringify({migrated:12,
+  proxies:['https://api.allorigins.win/raw?url='],feeds:[
+  {id:'a',cat:'Business',name:'CBC Business',url:'https://rss.cbc.ca/lineup/business.xml'},
+  {id:'d',cat:'Business',name:'The Big Picture',url:'https://ritholtz.com/feed/'},
+  {id:'e',cat:'Business',name:'A Wealth of Common Sense',url:'https://awealthofcommonsense.com/feed/'},
+  {id:'f',cat:'Business',name:'Abnormal Returns',url:'https://abnormalreturns.com/feed/'}]})));
+await p3.goto('http://localhost:8083/index.html');await p3.waitForTimeout(2500);
+const c3=await p3.evaluate(()=>JSON.parse(localStorage.getItem('breaking.v1')));
+console.log('  migrated to      :',c3.migrated);
+console.log('  Yahoo restored   :',c3.feeds.some(f=>f.url===YAHOO),'(must be true)');
+console.log('  no duplicates    :',c3.feeds.length===5,'-',c3.feeds.map(f=>f.name));
+if(!c3.feeds.some(f=>f.url===YAHOO)) console.log('*** build .66 removal was never repaired');
+if(c3.feeds.length!==5) console.log('*** the repair duplicated the feeds .66 had already added');
 
 console.log('\n=== the migration is not repeated ===');
 // Remove one of the replacements by hand, reload: it must stay removed.
@@ -71,7 +95,7 @@ await page.reload();await page.waitForTimeout(2500);
 console.log('  '+CALM[0]+' back:',(await names()).includes(CALM[0]),'(must be false)');
 if((await names()).includes(CALM[0])) console.log('*** a removed feed was pushed back');
 
-console.log('\n=== a reader who never had Yahoo ===');
+console.log('\n=== a fresh install skips every migration ===');
 const ctx2=await b.newContext({...devices['iPhone 14 Pro']});const p2=await ctx2.newPage();
 await ctx2.route('**/*',route=>{const u=route.request().url();
  if(u.startsWith('http://localhost:8083'))return route.continue();
@@ -79,13 +103,16 @@ await ctx2.route('**/*',route=>{const u=route.request().url();
  return route.fulfill({status:200,contentType:'application/xml',
   body:`<?xml version="1.0"?><rss version="2.0"><channel><title>t</title></channel></rss>`});});
 p2.on('pageerror',e=>errs.push(e.message));
-await p2.addInitScript(()=>localStorage.setItem('breaking.v1',JSON.stringify({migrated:11,
-  proxies:['https://api.allorigins.win/raw?url='],feeds:[
-  {id:'a',cat:'Business',name:'CBC Business',url:'https://rss.cbc.ca/lineup/business.xml'}]})));
+// Nothing stored at all: DEFAULTS carries no `migrated`, so `undefined < n`
+// is false everywhere and the shipped list is what shows up.
 await p2.goto('http://localhost:8083/index.html');await p2.waitForTimeout(2500);
-const n2=await p2.evaluate(()=>JSON.parse(localStorage.getItem('breaking.v1')).feeds.map(f=>f.name));
-console.log('  list             :',n2,'(unchanged - nothing was complained about)');
-if(CALM.some(n=>n2.includes(n))) console.log('*** feeds pushed at a reader who never had Yahoo');
+const c2f=await p2.evaluate(()=>JSON.parse(localStorage.getItem('breaking.v1')));
+const n2=c2f.feeds.map(f=>f.name);
+console.log('  migrated         :',c2f.migrated,'(undefined - migrations never ran)');
+console.log('  Yahoo present    :',n2.includes('Yahoo Finance'),'(must be false - not a default)');
+console.log('  supplements       :',CALM.filter(n=>n2.includes(n)),'(must be empty - library only)');
+if(n2.includes('Yahoo Finance')) console.log('*** a fresh install was given Yahoo Finance');
+if(CALM.some(n=>n2.includes(n))) console.log('*** a fresh install was given the supplementary feeds');
 
 console.log('\n=== the library marks what costs money ===');
 await page.click('#open-feeds'); await page.waitForTimeout(500);

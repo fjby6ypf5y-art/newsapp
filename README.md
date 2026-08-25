@@ -218,24 +218,29 @@ carry real weight arrive through the World feeds anyway, and a dedicated desk
 for each mostly added routine domestic politics.
 
 **Business** is deliberately the deepest category. Most of it is free to read
-with no metering: BBC, NPR and CBC business desks, Marketplace, CNBC,
-Investing.com, ProPublica and The Conversation for news; The Big Picture, A
+with no metering: BBC, NPR and CBC business desks, Marketplace, CNBC, Yahoo
+Finance, Investing.com, ProPublica and The Conversation for news; The Big Picture, A
 Wealth of Common Sense, Abnormal Returns, Musings on Markets, Klement on
 Investing and Calculated Risk for investing and markets writing; Federal
 Reserve, SEC and BLS releases as primary sources — the least clickbaitable
 headlines there are, since a release called "Consumer Price Index — July 2026"
 is the whole story.
 
-**Clickbait is a reason to retire a feed.** Yahoo Finance fetched perfectly
-well and was dropped anyway: the titles were written to be clicked rather than
-read, which is the one thing a screen that is nothing but titles cannot
-absorb. Its URL is in `CLICKBAIT_FEEDS` and a migration removes it from every
-installed feed list, in the same way `DEAD_FEEDS` handles a feed that stopped
-answering — shipping a change to the library alone does nothing for a phone
-that already has the URL saved. Because a removal is only half an answer, the
-same migration adds `CALMER_BUSINESS` in its place, and only for readers who
-actually had Yahoo. It stays in the library, so putting it back is one tap.
-Investing.com is the other feed in that genre and is still there, untouched.
+**Supplementing beats replacing.** The investing feeds above were added
+because Yahoo Finance and Investing.com write for the tap rather than the
+read, and a screen that is nothing but titles cannot absorb that. Neither was
+removed: a complaint about how a feed writes is a reason to put something
+calmer next to it, not to take it away — that call belongs to whoever is
+reading, and it is one tap either way. `CALMER_BUSINESS` is added to the
+Business list by migration rather than left in the library, since a new
+library entry is invisible until someone goes looking for it.
+
+Build `.66` did remove Yahoo Finance, misreading the complaint as a request to
+drop it. `.67` puts it back via `RESTORED_BUSINESS` and burns migration number
+12 rather than reusing it — a phone that ran `.66` is already sitting at 12,
+and reusing the number would leave that phone the one device the repair never
+runs on. Fresh installs are unaffected either way: `DEFAULTS` carries no
+`migrated`, so `undefined < n` is false and every migration is skipped.
 
 **Paywalled feeds are offered, and marked.** The FT, WSJ, Bloomberg, Financial
 Post and Economist used to be left out because their links dead-end on a

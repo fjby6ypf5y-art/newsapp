@@ -553,22 +553,22 @@ const DEAD_FEEDS = [
   "https://www.ctvnews.ca/rss/ctvnews-ca-top-stories-public-rss-1.822009"
 ];
 
-// Retired on how they write rather than on whether they answer. These fetch
-// fine; the headlines are built to be clicked rather than read, which is the
-// one thing a list of headlines cannot absorb. Delivery is the same problem as
-// DEAD_FEEDS - the URL is already in localStorage on the phone, so dropping it
-// from the library alone would change nothing there. It stays in the library,
-// so putting it back is one tap.
-const CLICKBAIT_FEEDS = [
-  "https://finance.yahoo.com/news/rssindex"
-];
-
-// Put in its place. Investing and markets writing whose titles describe the
-// piece; daily or near-daily, so Business does not go quiet without Yahoo.
+// Investing and markets writing whose titles describe the piece rather than
+// bait the tap; daily or near-daily, so they actually show up in the list.
+// These supplement the Business desks already there - nothing is replaced.
 const CALMER_BUSINESS = [
   { cat:"Business", name:"The Big Picture", url:"https://ritholtz.com/feed/" },
   { cat:"Business", name:"A Wealth of Common Sense", url:"https://awealthofcommonsense.com/feed/" },
   { cat:"Business", name:"Abnormal Returns", url:"https://abnormalreturns.com/feed/" }
+];
+
+// Build .66 removed Yahoo Finance, reading a complaint about its headlines as
+// a request to drop it. It was not: the ask was to supplement it. Anything
+// that ran .66 gets it back. Fresh installs never see this - DEFAULTS carries
+// no `migrated`, so `undefined < n` is false and every migration is skipped -
+// and addFeeds will not duplicate it for the lists that still have it.
+const RESTORED_BUSINESS = [
+  { cat:"Business", name:"Yahoo Finance", url:"https://finance.yahoo.com/news/rssindex" }
 ];
 
 // Feeds added to an existing install when a category is requested but empty.
@@ -596,8 +596,8 @@ const SEED_ENTERTAINMENT = [
 
 // Add feeds regardless of what the category already holds. Unlike
 // seedCategory this ignores "removed on purpose", so it is only for a change
-// that was asked for by name - here, replacing a feed the reader complained
-// about. Never duplicates a URL already in the list.
+// that was asked for by name - here, feeds the reader asked to have added.
+// Never duplicates a URL already in the list.
 function addFeeds(c, feeds) {
   const have = new Set(c.feeds.map(f => f.url));
   feeds.forEach(f => { if (!have.has(f.url)) c.feeds.push({ ...f, id: newId() }); });
@@ -689,12 +689,14 @@ function migrate(c) {
   // Yahoo Finance out, calmer markets writing in. Both halves have to happen
   // here: the reader already has the Yahoo URL saved, and a new library entry
   // is invisible until someone goes looking for it.
-  if (c.migrated < 12) {
-    const noisy = new Set(CLICKBAIT_FEEDS);
-    const dropped = c.feeds.some(f => noisy.has(f.url));
-    c.feeds = c.feeds.filter(f => !noisy.has(f.url));
-    if (dropped) addFeeds(c, CALMER_BUSINESS);
-    c.migrated = 12;
+  // 12 was a Yahoo Finance removal, withdrawn before it reached main. The
+  // number is burnt rather than reused: a phone that ran build .66 is already
+  // sitting at 12, and reusing it would leave that phone the one device the
+  // repair below never runs on.
+  if (c.migrated < 13) {
+    addFeeds(c, CALMER_BUSINESS);
+    addFeeds(c, RESTORED_BUSINESS);
+    c.migrated = 13;
   }
   return c;
 }
@@ -712,7 +714,7 @@ function normalise(c) {
 }
 
 const load = () => { try { return normalise(migrate({...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || "{}")})); }
-                     catch { return normalise({...DEFAULTS, migrated:12}); } };
+                     catch { return normalise({...DEFAULTS, migrated:13}); } };
 const save = () => localStorage.setItem(KEY, JSON.stringify(cfg));
 let cfg = load();
 // Persist immediately: migrations rewrite feed URLs and backfill categories,
@@ -2255,7 +2257,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-25.66";
+const BUILD = "2026-08-25.67";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
