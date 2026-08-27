@@ -310,7 +310,7 @@ body.busy .chips{filter:saturate(.3)}
   <p class="hint" id="relay-count"></p>
 
   <h3>Fetch relay</h3>
-  <input type="text" id="proxy" placeholder="https://api.allorigins.win/raw?url=">
+  <textarea id="proxy" spellcheck="false" rows="3" placeholder="https://api.allorigins.win/raw?url="></textarea>
   <p class="hint">News sites block direct browser requests (CORS). Each feed is tried
   directly first, then through these relays in order, one URL-prefix per line.
   A relay sees your IP address and which feeds you fetch, so the fewer feeds
@@ -509,7 +509,6 @@ const DEFAULTS = {
   ],
   proxies: [
     "https://api.allorigins.win/raw?url=",
-    "https://corsproxy.io/?url=",
     "https://api.codetabs.com/v1/proxy?quest="
   ],
   autoRefresh: true,
@@ -1669,6 +1668,11 @@ $("#s-auto").onchange   = e => { cfg.autoRefresh = e.target.checked; save(); };
 $("#s-idle").onchange   = e => { cfg.idleResetMin = +e.target.value || 0; save(); markSeen(); };
 $("#s-direct").onchange = e => {
   cfg.directOnly = e.target.checked; save();
+  routes = {}; localStorage.setItem(KEY + ".routes", "{}");   // re-probe from scratch
+};
+$("#proxy").onchange = e => {
+  cfg.proxies = e.target.value.split("\n").map(s => s.trim()).filter(Boolean);
+  save();
   routes = {}; localStorage.setItem(KEY + ".routes", "{}");   // re-probe from scratch
 };
 
