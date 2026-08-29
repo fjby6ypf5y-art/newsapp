@@ -317,8 +317,13 @@ body.busy .chips{filter:saturate(.3)}
 
   <h3>Fetch relay</h3>
   <textarea id="proxy" spellcheck="false" rows="3" placeholder="https://api.allorigins.win/raw?url="></textarea>
+  <p class="hint" id="relay-health"></p>
   <p class="hint">News sites block direct browser requests (CORS). Each feed is tried
-  directly first, then through these relays in order, one URL-prefix per line.
+  directly first, then through the relays, one URL-prefix per line. They are
+  tried fastest-first from what they have actually done on this phone, several
+  at a time rather than one after another, and a relay that has just failed
+  twice sits out for ten minutes instead of costing every remaining feed a
+  timeout.
   A relay sees your IP address and which feeds you fetch, so the fewer feeds
   that need one, the less anybody learns about your reading. Feeds on a relay
   are re-tested directly every few hours, in case the publisher adds CORS
@@ -757,6 +762,14 @@ function resetTabIfStale() {
   return true;
 }
 let loading  = false;
+// "loading" means a refresh is in flight, which is what a second refresh has
+// to queue behind. "holding" means the reader is being made to wait for it,
+// which is a different and much rarer thing: a background pass must never
+// take the chips and the swipe away, and even a foreground one only gets the
+// screen for as long as it takes for the near feeds to arrive.
+let holding  = false;
+let busyTimer = 0;
+const BUSY_MAX = 4000;
 let queued   = null, queuedScope, queuedOpts;
 // One "cycle" is a staged refresh: the categories within reach first, the rest
 // behind them. Both passes report as one thing.
@@ -802,15 +815,89 @@ try { routes = JSON.parse(localStorage.getItem(KEY + ".routes") || "{}"); } catc
 // last error string.
 let attemptLog = {};
 
+// One attempt's ceiling. Anything slower than this is not worth waiting for
+// when there is another relay that might answer sooner.
 const TIMEOUT = 7000;
+// How long a candidate gets to itself before the next one is started
+// alongside it. Trying candidates strictly one after another meant one slow
+// relay cost its full timeout before the next was even asked - with five
+// relays configured, a feed nobody could reach took the best part of a
+// minute, and every feed in the refresh paid it. Now a quiet candidate is
+// overtaken rather than waited out, and the first answer wins.
+const HEDGE_MS = 1800;
+// The ceiling on one grab(), however many relays are configured. Adding a
+// sixth relay should widen the search, not lengthen the wait.
+const DEADLINE = 15000;
+// A relay that has just failed twice is not asked again for every remaining
+// feed in the same refresh: that is how one dead relay turned into sixteen
+// timeouts. It sits out until the cooldown expires.
+const RELAY_FAILS = 2, RELAY_COOLDOWN_MS = 10 * 60 * 1000;
+// Requests in flight to any one host. Past this the browser queues them
+// itself, invisibly, and a queued request spends its timeout sitting in the
+// queue rather than talking to anybody - which reads as a relay being slow
+// when it is really the phone holding the request back.
+const PER_HOST = 4;
+
+// What each relay has actually done for this phone: how often it answered,
+// how quickly, and whether it is failing right now. Candidates are tried
+// best-first from this, so the list in Settings is a set of relays to choose
+// between rather than a running order to work through.
+let relays = {};
+try { relays = JSON.parse(localStorage.getItem(KEY + ".relays") || "{}"); } catch {}
+const saveRelays = () => { try { localStorage.setItem(KEY + ".relays", JSON.stringify(relays)); } catch {} };
+
+function noteRelay(host, ok, ms) {
+  const s = relays[host] || (relays[host] = { ok: 0, fail: 0, ms: 0, run: 0, until: 0 });
+  if (ok) {
+    s.ok++; s.run = 0; s.until = 0;
+    // Weighted towards the recent: a relay that was fast last month and is
+    // slow this morning should sort like a slow relay.
+    s.ms = s.ms ? Math.round(s.ms * 0.7 + ms * 0.3) : ms;
+  } else {
+    s.fail++; s.run++;
+    if (s.run >= RELAY_FAILS) s.until = Date.now() + RELAY_COOLDOWN_MS;
+  }
+}
+
+// Lower is better: typical latency, plus a penalty for how often it fails.
+// An untried relay scores as if it were mediocre - ahead of a relay that has
+// been failing, behind one that has been answering.
+const relayScore = host => {
+  const s = relays[host];
+  if (!s || !(s.ok + s.fail)) return 3000;
+  return (s.ms || 2500) + (1 - s.ok / (s.ok + s.fail)) * 8000;
+};
+
+const hostOf = u => { try { return new URL(u, location.href).host; } catch { return String(u); } };
+
+// Per-host gate. The slot is taken before the request goes out and handed
+// straight to whoever is waiting when it comes back.
+const inFlight = {}, waiting = {};
+function hostSlot(host) {
+  inFlight[host] = inFlight[host] || 0;
+  if (inFlight[host] < PER_HOST) { inFlight[host]++; return Promise.resolve(); }
+  return new Promise(r => (waiting[host] = waiting[host] || []).push(r));
+}
+function hostFree(host) {
+  const q = waiting[host];
+  if (q && q.length) return q.shift()();
+  inFlight[host] = Math.max(0, (inFlight[host] || 1) - 1);
+}
 
 // Turn a raw fetch failure into a short, specific reason instead of a
 // generic browser message like "Failed to fetch" or "The operation was aborted".
-async function tryOnce(target) {
-  const ctl = new AbortController();
+async function tryOnce(target, ctl) {
+  const host = hostOf(target);
+  await hostSlot(host);
+  if (ctl.cancelled) { hostFree(host); throw new Error("not needed"); }
+  // The clock starts when the request actually goes out, not while it is
+  // queued behind other requests to the same host.
   const timer = setTimeout(() => ctl.abort(), TIMEOUT);
   try {
-    const res = await fetch(target, { signal: ctl.signal, cache: "no-store" });
+    // no-cache rather than no-store: the browser still revalidates with the
+    // server, but a feed that has not changed can come back as a 304 with no
+    // body to download. no-store forbade even that.
+    const res = await fetch(target, { signal: ctl.signal, cache: "no-cache" });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const text = await res.text();
     if (!text.trim()) throw new Error("empty response");
@@ -822,7 +909,7 @@ async function tryOnce(target) {
     // not something this app can see past.
     if (e instanceof TypeError) throw new Error("blocked or unreachable");
     throw e;
-  } finally { clearTimeout(timer); }
+  } finally { clearTimeout(timer); hostFree(host); }
 }
 
 // Best-effort label for an attempt: "direct" for the publisher itself,
@@ -832,48 +919,135 @@ const hostLabel = prefix => {
   try { return new URL(prefix).host; } catch { return prefix; }
 };
 
-async function grab(url) {
+// The order to try for one feed: the publisher itself and every relay not
+// currently sitting out, best-first, with whatever worked last time in front.
+function candidatesFor(url) {
+  const direct = { target: url, label: "direct", i: 0 };
   // Direct-only mode drops the relays entirely: nothing but your phone and the
   // publisher, at the cost of every feed that needs a relay to be reachable.
-  const all = cfg.directOnly ? [url] : [url, ...cfg.proxies.map(p => p + encodeURIComponent(url))];
-  const labels = cfg.directOnly ? ["direct"] : ["direct", ...cfg.proxies.map(hostLabel)];
+  if (cfg.directOnly) return [direct];
+
+  const all = cfg.proxies.map((p, n) => ({ target: p + encodeURIComponent(url), label: hostLabel(p), i: n + 1 }));
+  const now = Date.now();
+  let usable = all.filter(r => !(relays[r.label] && relays[r.label].until > now));
+  // Every relay is in cooldown. Fetching nothing at all is worse than one more
+  // attempt, so take the one whose cooldown expires soonest and try it.
+  if (!usable.length && all.length)
+    usable = [all.slice().sort((a, b) => relays[a.label].until - relays[b.label].until)[0]];
+  usable.sort((a, b) => relayScore(a.label) - relayScore(b.label));
 
   const memo = routes[url];
   const first = memo && typeof memo === "object" ? memo.i : memo;
   const probedAt = memo && typeof memo === "object" ? memo.t : 0;
   const stale = Date.now() - (probedAt || 0) > REPROBE_MS;
 
-  // Retry direct first when the memo is stale, so a feed can climb back off
-  // the relay; otherwise start with whatever answered last time.
-  const order = (Number.isInteger(first) && all[first] && !(first !== 0 && stale))
-    ? [first, ...all.keys()].filter((v, i, arr) => arr.indexOf(v) === i)
-    : [...all.keys()];
+  let order;
+  if (first === 0) order = [direct, ...usable];
+  else if (Number.isInteger(first) && all[first - 1]) {
+    const won = all[first - 1];
+    // A feed that goes through a relay is re-probed directly every few hours,
+    // in case the publisher has added CORS support since. A blocked direct
+    // fetch fails in milliseconds, so leading with it costs almost nothing -
+    // and when it does work the relay stops seeing that feed.
+    order = stale ? [direct, won, ...usable] : [won, ...usable, direct];
+  } else order = [direct, ...usable];
 
+  const seen = new Set();
+  return order.filter(c => c && !seen.has(c.target) && seen.add(c.target));
+}
+
+// Race the candidates, staggered: start the most likely one, and if it has
+// not answered within HEDGE_MS start the next alongside it rather than
+// waiting it out. First success wins and the rest are aborted.
+function grab(url) {
+  const cands = candidatesFor(url);
   const attempts = [];
-  let lastErr;
-  for (const idx of order) {
-    const t0 = Date.now();
-    try {
-      const text = await tryOnce(all[idx]);
-      attempts.push({ host: labels[idx], ok: true, ms: Date.now() - t0 });
-      attemptLog[url] = attempts;
-      routes[url] = { i: idx, t: Date.now() };
-      localStorage.setItem(KEY + ".routes", JSON.stringify(routes));
-      return text;
-    } catch (e) {
-      attempts.push({ host: labels[idx], ok: false, err: e.message, ms: Date.now() - t0 });
-      lastErr = e;
-    }
-  }
   attemptLog[url] = attempts;
-  delete routes[url];
-  localStorage.setItem(KEY + ".routes", JSON.stringify(routes));
-  // One line per attempt, e.g. "direct: blocked or unreachable (210ms) ·
-  // allorigins.win: HTTP 429 (640ms) · codetabs.com: timed out (7s) (7002ms)"
-  const summary = attempts.map(a => a.host + ": " + a.err + " (" + a.ms + "ms)").join(" · ");
-  const err = new Error(summary || (lastErr && lastErr.message) || "unreachable");
-  err.attempts = attempts;
-  throw err;
+
+  return new Promise((resolve, reject) => {
+    let launched = 0, live = 0, done = false;
+    const running = [];              // candidates still in flight, oldest first
+    let hedge = null, deadline = null;
+
+    const stop = () => {
+      clearTimeout(hedge); clearTimeout(deadline);
+      running.forEach(r => { r.ctl.cancelled = true; try { r.ctl.abort(); } catch {} });
+    };
+    const win = (text, c) => {
+      done = true;
+      // A relay that was still thinking about it when somebody else answered
+      // counts against that relay. Without this a relay that simply hangs is
+      // never recorded as failing - it is cancelled, not rejected - so it
+      // keeps its optimistic score and gets tried first forever.
+      running.forEach(r => {
+        if (r.c === c || Date.now() - r.t0 < HEDGE_MS) return;
+        if (r.c.i) noteRelay(r.c.label, false, Date.now() - r.t0);
+        attempts.push({ host: r.c.label, ok: false, err: "overtaken", ms: Date.now() - r.t0 });
+      });
+      stop();
+      routes[url] = { i: c.i, t: Date.now() };
+      localStorage.setItem(KEY + ".routes", JSON.stringify(routes));
+      saveRelays();
+      resolve(text);
+    };
+    const lose = () => {
+      if (done || live > 0 || launched < cands.length) return;
+      done = true; stop();
+      delete routes[url];
+      localStorage.setItem(KEY + ".routes", JSON.stringify(routes));
+      saveRelays();
+      // One line per attempt, e.g. "direct: blocked or unreachable (210ms) ·
+      // allorigins.win: HTTP 429 (640ms) · codetabs.com: timed out (7s)"
+      const err = new Error(attempts.map(a => a.host + ": " + a.err + " (" + a.ms + "ms)").join(" · ") || "unreachable");
+      err.attempts = attempts;
+      reject(err);
+    };
+    const launch = () => {
+      if (done) return;
+      if (launched >= cands.length) return lose();
+      const c = cands[launched++];
+      const ctl = new AbortController();
+      const t0 = Date.now();
+      const rec = { ctl, c, t0 };
+      running.push(rec);
+      live++;
+      const drop = () => { const i = running.indexOf(rec); if (i >= 0) running.splice(i, 1); };
+      tryOnce(c.target, ctl).then(text => {
+        live--; drop();
+        if (done) return;
+        attempts.push({ host: c.label, ok: true, ms: Date.now() - t0 });
+        if (c.i) noteRelay(c.label, true, Date.now() - t0);
+        win(text, c);
+      }, e => {
+        live--; drop();
+        // A candidate we cancelled ourselves has already been accounted for.
+        if (done || ctl.cancelled) return;
+        attempts.push({ host: c.label, ok: false, err: e.message, ms: Date.now() - t0 });
+        if (c.i) noteRelay(c.label, false, Date.now() - t0);
+        clearTimeout(hedge); hedge = null;
+        launch();                       // nothing left to hedge against
+      });
+      clearTimeout(hedge);
+      hedge = setTimeout(() => { hedge = null; launch(); }, HEDGE_MS);
+    };
+
+    deadline = setTimeout(() => {
+      if (done) return;
+      attempts.push({ host: "all " + cands.length + " routes", ok: false, err: "gave up", ms: DEADLINE });
+      launched = cands.length; live = 0;
+      lose();
+    }, DEADLINE);
+    launch();
+  });
+}
+
+// A cheap fingerprint of what a feed just sent. If it is byte-identical to
+// last time there is nothing new in it, and parsing it, merging it and
+// rebuilding the list is work with a known-empty result.
+function sig(text) {
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;
+  return text.length + ":" + h.toString(36);
 }
 
 const txt = (node, ...names) => {
@@ -983,57 +1157,115 @@ async function refresh(scope, opts) {
     return queued;
   }
   const o = opts || {};
-  const feeds = Array.isArray(scope) ? scope : cfg.feeds;
+  const asked = Array.isArray(scope) ? scope : cfg.feeds;
   const scoped = Array.isArray(scope);
   const name = o.name ? o.name + " " : "";
-  if (!feeds.length) { setStatus(scoped ? "No feeds in " + active : "No feeds yet"); return; }
+  if (!asked.length) { setStatus(scoped ? "No feeds in " + active : "No feeds yet"); return; }
+
+  // Fetching a feed the phone read a minute ago cannot produce a newer story,
+  // so an automatic refresh leaves it alone. Anything you asked for by hand -
+  // the arrow, a pull, Test all feeds - passes no maxAge and refetches
+  // everything, because "I just asked" is the one case where a stale answer
+  // is not good enough.
+  const have = new Set(items.map(i => i.source));
+  const current = o.maxAge
+    ? asked.filter(f => {
+        const h = health[f.url];
+        // Recent *and* already on screen. A feed checked by "Test all feeds"
+        // is recent but contributed no stories, and skipping it would leave
+        // the category empty.
+        return h && h.ok && Date.now() - h.at < o.maxAge && have.has(f.name);
+      })
+    : [];
+  const feeds = current.length ? asked.filter(f => !current.includes(f)) : asked;
+  if (!feeds.length) {
+    const last = Math.max(...current.map(f => health[f.url].at));
+    setStatus("Up to date · " + asked.length + " " + name + "feed"
+      + (asked.length === 1 ? "" : "s") + " checked " + timeAgo(last));
+    return;
+  }
+
   loading = true;
   // A background pass is not something the reader is waiting on, so it does
-  // not hold the screen back.
-  if (!o.quiet) setBusy(true);
+  // not hold the screen back. Nor does one that has gone on too long: the
+  // stragglers still land and still render, but after BUSY_MAX the reader
+  // gets the screen back rather than watching a dimmed list wait on a relay.
+  if (!o.quiet) {
+    hold(true);
+    clearTimeout(busyTimer);
+    busyTimer = setTimeout(() => hold(false), BUSY_MAX);
+  }
   $("#refresh").style.opacity = ".4";
   // The status line names what asked for the fetch. Without it, a refresh you
   // did not expect is indistinguishable from one you did.
   const why = o.why ? " · " + o.why : "";
+  const skipped = current.length ? " · " + current.length + " already current" : "";
   setStatus(o.quiet && o.summary
     ? "Updating the rest in the background" + why + "…"
     : "Fetching " + feeds.length + " " + name
-      + "feed" + (feeds.length === 1 ? "" : "s") + why + "…");
+      + "feed" + (feeds.length === 1 ? "" : "s") + why + skipped + "…");
 
   const merged = new Map(items.map(i => [i.id, i]));
   const total = feeds.length;
-  let ok = 0, done = 0, added = 0;
+  let ok = 0, done = 0, added = 0, same = 0;
   const failed = [];
 
+  // Returns whether anything actually changed. A feed can answer perfectly
+  // well and carry nothing the list does not already have, and rebuilding
+  // four hundred rows to show the same four hundred rows is the kind of work
+  // that drops a frame in the middle of a swipe.
   const absorb = list => {
+    let changed = false;
     list.forEach(it => {
       // Two feeds often carry the same story under one link. Keep whichever
       // copy is newer, so a fresher (possibly re-headlined) version wins
       // instead of whichever feed simply resolved last.
       const prev = merged.get(it.id);
-      if (!prev) added++;
+      if (!prev) { added++; changed = true; }
+      else if (it.ts > prev.ts || it.title !== prev.title) changed = true;
       if (!prev || it.ts >= prev.ts) merged.set(it.id, it);
     });
+    if (!changed) return false;
     const cutoff = Date.now() - 1000 * 60 * 60 * 72;
     items = [...merged.values()]
       .filter(i => !i.ts || i.ts > cutoff)
       .sort((a, b) => b.ts - a.ts)
       .slice(0, 400);
+    return true;
   };
 
   // Render each feed the moment it lands rather than blocking on the slowest.
   await Promise.all(feeds.map(f =>
-    grab(f.url).then(x => parseFeed(x, f.name, f.url)).then(
-      list => {
+    grab(f.url).then(
+      // Parsing happens inside this handler, so its failures have to be
+      // caught below alongside the network's: a feed that answers with
+      // something that is not a feed must mark that feed bad, not abandon
+      // the whole refresh before it saves anything.
+      text => {
+        const prev = health[f.url];
+        const fp = sig(text);
+        // Byte-identical to the last time we read it, and its stories are
+        // still in the list: there is provably nothing newer here, so it is
+        // not parsed, not merged and does not repaint the screen.
+        if (prev && prev.ok && prev.sig === fp && items.some(i => i.source === f.name)) {
+          ok++; same++;
+          health[f.url] = { ...prev, at: Date.now(), sig: fp, direct: isDirect(f.url), attempts: attemptLog[f.url] };
+          return;
+        }
+        const list = parseFeed(text, f.name, f.url);
+        health[f.url] = {
+          ok: true, at: Date.now(), n: list.length, sig: fp,
+          newest: list.reduce((m, i) => Math.max(m, i.ts || 0), 0),
+          direct: isDirect(f.url), attempts: attemptLog[f.url]
+        };
+        if (absorb(list)) scheduleRender(); else same++;
         ok++;
-        health[f.url] = { ok: true, at: Date.now(), n: list.length, direct: isDirect(f.url), attempts: attemptLog[f.url] };
-        absorb(list); scheduleRender();
-      },
-      err => {
-        failed.push(f.name);
-        health[f.url] = { ok: false, at: Date.now(), err: String(err && err.message || err), attempts: err && err.attempts };
       }
-    ).finally(() => {
+    ).catch(err => {
+      failed.push(f.name);
+      health[f.url] = { ok: false, at: Date.now(), err: String(err && err.message || err),
+        attempts: (err && err.attempts) || attemptLog[f.url] };
+    }).finally(() => {
       done++;
       if (done < total && !(o.quiet && o.summary))
         setStatus("Fetched " + done + "/" + total + " " + name + "feeds…");
@@ -1054,7 +1286,7 @@ async function refresh(scope, opts) {
       okAll.length === 0
         ? "No feeds reachable — check your connection or relays"
         : "Updated " + timeAgo(Date.now()) + " · " + okAll.length + "/" + all.length + " feeds"
-          + (cycleAdded ? " · " + cycleAdded + " new" : "")
+          + (cycleAdded ? " · " + cycleAdded + " new" : " · nothing new")
           + (badAll.length
               ? " · failed: " + (badAll.length > 2
                   ? badAll.slice(0, 2).join(", ") + " +" + (badAll.length - 2) + " more"
@@ -1070,7 +1302,7 @@ async function refresh(scope, opts) {
     setStatus(
       "Updated " + timeAgo(Date.now()) + " · " + ok + "/" + total + " "
       + name + "feeds"
-      + (added ? " · " + added + " new" : "")
+      + (added ? " · " + added + " new" : same ? " · nothing new" : "")
       + (failed.length
           ? " · failed: " + (failed.length > 2
               ? failed.slice(0, 2).join(", ") + " +" + (failed.length - 2) + " more"
@@ -1083,7 +1315,8 @@ async function refresh(scope, opts) {
   render();
   loading = false;
   if (ok > 0) { try { localStorage.setItem(KEY + ".fetchedAt", Date.now()); } catch {} }
-  setBusy(false);
+  clearTimeout(busyTimer);
+  hold(false);
   $("#refresh").style.opacity = "";
 }
 
@@ -1100,16 +1333,24 @@ function nearCats() {
   return new Set([cats[i], cats[(i + 1) % n], cats[(i - 1 + n) % n]]);
 }
 
-// Two passes: what is within reach, then the rest behind it.
-async function stagedRefresh(quiet, why) {
+// Two passes: what is within reach, then the rest behind it. maxAge, when
+// given, is how recently a feed must have answered for this pass to leave it
+// alone - see refresh().
+async function stagedRefresh(quiet, why, maxAge) {
   cycleStart = Date.now(); cycleAdded = 0;
   const near = nearCats();
   const first = cfg.feeds.filter(f => near.has(f.cat || "Other"));
   const rest  = cfg.feeds.filter(f => !near.has(f.cat || "Other"));
-  if (!first.length) return refresh(undefined, { quiet, summary: true, why });
-  await refresh(first, { quiet, summary: !rest.length, why });
-  if (rest.length) await refresh(rest, { quiet: true, summary: true, why });
+  if (!first.length) return refresh(undefined, { quiet, summary: true, why, maxAge });
+  await refresh(first, { quiet, summary: !rest.length, why, maxAge });
+  if (rest.length) await refresh(rest, { quiet: true, summary: true, why, maxAge });
 }
+
+// A launch within this of the last successful read of a feed serves what is
+// already cached rather than fetching it again. Opening the app, closing it
+// and opening it again is the commonest thing anybody does with a news
+// reader, and it should not cost sixteen network round trips.
+const FRESH_MS = 2 * 60 * 1000;
 
 /* -------------------------------------------------------------- render */
 const setStatus = (s, err) => { const n = $("#status"); n.textContent = s; n.classList.toggle("err", !!err); };
@@ -1184,6 +1425,11 @@ function feedTitle(body) {
 // Everything but the status line is held back while feeds are still landing:
 // half the stories are missing, so switching category or opening one means
 // acting on a list that is about to change under you.
+function hold(on) {
+  holding = on;
+  setBusy(on);
+}
+
 function setBusy(on) {
   if (on && window.endGesture) window.endGesture();
   document.body.classList.toggle("busy", on);
@@ -1263,7 +1509,7 @@ function renderChips() {
     b.setAttribute("aria-pressed", c === active);
     b.onclick = () => {
       // Dimming the chips keeps a finger out, but not a synthetic click.
-      if (loading) return;
+      if (holding) return;
       if (active === c) { $("#list").scrollTop = 0; return; }
       active = c;
       localStorage.setItem(KEY + ".tab", active);
@@ -1677,6 +1923,21 @@ function openFeeds(open) {
   if (!open) refreshChanged();
 }
 
+// What the relays have actually done on this phone. The order they are tried
+// in is derived from this, so it is worth being able to see it.
+function renderRelayHealth() {
+  const now = Date.now();
+  $("#relay-health").textContent = cfg.proxies.length
+    ? cfg.proxies.map(pfx => {
+        const h = hostLabel(pfx), st = relays[h];
+        if (!st || !(st.ok + st.fail)) return h + ": not tried yet";
+        return h + ": " + st.ok + " ok / " + st.fail + " failed"
+          + (st.ms ? ", ~" + st.ms + "ms" : "")
+          + (st.until > now ? ", sitting out " + Math.ceil((st.until - now) / 60000) + "m" : "");
+      }).join(" · ")
+    : "No relays configured.";
+}
+
 function openSettings(open) {
   if (open) {
     showSheet("#feeds-sheet", false);
@@ -1686,6 +1947,7 @@ function openSettings(open) {
     $("#s-idle").value     = String(cfg.idleResetMin);
     const checked = cfg.feeds.filter(f => health[f.url] && health[f.url].ok);
     const viaRelay = checked.filter(f => !health[f.url].direct);
+    renderRelayHealth();
     $("#relay-count").textContent = checked.length
       ? viaRelay.length
         ? viaRelay.length + " of " + checked.length + " working feeds go through a relay: "
@@ -1741,14 +2003,25 @@ $("#proxy").onchange = e => {
   cfg.proxies = e.target.value.split("\n").map(s => s.trim()).filter(Boolean);
   save();
   routes = {}; localStorage.setItem(KEY + ".routes", "{}");   // re-probe from scratch
+  // Editing the list is a fresh start for every relay in it: a relay you have
+  // just added should not inherit a cooldown, and one you kept deserves the
+  // benefit of the doubt now that its neighbours have changed.
+  Object.values(relays).forEach(st => { st.until = 0; st.run = 0; });
+  saveRelays();
+  renderRelayHealth();
 };
 
 $("#f-test").onclick = async () => {
   const b = $("#f-test");
   b.textContent = "Testing…"; b.disabled = true;
   await Promise.all(cfg.feeds.map(f =>
-    grab(f.url).then(x => parseFeed(x, f.name, f.url)).then(
-      list => { health[f.url] = { ok: true, at: Date.now(), n: list.length, direct: isDirect(f.url), attempts: attemptLog[f.url] }; },
+    grab(f.url).then(x => ({ list: parseFeed(x, f.name, f.url), sig: sig(x) })).then(
+      // The fingerprint goes in alongside the result: a test that dropped it
+      // would make the next refresh reparse and re-merge every feed for
+      // nothing.
+      r => { health[f.url] = { ok: true, at: Date.now(), n: r.list.length, sig: r.sig,
+        newest: r.list.reduce((m, i) => Math.max(m, i.ts || 0), 0),
+        direct: isDirect(f.url), attempts: attemptLog[f.url] }; },
       err  => { health[f.url] = { ok: false, at: Date.now(), err: String(err && err.message || err), attempts: err && err.attempts }; }
     )
   ));
@@ -1917,7 +2190,7 @@ resetTabIfStale();
 markSeen();
 render();
 if (items.length) setStatus(items.length + " stored stories · refreshing…");
-stagedRefresh(false, "app opened");
+stagedRefresh(false, "app opened", FRESH_MS);
 
 // Coming back to the app is not always a new reading session. Tapping a story
 // opens another app, and returning from it a minute later should hand back the
@@ -2199,7 +2472,7 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     // putting the panels back - the page stuck half way across.
     if (e.touches.length !== 1) { abandon(); tracking = true; return; }
     tracking = true;
-    if (animating || loading) { mode = "off"; return; }
+    if (animating || holding) { mode = "off"; return; }
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
     mode = null; dist = 0; dx = 0;
@@ -2324,7 +2597,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-25.68";
+const BUILD = "2026-08-29.69";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

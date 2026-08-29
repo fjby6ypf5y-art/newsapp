@@ -100,6 +100,17 @@ something about to rearrange itself. The remaining feeds follow in the
 background with nothing dimmed. The status line stays at full strength
 throughout and reports on every feed at the end.
 
+**The hold is bounded, and the background pass never holds at all.** Two
+things used to go wrong here. A refresh running at all — including a quiet
+background one — blocked chip taps and swipes, so the second pass quietly made
+the whole app inert for as long as it took; with five relays configured that
+was long enough to feel broken. And a foreground pass held the screen for
+however long the slowest near feed took, with no ceiling. So the two ideas are
+now separate: *a refresh is running* (what a second refresh queues behind) and
+*the reader is being made to wait for it* (what dims the screen and ignores
+taps). Only a foreground pass does the second, and only for four seconds —
+after that you get the screen back and the stragglers land as they arrive.
+
 **Coming back is not always a new session.** Tapping a story hands you to
 another app, and returning a minute later should give the screen back exactly
 as it was. So the refresh on return only happens once the stories are actually
@@ -303,12 +314,69 @@ https://news.google.com/rss/search?q=YOUR+SEARCH+when:24h&hl=en-US&gl=US&ceid=US
 
 News sites don't send CORS headers, so a browser is not allowed to read their
 RSS directly. Every feed is tried direct first, then through the public relays
-listed in Settings, in order.
+listed in Settings.
 
 This is the one part of the app that touches infrastructure you don't control.
 The relays only ever see which public feed URLs you're fetching — no personal
 data, no account. If one dies, swap in another URL-prefix relay; the list is
 just text, one per line.
+
+**The list is a set of candidates, not a running order.** Public relays are
+free, unpaid and frequently unwell, and the obvious way to use several — try
+the first, and when it fails try the next — is the worst way. Each failure has
+to time out before the next relay is even asked, so adding relays to improve
+your odds makes the app slower with every one you add. Five relays and an
+unreachable feed came to the better part of a minute, and every feed in the
+refresh paid it.
+
+So they are raced instead:
+
+- The most promising candidate starts first. If it hasn't answered in **1.8
+  seconds** the next one starts *alongside* it rather than replacing it. First
+  answer wins, the losers are aborted. A slow relay costs 1.8s, not seven.
+- One attempt is capped at 7s and the whole search at **15s**, whatever the
+  length of the list. Adding a sixth relay widens the search; it can't lengthen
+  the wait.
+- "Most promising" comes from a **scoreboard the phone keeps**: how often each
+  relay has answered, and how quickly, weighted towards the recent. A relay
+  that hangs and gets overtaken is scored as having failed — otherwise a relay
+  that never answers at all would keep its optimistic score forever, because
+  being cancelled is not the same as being rejected.
+- A relay that fails **twice in a row sits out for ten minutes**. This is the
+  one that matters most: without it, one dead relay costs a *timeout per feed*,
+  sixteen times over. Settings shows each relay's record and whether it's
+  currently sitting out.
+- At most four requests are in flight to any one host. Past that the browser
+  queues them itself, invisibly, and a queued request burns its timeout sitting
+  in the queue — which then reads as the relay being slow when it was the phone
+  holding it back.
+
+A cold start still has to try the bad relays once to find out they're bad. The
+refresh after that skips them. In the test fixture — five relays of which three
+are broken — that's the difference between 12s and 170ms.
+
+### Not fetching things that can't have changed
+
+Two separate ideas, both aimed at "only do the work if there's something new":
+
+- **A feed read in the last two minutes isn't read again** by an automatic
+  refresh. Opening the app, closing it and opening it again is the commonest
+  thing anyone does with a news reader, and it shouldn't cost sixteen network
+  round trips. The status line says `Up to date · 16 feeds checked just now`.
+  Anything you ask for by hand — the ↻ arrow, a pull, Test all feeds — ignores
+  this completely and refetches everything, because "I just asked" is the one
+  case where a stale answer isn't good enough.
+- **A response identical to last time isn't parsed.** Each successful fetch is
+  fingerprinted (length plus a 32-bit hash). If a feed comes back byte-for-byte
+  as before *and* its stories are still on screen, it is provably carrying
+  nothing new, so it isn't parsed, isn't merged and doesn't repaint the list.
+  The status line says `nothing new` rather than claiming an update.
+
+Requests use `cache: "no-cache"` rather than `no-store`, so the browser still
+revalidates with the server but an unchanged feed can come back as a 304 with
+no body to download. The obvious next step — sending `If-Modified-Since`
+ourselves — isn't available: it isn't a CORS-safelisted request header, so it
+would force a preflight that most public relays fail.
 
 ---
 
@@ -449,6 +517,8 @@ So the app minimises it, and shows you exactly where you stand:
 - Direct is always tried first, and a feed sitting on a relay is re-tested
   directly every six hours, so it climbs off as soon as the publisher adds CORS
   support rather than being stuck there because a relay once answered first.
+  (Leading with the direct attempt is nearly free: a blocked one fails in
+  milliseconds, and the relay is started 1.8s later anyway if it doesn't.)
 - **Direct only** disables relays completely. Nothing but your phone and the
   publisher. Feeds that need a relay then fail honestly rather than quietly
   routing through a stranger — check the health dots and swap them out.
