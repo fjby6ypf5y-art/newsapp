@@ -221,6 +221,19 @@ select.sel{width:100%;background:var(--panel);border:1px solid var(--line);
    need to wrap and stay fully visible instead of truncating with an ellipsis. */
 .row .e.multi{white-space:normal;overflow:visible;text-overflow:clip}
 .row .e.multi div{white-space:normal;overflow-wrap:anywhere}
+/* ---------- fetch log ---------- */
+/* One entry per failure, newest first. Everything in here is remote or
+   remote-adjacent - error strings, relay hostnames, the opening of whatever a
+   feed sent back - so every value goes in through textContent. */
+.log-entry{background:var(--panel);border:1px solid var(--line);border-radius:11px;
+  padding:9px 11px;margin-bottom:7px;font-size:0.75rem;line-height:1.45}
+.log-entry.ok{border-color:rgba(60,190,120,.35)}
+.log-entry .when{color:var(--faint);font-size:0.6875rem}
+.log-entry .who{font-weight:700;font-size:0.8125rem;margin:1px 0 3px}
+.log-entry .try{color:var(--accent);overflow-wrap:anywhere}
+.log-entry.ok .try{color:var(--dim)}
+.log-entry .body{color:var(--faint);margin-top:4px;overflow-wrap:anywhere;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.6875rem}
 .cat{margin:14px 0 6px;font-size:0.6875rem;font-weight:800;letter-spacing:.9px;
   text-transform:uppercase;color:var(--dim)}
 .lib{display:flex;flex-wrap:wrap;gap:6px}
@@ -357,7 +370,30 @@ body.busy .chips{filter:saturate(.3)}
   feeds into any other reader, or paste one in to bring feeds across. Importing
   adds to your list rather than replacing it, and skips feeds you already have.
   Folder names that match a category are kept; anything else lands in Other.</p>
+  <h3>Diagnostics</h3>
+  <button class="btn" id="open-log">Fetch log</button>
+  <p class="hint" id="log-count"></p>
+  <p class="hint">The health dots on the Feeds page say whether a feed answered
+  the <i>last</i> time it was asked. The log keeps the last 60 failures and
+  recoveries with the full detail &mdash; every relay tried, what each one said,
+  how long it took &mdash; which is the difference between "this feed is broken"
+  and "this feed fails every third refresh through one particular relay".</p>
+
   <p class="hint" id="ver"></p>
+</section>
+
+<!-- ================= fetch log ================= -->
+<section class="sheet" id="log-sheet" aria-hidden="true">
+  <div class="bar">
+    <h2 style="flex:1">Fetch log</h2>
+    <button class="iconbtn" id="close-log" aria-label="Close">&times;</button>
+  </div>
+  <div class="btns">
+    <button class="btn" id="log-copy">Copy log</button>
+    <button class="btn danger" id="log-clear">Clear</button>
+  </div>
+  <p class="hint" id="log-msg"></p>
+  <div id="log-list"></div>
 </section>
 
 <script>
@@ -746,7 +782,14 @@ function storeItems() {
   if (store(KEY + ".items", JSON.stringify(items))) return true;
   for (const keep of [200, 100, 50, 20, 0]) {
     items = items.slice(0, keep);
-    if (store(KEY + ".items", JSON.stringify(items))) return true;
+    if (store(KEY + ".items", JSON.stringify(items))) {
+      // Stories going missing with no explanation is exactly what the log is
+      // for. (It writes to a different and much smaller key, so it can still
+      // get through when this could not.)
+      logEvent({ kind: "store", name: "Story cache", why: "storage full",
+                 attempts: [{ host: "localStorage", err: "trimmed to " + keep + " stories", ms: 0 }] });
+      return true;
+    }
   }
   return false;
 }
@@ -857,6 +900,38 @@ try { routes = JSON.parse(localStorage.getItem(KEY + ".routes") || "{}"); } catc
 // health UI so a failure says *which* relay failed and *why*, not just the
 // last error string.
 let attemptLog = {};
+
+// The health dots answer "is this feed working right now". They cannot answer
+// "has it been failing all week, or only through one relay, or only since
+// Tuesday" - and that is the question you actually have when a feed goes bad,
+// because the evidence is gone by the time you go looking for it. So failures
+// and recoveries are written down as they happen.
+const LOG_MAX = 60;
+let log = [];
+try { log = JSON.parse(localStorage.getItem(KEY + ".log") || "[]"); } catch {}
+const saveLog = () => store(KEY + ".log", JSON.stringify(log));
+
+// Everything in an entry is capped on the way in. The strings come off the
+// network - an error can carry a relay's error page - and the log has to stay
+// small enough that keeping it never costs a story its place in the cache.
+function logEvent(e) {
+  log.unshift({
+    t: Date.now(),
+    k: e.kind,                                   // "fail" | "ok" | "store"
+    n: String(e.name || "").slice(0, 80),
+    u: String(e.url || "").slice(0, 200),
+    w: String(e.why || "").slice(0, 60),
+    r: String(e.reason || "").slice(0, 160),
+    a: (e.attempts || []).slice(0, 8).map(x => ({
+      h: String(x.host || "").slice(0, 60),
+      e: x.ok ? "" : String(x.err || "").slice(0, 120),
+      ms: x.ms | 0
+    })),
+    b: e.body ? String(e.body).slice(0, 160) : ""
+  });
+  if (log.length > LOG_MAX) log.length = LOG_MAX;
+  saveLog();
+}
 
 // One attempt's ceiling. Anything slower than this is not worth waiting for
 // when there is another relay that might answer sooner.
@@ -1308,7 +1383,19 @@ async function refresh(scope, opts) {
             health[f.url] = { ...prev, at: Date.now(), sig: fp, direct: isDirect(f.url), attempts: attemptLog[f.url] };
             return;
           }
-          const list = parseFeed(text, f.name, f.url);
+          let list;
+          try { list = parseFeed(text, f.name, f.url); }
+          catch (e) {
+            // What a relay hands back when it is unhappy is usually an HTML
+            // error page under a 200, which parses as "bad XML" and tells you
+            // nothing at all. The opening of the response says which it was.
+            e.body = text.slice(0, 160);
+            throw e;
+          }
+          // Worth writing down: a feed that comes back after failing is the
+          // other half of the question "is this broken, or is it flaky".
+          if (prev && !prev.ok)
+            logEvent({ kind: "ok", name: f.name, url: f.url, why: o.why, attempts: attemptLog[f.url] });
           health[f.url] = {
             ok: true, at: Date.now(), n: list.length, sig: fp,
             newest: list.reduce((m, i) => Math.max(m, i.ts || 0), 0),
@@ -1319,8 +1406,16 @@ async function refresh(scope, opts) {
         }
       ).catch(err => {
         failed.push(f.name);
-        health[f.url] = { ok: false, at: Date.now(), err: String(err && err.message || err),
-          attempts: (err && err.attempts) || attemptLog[f.url] };
+        const attempts = (err && err.attempts) || attemptLog[f.url];
+        health[f.url] = { ok: false, at: Date.now(), err: String(err && err.message || err), attempts };
+        logEvent({ kind: "fail", name: f.name, url: f.url, why: o.why,
+                   attempts: attempts || [{ host: "?", err: String(err && err.message || err), ms: 0 }],
+                   // When a relay answered and the failure came afterwards, the
+                   // reason is not in the route lines - they all say "ok". When
+                   // nothing answered, grab()'s message *is* the route lines,
+                   // and repeating it above them helps nobody.
+                   reason: attempts && attempts.some(a => a.ok) ? String(err && err.message || err) : "",
+                   body: err && err.body });
       }).finally(() => {
         done++;
         if (done < total && !(o.quiet && o.summary))
@@ -1987,6 +2082,7 @@ function showSheet(id, open) {
 function openFeeds(open) {
   if (open) {
     showSheet("#settings", false);
+    showSheet("#log-sheet", false);
     editing = null;
     renderFeeds();
     renderLibrary();
@@ -2006,8 +2102,10 @@ function openFeeds(open) {
 function openSettings(open) {
   if (open) {
     showSheet("#feeds-sheet", false);
+    showSheet("#log-sheet", false);
     $("#proxy").value      = cfg.proxies.join("\n");
     showRelayCount();
+    showLogCount();
     $("#s-auto").checked   = cfg.autoRefresh;
     $("#s-direct").checked = cfg.directOnly;
     $("#s-idle").value     = String(cfg.idleResetMin);
@@ -2024,6 +2122,74 @@ function openSettings(open) {
   showSheet("#settings", open);
   if (!open) refreshChanged();
 }
+
+// Newest first. Every value here came off the network or is derived from
+// something that did, so all of it goes in as text - the log is the one screen
+// whose whole purpose is to show you hostile input verbatim.
+const showLogCount = () => {
+  $("#log-count").textContent = log.length
+    ? log.length + " entr" + (log.length === 1 ? "y" : "ies") + ", newest " + timeAgo(log[0].t) + "."
+    : "Nothing logged yet.";
+};
+
+function renderLog() {
+  const box = $("#log-list");
+  box.innerHTML = "";
+  showLogCount();
+  if (!log.length) {
+    const p = el("p", "hint");
+    p.textContent = "Nothing logged yet. Failures and recoveries appear here as they happen.";
+    box.appendChild(p);
+    return;
+  }
+  log.forEach(e => {
+    const d = el("div", "log-entry" + (e.k === "ok" ? " ok" : ""));
+    const line = (t, cls) => { const n = el("div", cls); n.textContent = t; d.appendChild(n); };
+    line(new Date(e.t).toLocaleString() + " · " + timeAgo(e.t)
+         + (e.w ? " · " + e.w : ""), "when");
+    line((e.k === "ok" ? "recovered: " : "") + e.n, "who");
+    if (e.r) line(e.r, "try");
+    (e.a || []).forEach(a => line(a.h + ": " + (a.e || "ok") + " (" + a.ms + "ms)",
+                                  e.r ? "body" : "try"));
+    if (e.b) line("response began: " + e.b, "body");
+    if (e.u) line(e.u, "when");
+    box.appendChild(d);
+  });
+}
+
+function openLog(open) {
+  if (open) { showSheet("#settings", false); showSheet("#feeds-sheet", false); renderLog(); $("#log-msg").textContent = ""; }
+  showSheet("#log-sheet", open);
+}
+
+$("#open-log").onclick  = () => openLog(true);
+$("#close-log").onclick = () => openLog(false);
+
+// Plain text, because the point of copying it is to paste it somewhere that
+// is not this app.
+$("#log-copy").onclick = async () => {
+  const text = log.map(e =>
+    new Date(e.t).toISOString() + "  " + (e.k === "ok" ? "RECOVERED" : e.k === "store" ? "STORAGE" : "FAILED")
+    + "  " + e.n + (e.w ? "  (" + e.w + ")" : "")
+    + (e.r ? "\n  " + e.r : "")
+    + (e.u ? "\n  " + e.u : "")
+    + (e.a || []).map(a => "\n  " + a.h + ": " + (a.e || "ok") + " (" + a.ms + "ms)").join("")
+    + (e.b ? "\n  response began: " + e.b : "")
+  ).join("\n\n") || "(nothing logged)";
+  const msg = $("#log-msg");
+  try {
+    await navigator.clipboard.writeText("News build " + BUILD + "\n\n" + text);
+    msg.style.color = ""; msg.textContent = "Copied " + log.length + " entries.";
+  } catch {
+    msg.style.color = "var(--accent)";
+    msg.textContent = "Could not reach the clipboard.";
+  }
+};
+
+$("#log-clear").onclick = () => {
+  log = []; saveLog(); renderLog();
+  $("#log-msg").style.color = ""; $("#log-msg").textContent = "Cleared.";
+};
 
 $("#open-feeds").onclick     = () => openFeeds(true);
 $("#close-feeds").onclick    = () => openFeeds(false);
@@ -2749,7 +2915,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-29.70";
+const BUILD = "2026-08-29.71";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

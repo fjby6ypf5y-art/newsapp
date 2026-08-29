@@ -361,6 +361,47 @@ relay on it is another party who gets to see a feed request. Speed stopped
 being the constraint; privacy still is. Five is enough redundancy that the odds
 of all of them being down at once are not worth planning for.
 
+### The fetch log
+
+The health dots on the Feeds page answer "did this feed answer the *last* time
+it was asked". That is the wrong tense for the question you actually have when
+a feed goes bad, which is "has it been failing all week, only through one
+relay, or only since Tuesday" — and by the time you go looking, the evidence
+has been overwritten by the next refresh.
+
+So **Settings → Diagnostics → Fetch log** keeps the last 60 failures and
+recoveries. Each entry has the time, the feed, what asked for the fetch, every
+route tried with what it said and how long it took, and — when a relay answered
+and the failure came afterwards — the first 160 characters of what it actually
+sent. That last one matters more than it sounds: a relay having a bad day
+usually returns an HTML error page under a `200`, which parses as `bad XML` and
+tells you nothing, and seeing `<!doctype html>…502 Bad Gateway` in the entry
+ends the guessing immediately.
+
+**Copy log** puts the whole thing on the clipboard as plain text with the build
+stamp on top, which is the form to paste into a bug report or a session. A
+storage failure that trims the story cache is logged too, since stories quietly
+going missing is exactly the kind of thing that otherwise looks like the app
+inventing problems.
+
+How to read the common ones:
+
+| What the entry says | What it means |
+| --- | --- |
+| `blocked or unreachable` on **every** line | Nothing can reach it — the publisher is down, or so is your connection |
+| `direct: blocked` then a relay `ok`, and the feed still failed | The relay answered; look at `response began` for what it actually sent |
+| `HTTP 403` / `HTTP 429` from the relays | The publisher or the relay is refusing this traffic; another relay may work |
+| `timed out (7s)` on every line | Reachable but too slow — a feed that does this consistently is worth replacing |
+| `bad XML` with `response began: <!doctype html` | A relay error page, not the feed. Usually transient |
+| `empty response` | Answered with nothing at all, which is a relay fault more often than a publisher one |
+
+The log lives in `localStorage` under `breaking.v1.log`, capped at 60 entries
+with every string length-capped on the way in, so it cannot grow into the space
+the story cache needs. It is the one screen whose whole purpose is to display
+untrusted strings, so every value in it goes in through `textContent` —
+`testlog` serves an error page containing a `<script>` tag and checks that what
+lands on screen is characters rather than markup.
+
 ### Not fetching things that can't have changed
 
 Two separate ideas, both aimed at "only do the work if there's something new":

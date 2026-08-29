@@ -45,6 +45,7 @@ If Chromium is somewhere else, set `CHROMIUM_PATH`.
 | `testsetup` | The setup link restores feeds and refuses a corrupt one |
 | `testresume` | Backgrounding releases the parked panels; a launch on a hanging network serves the cache rather than a blank page |
 | `testrelaytrust` | Can a setup link install a relay behind your back, and can you remove one? |
+| `testlog` | Does a failure get written down with enough detail to act on, does a recovery show up, and does a hostile error string stay text? |
 | `testquota` | A feed big enough to fill the storage quota; a config that will not parse |
 | `testupdate` | Is a new build picked up rather than served from cache? |
 | `testpaywall` | Do the supplementary Business feeds reach a saved feed list without removing anything, is a fresh install left alone, and are paywalled feeds marked and skipped by "Add all"? |
