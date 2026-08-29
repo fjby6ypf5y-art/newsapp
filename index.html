@@ -954,7 +954,7 @@ const RELAY_FAILS = 2, RELAY_COOLDOWN_MS = 10 * 60 * 1000;
 // itself, invisibly, and a queued request spends its timeout sitting in the
 // queue rather than talking to anybody - which reads as a relay being slow
 // when it is really the phone holding the request back.
-const PER_HOST = 4;
+const PER_HOST = 6;
 
 // What each relay has actually done for this phone: how often it answered,
 // how quickly, and whether it is failing right now. Candidates are tried
@@ -977,13 +977,24 @@ function relayAtFault(err) {
   return code === 408 || code === 425 || code === 429 || code >= 500;
 }
 
-function noteRelay(host, ok, ms, err) {
+// outcome: "ok" | "fail" | "slow". "slow" is a relay that was still working
+// when another one answered. That is the ordinary outcome of a race and not a
+// fault: with five relays, four lose every time. Counting it as a failure
+// benched the two best relays within two feeds of a refresh starting, left
+// every feed with one route, and made the current leader unassailable - it
+// won, so it penalised the others, so they sat out, so it won. All a lost
+// race can honestly do is make a relay sort slower.
+function noteRelay(host, outcome, ms, err) {
   const s = relays[host] || (relays[host] = { ok: 0, fail: 0, ms: 0, run: 0, until: 0 });
-  if (ok) {
+  if (outcome === "ok") {
     s.ok++; s.run = 0; s.until = 0;
     // Weighted towards the recent: a relay that was fast last month and is
     // slow this morning should sort like a slow relay.
     s.ms = s.ms ? Math.round(s.ms * 0.7 + ms * 0.3) : ms;
+    return;
+  }
+  if (outcome === "slow") {
+    s.ms = s.ms ? Math.round(s.ms * 0.8 + ms * 0.2) : ms;
     return;
   }
   // The tally counts every failure, so the record in Settings stays honest.
@@ -999,6 +1010,23 @@ function noteRelay(host, ok, ms, err) {
   logEvent({ kind: "relay", name: host,
              why: "benched for " + Math.round(RELAY_COOLDOWN_MS / 60000) + " minutes",
              attempts: [{ host, err: String(err || "failed") + " (" + s.run + " in a row)", ms }] });
+}
+
+// Everything failing at once, with nothing anywhere getting as far as an HTTP
+// status, is the phone's connection - a lift, a tunnel, a dead moment between
+// wifi and cellular - and not every relay going down together. Benching them
+// for it costs ten minutes of sitting out beginning exactly when the signal
+// comes back, which is when you picked the phone up to read something.
+function forgiveRelays() {
+  const now = Date.now();
+  const benched = Object.keys(relays).filter(h => relays[h].until > now);
+  if (!benched.length && !Object.values(relays).some(st => st.run)) return;
+  Object.values(relays).forEach(st => { st.run = 0; st.until = 0; });
+  saveRelays();
+  if (benched.length)
+    logEvent({ kind: "relay", name: benched.join(", "),
+               why: "back in play \u2014 nothing at all was reachable, so it was the connection",
+               attempts: [] });
 }
 
 // Lower is better: typical latency, plus a penalty for how often it fails.
@@ -1032,6 +1060,11 @@ async function tryOnce(target, ctl) {
   const host = hostOf(target);
   await hostSlot(host);
   if (ctl.cancelled) { hostFree(host); throw new Error("not needed"); }
+  // Everything is timed from here, not from when grab() picked this candidate.
+  // Waiting for a slot behind twenty-nine other feeds is this app's doing, and
+  // charging it to the relay made a relay that answered in 600ms look like one
+  // that took five seconds.
+  ctl.startedAt = Date.now();
   // The clock starts when the request actually goes out, not while it is
   // queued behind other requests to the same host.
   const timer = setTimeout(() => ctl.abort(), TIMEOUT);
@@ -1117,14 +1150,20 @@ function grab(url) {
     };
     const win = (text, c) => {
       done = true;
-      // A relay that was still thinking about it when somebody else answered
-      // counts against that relay. Without this a relay that simply hangs is
-      // never recorded as failing - it is cancelled, not rejected - so it
-      // keeps its optimistic score and gets tried first forever.
+      // What the losers were doing when this one answered. A relay still
+      // waiting for a slot has told us nothing and is recorded as nothing;
+      // one that was genuinely on the wire and slower just sorts slower next
+      // time. Neither is a failure - see noteRelay.
       running.forEach(r => {
-        if (r.c === c || Date.now() - r.t0 < HEDGE_MS) return;
-        if (r.c.i) noteRelay(r.c.label, false, Date.now() - r.t0, "overtaken");
-        attempts.push({ host: r.c.label, ok: false, err: "overtaken", ms: Date.now() - r.t0 });
+        if (r.c === c) return;
+        if (!r.ctl.startedAt) {
+          attempts.push({ host: r.c.label, ok: false, err: "not sent", ms: 0 });
+          return;
+        }
+        const el = Date.now() - r.ctl.startedAt;
+        if (el < HEDGE_MS) return;
+        attempts.push({ host: r.c.label, ok: false, err: "overtaken", ms: el });
+        if (r.c.i) noteRelay(r.c.label, "slow", el);
       });
       stop();
       routes[url] = { i: c.i, t: Date.now() };
@@ -1154,18 +1193,19 @@ function grab(url) {
       running.push(rec);
       live++;
       const drop = () => { const i = running.indexOf(rec); if (i >= 0) running.splice(i, 1); };
+      const took = () => Date.now() - (ctl.startedAt || t0);
       tryOnce(c.target, ctl).then(text => {
         live--; drop();
         if (done) return;
-        attempts.push({ host: c.label, ok: true, ms: Date.now() - t0 });
-        if (c.i) noteRelay(c.label, true, Date.now() - t0);
+        attempts.push({ host: c.label, ok: true, ms: took() });
+        if (c.i) noteRelay(c.label, "ok", took());
         win(text, c);
       }, e => {
         live--; drop();
         // A candidate we cancelled ourselves has already been accounted for.
         if (done || ctl.cancelled) return;
-        attempts.push({ host: c.label, ok: false, err: e.message, ms: Date.now() - t0 });
-        if (c.i) noteRelay(c.label, false, Date.now() - t0, e.message);
+        attempts.push({ host: c.label, ok: false, err: e.message, ms: took() });
+        if (c.i) noteRelay(c.label, "fail", took(), e.message);
         clearTimeout(hedge); hedge = null;
         launch();                       // nothing left to hedge against
       });
@@ -1450,6 +1490,13 @@ async function refresh(scope, opts) {
       storeItems();
       saveHealth();
 
+      // See forgiveRelays: a pass where not one route anywhere answered is
+      // evidence about this phone, not about the relays.
+      if (ok === 0 && total > 1
+          && !feeds.some(f => ((health[f.url] && health[f.url].attempts) || [])
+               .some(a => a.ok || /^HTTP /.test(a.err || ""))))
+        forgiveRelays();
+
     cycleAdded += added;
     if (o.summary) {
       // Both passes of this cycle, counted from what each feed last reported.
@@ -1489,6 +1536,15 @@ async function refresh(scope, opts) {
 
     render();
     if (ok > 0) store(KEY + ".fetchedAt", Date.now());
+  } catch (e) {
+    // The screen comes back either way - that is what the finally is for - but
+    // the status line does not fix itself, and a refresh that fell over
+    // between the fetches and the summary left it stuck part-way through a
+    // count, which reads as the app still working on something it abandoned
+    // long ago. Found exactly that way, by a bug in this function.
+    setStatus("Refresh failed: " + ((e && e.message) || e), true);
+    logEvent({ kind: "app", name: "Refresh", why: o.why || "",
+               attempts: [{ host: "app", err: String((e && e.message) || e), ms: 0 }] });
   } finally {
     // Whatever happens in here, the flag has to come back down. It did not: an
     // oversized feed threw on the way to storage, `loading` stayed true, the
@@ -2171,7 +2227,7 @@ function renderLog() {
     const line = (t, cls) => { const n = el("div", cls); n.textContent = t; d.appendChild(n); };
     line(new Date(e.t).toLocaleString() + " · " + timeAgo(e.t)
          + (e.w ? " · " + e.w : ""), "when");
-    line((e.k === "ok" ? "recovered: " : e.k === "relay" ? "relay benched: " : "") + e.n, "who");
+    line((e.k === "ok" ? "recovered: " : e.k === "relay" ? "relay: " : e.k === "app" ? "the app itself: " : "") + e.n, "who");
     if (e.r) line(e.r, "try");
     (e.a || []).forEach(a => line(a.h + ": " + (a.e || "ok") + " (" + a.ms + "ms)",
                                   e.r ? "body" : "try"));
@@ -2194,7 +2250,7 @@ $("#close-log").onclick = () => openLog(false);
 $("#log-copy").onclick = async () => {
   const text = log.map(e =>
     new Date(e.t).toISOString() + "  "
-    + (e.k === "ok" ? "RECOVERED" : e.k === "store" ? "STORAGE" : e.k === "relay" ? "RELAY BENCHED" : "FAILED")
+    + (e.k === "ok" ? "RECOVERED" : e.k === "store" ? "STORAGE" : e.k === "relay" ? "RELAY" : e.k === "app" ? "APP ERROR" : "FAILED")
     + "  " + e.n + (e.w ? "  (" + e.w + ")" : "")
     + (e.r ? "\n  " + e.r : "")
     + (e.u ? "\n  " + e.u : "")
@@ -2940,7 +2996,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-29.72";
+const BUILD = "2026-08-29.73";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

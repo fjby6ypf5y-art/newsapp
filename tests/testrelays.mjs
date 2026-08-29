@@ -144,4 +144,68 @@ console.log('\n=== a 4xx on one feed must not bench the relay for the rest ===')
     benched.includes('hangs.test')?'(the one that really is down)':'*** the dead relay was benched with nothing said');
   await ctx2.close();
 }
+// Straight from a real log: one relay answered every feed, and the two that
+// lost the race were benched within two feeds of the refresh starting - so
+// every later feed had one route, and the leader could never be unseated.
+console.log('\n=== losing a race must not bench a relay ===');
+{
+  const ctx3=await b.newContext({...devices['iPhone 14 Pro']});const p3=await ctx3.newPage();
+  const FEEDS3=Array.from({length:10},(_,i)=>({id:'h'+i,cat:'World',name:'feed'+i,url:'https://pub'+i+'.test/rss'}));
+  await ctx3.route('**/*',async route=>{const u=route.request().url();
+   if(u.startsWith('http://localhost:8090'))return route.continue();
+   const host=new URL(u).host;
+   const id=(decodeURIComponent(u).match(/\/\/(pub\d+)\.test/)||[])[1]||'x';
+   if(/^pub\d/.test(host)) return route.abort('failed');
+   // quick.test must be slower than the 1.8s hedge, or the others are never
+   // started and there is no race to lose.
+   if(host==='quick.test'){ await new Promise(r=>setTimeout(r,2400));
+     return route.fulfill({status:200,contentType:'application/xml',body:body(id)}); }
+   // Both of these work perfectly well; they are simply slower than quick.test.
+   await new Promise(r=>setTimeout(r,4000));
+   return route.fulfill({status:200,contentType:'application/xml',body:body(id)});});
+  await p3.addInitScript(x=>localStorage.setItem('breaking.v1',x),
+    JSON.stringify({migrated:13,idleResetMin:0,feeds:FEEDS3,
+      proxies:['https://quick.test/p?url=','https://slower.test/p?url=','https://slowest.test/p?url=']}));
+  await p3.goto('http://localhost:8090/index.html');
+  await p3.waitForTimeout(14000);
+  const rel=await p3.evaluate(()=>JSON.parse(localStorage.getItem('breaking.v1.relays')||'{}'));
+  const bench=Object.entries(rel).filter(([,st])=>st.until>Date.now()).map(([h])=>h);
+  console.log('relay records        :', Object.entries(rel).map(([h,st])=>`${h} ${st.ok}ok/${st.fail}bad ~${st.ms}ms`).join(' · '));
+  console.log('benched              :', JSON.stringify(bench), bench.length?'*** A RELAY WAS BENCHED FOR LOSING A RACE ***':'(none — losing is not failing)');
+  const losers=Object.entries(rel).filter(([h])=>h!=='quick.test');
+  console.log('losers marked failed :', losers.map(([,st])=>st.fail).join(','), losers.every(([,st])=>st.fail===0)?'(no)':'*** counted as failures ***');
+  console.log('losers sort slower   :', losers.every(([,st])=>st.ms>1000)?'yes (that is all a lost race says)':'*** latency not recorded ***');
+  await ctx3.close();
+}
+
+// A dead moment on the phone benched every relay for ten minutes, starting
+// exactly when the signal came back.
+console.log('\n=== a total blackout is the connection, not the relays ===');
+{
+  const ctx4=await b.newContext({...devices['iPhone 14 Pro']});const p4=await ctx4.newPage();
+  let offline=true;
+  const FEEDS4=Array.from({length:4},(_,i)=>({id:'k'+i,cat:'World',name:'feed'+i,url:'https://pub'+i+'.test/rss'}));
+  await ctx4.route('**/*',async route=>{const u=route.request().url();
+   if(u.startsWith('http://localhost:8090'))return route.continue();
+   if(offline) return route.abort('failed');                 // nothing at all is reachable
+   const id=(decodeURIComponent(u).match(/\/\/(pub\d+)\.test/)||[])[1]||'x';
+   if(/^pub\d/.test(new URL(u).host)) return route.abort('failed');
+   return route.fulfill({status:200,contentType:'application/xml',body:body(id)});});
+  await p4.addInitScript(x=>localStorage.setItem('breaking.v1',x),
+    JSON.stringify({migrated:13,idleResetMin:0,feeds:FEEDS4,
+      proxies:['https://a.test/p?url=','https://b.test/p?url=']}));
+  await p4.goto('http://localhost:8090/index.html');
+  await p4.waitForTimeout(6000);
+  let rel=await p4.evaluate(()=>JSON.parse(localStorage.getItem('breaking.v1.relays')||'{}'));
+  const still=Object.entries(rel).filter(([,st])=>st.until>Date.now()).map(([h])=>h);
+  console.log('after the blackout   : benched', JSON.stringify(still),
+    still.length?'*** STILL SITTING OUT WHEN THE SIGNAL RETURNS ***':'(all back in play)');
+  offline=false;
+  await p4.click('#refresh'); await p4.waitForTimeout(4000);
+  const h=await p4.evaluate(()=>JSON.parse(localStorage.getItem('breaking.v1.health')));
+  const good=Object.values(h).filter(x=>x.ok).length;
+  console.log('once it is back      :', good+'/4 feeds', good===4?'(straight back to work)':'*** STILL FAILING ***');
+  console.log('status               :', await p4.evaluate(()=>document.querySelector('#status').textContent));
+  await ctx4.close();
+}
 srv.close();await b.close();

@@ -354,6 +354,25 @@ So they are raced instead:
   version made no distinction, and the result was the bug this rule exists for:
   two feeds a relay wouldn't serve took that relay away from the other
   fourteen, and feeds only it could reach were left with no route at all.
+- **Losing the race is not failing.** With five relays, four lose every time;
+  that is what racing *is*. Counting a lost race against a relay benched the
+  two best ones within two feeds of a refresh starting, left every later feed
+  with a single route, and made whichever relay was currently ahead
+  unassailable — it won, so it penalised the others, so they sat out, so it
+  won. All a lost race can honestly say is that the relay was slower this
+  time, so that is all it does: it nudges the latency the ordering is built
+  on, and never the count that benches.
+- **A relay is timed from when its request actually goes out**, not from when
+  the search picked it. Waiting for a slot behind twenty-nine other feeds is
+  this app's own doing, and charging it to the relay made one that answered in
+  600ms look like one that took five seconds — and then benched it for being
+  slow.
+- **A pass where nothing at all answered un-benches everything.** If not one
+  route, publisher or relay, got as far as an HTTP status, that is the phone's
+  connection — a lift, a tunnel, a moment between wifi and cellular — not
+  every relay going down at once. Benching them for it costs ten minutes of
+  sitting out beginning exactly when the signal comes back, which is when you
+  picked the phone up to read something.
 - Benching is logged. It happens inside grabs that mostly went on to succeed
   through some other relay, so none of it reaches the log as a feed failure —
   without an entry of its own, a relay just quietly stops appearing in the
@@ -406,7 +425,10 @@ How to read the common ones:
 | `timed out (7s)` on every line | Reachable but too slow — a feed that does this consistently is worth replacing |
 | `bad XML` with `response began: <!doctype html` | A relay error page, not the feed. Usually transient |
 | `empty response` | Answered with nothing at all, which is a relay fault more often than a publisher one |
-| `relay benched: <host>` | That relay is sitting out for ten minutes, and why. It will be missing from attempt lists until it comes back |
+| `relay: <host>` | That relay was benched for ten minutes, or put back in play, and why. A benched one is missing from attempt lists until it returns |
+| `overtaken` | Another relay answered first. Normal, and not held against it — it only sorts slower |
+| `not sent` | Never left the queue before the race was over. It says nothing about that relay at all |
+| `the app itself` | A refresh threw. Should not happen; the entry says where |
 
 A relay that is genuinely dead shows a distinctive shape: one slow failure
 (the real connection attempt) followed by a run of one- and two-millisecond
