@@ -166,6 +166,7 @@ h1{margin:0;font-size:1.375rem;font-weight:800;letter-spacing:-.4px}
 .row .g{flex:1;min-width:0}
 .row .n{font-size:0.875rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .row .u{font-size:0.6875rem;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
 .row .x{border:0;background:transparent;color:var(--faint);font-size:1.1875rem;padding:0 4px;flex:none}
 input[type=text],input[type=url],textarea{
   width:100%;background:var(--panel);border:1px solid var(--line);border-radius:11px;
@@ -210,6 +211,11 @@ select.sel{width:100%;background:var(--panel);border:1px solid var(--line);
    chosen, so a dead-end link is never a surprise. */
 .route.paywall{color:#c9a227;border:1px solid rgba(201,162,39,.4)}
 .row .e{font-size:0.6875rem;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Per-relay failure breakdown: one line per attempt (renderFeeds gives this
+   the extra "multi" class), so unlike a plain single-line .e string these
+   need to wrap and stay fully visible instead of truncating with an ellipsis. */
+.row .e.multi{white-space:normal;overflow:visible;text-overflow:clip}
+.row .e.multi div{white-space:normal;overflow-wrap:anywhere}
 .cat{margin:14px 0 6px;font-size:0.6875rem;font-weight:800;letter-spacing:.9px;
   text-transform:uppercase;color:var(--dim)}
 .lib{display:flex;flex-wrap:wrap;gap:6px}
@@ -790,8 +796,16 @@ const isDirect = url => {
 let routes = {};
 try { routes = JSON.parse(localStorage.getItem(KEY + ".routes") || "{}"); } catch {}
 
+// Per-feed breakdown of the most recent grab(): one entry per relay tried,
+// win or lose, with which host it was and how long it took. Read by the
+// health UI so a failure says *which* relay failed and *why*, not just the
+// last error string.
+let attemptLog = {};
+
 const TIMEOUT = 7000;
 
+// Turn a raw fetch failure into a short, specific reason instead of a
+// generic browser message like "Failed to fetch" or "The operation was aborted".
 async function tryOnce(target) {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), TIMEOUT);
@@ -801,13 +815,28 @@ async function tryOnce(target) {
     const text = await res.text();
     if (!text.trim()) throw new Error("empty response");
     return text;
+  } catch (e) {
+    if (e.name === "AbortError") throw new Error("timed out (" + (TIMEOUT / 1000) + "s)");
+    // A CORS rejection, DNS failure, or offline network all surface to JS as
+    // a bare TypeError with no further detail — that's the browser's doing,
+    // not something this app can see past.
+    if (e instanceof TypeError) throw new Error("blocked or unreachable");
+    throw e;
   } finally { clearTimeout(timer); }
 }
+
+// Best-effort label for an attempt: "direct" for the publisher itself,
+// otherwise the relay's hostname so a failure reads as "allorigins.win:
+// timed out (7s)" rather than a meaningless index number.
+const hostLabel = prefix => {
+  try { return new URL(prefix).host; } catch { return prefix; }
+};
 
 async function grab(url) {
   // Direct-only mode drops the relays entirely: nothing but your phone and the
   // publisher, at the cost of every feed that needs a relay to be reachable.
   const all = cfg.directOnly ? [url] : [url, ...cfg.proxies.map(p => p + encodeURIComponent(url))];
+  const labels = cfg.directOnly ? ["direct"] : ["direct", ...cfg.proxies.map(hostLabel)];
 
   const memo = routes[url];
   const first = memo && typeof memo === "object" ? memo.i : memo;
@@ -820,18 +849,31 @@ async function grab(url) {
     ? [first, ...all.keys()].filter((v, i, arr) => arr.indexOf(v) === i)
     : [...all.keys()];
 
+  const attempts = [];
   let lastErr;
   for (const idx of order) {
+    const t0 = Date.now();
     try {
       const text = await tryOnce(all[idx]);
+      attempts.push({ host: labels[idx], ok: true, ms: Date.now() - t0 });
+      attemptLog[url] = attempts;
       routes[url] = { i: idx, t: Date.now() };
       localStorage.setItem(KEY + ".routes", JSON.stringify(routes));
       return text;
-    } catch (e) { lastErr = e; }
+    } catch (e) {
+      attempts.push({ host: labels[idx], ok: false, err: e.message, ms: Date.now() - t0 });
+      lastErr = e;
+    }
   }
+  attemptLog[url] = attempts;
   delete routes[url];
   localStorage.setItem(KEY + ".routes", JSON.stringify(routes));
-  throw lastErr || new Error("unreachable");
+  // One line per attempt, e.g. "direct: blocked or unreachable (210ms) ·
+  // allorigins.win: HTTP 429 (640ms) · codetabs.com: timed out (7s) (7002ms)"
+  const summary = attempts.map(a => a.host + ": " + a.err + " (" + a.ms + "ms)").join(" · ");
+  const err = new Error(summary || (lastErr && lastErr.message) || "unreachable");
+  err.attempts = attempts;
+  throw err;
 }
 
 const txt = (node, ...names) => {
@@ -984,12 +1026,12 @@ async function refresh(scope, opts) {
     grab(f.url).then(x => parseFeed(x, f.name, f.url)).then(
       list => {
         ok++;
-        health[f.url] = { ok: true, at: Date.now(), n: list.length, direct: isDirect(f.url) };
+        health[f.url] = { ok: true, at: Date.now(), n: list.length, direct: isDirect(f.url), attempts: attemptLog[f.url] };
         absorb(list); scheduleRender();
       },
       err => {
         failed.push(f.name);
-        health[f.url] = { ok: false, at: Date.now(), err: String(err && err.message || err) };
+        health[f.url] = { ok: false, at: Date.now(), err: String(err && err.message || err), attempts: err && err.attempts };
       }
     ).finally(() => {
       done++;
@@ -1365,9 +1407,17 @@ function renderFeeds() {
     const h = el("div", "cat"); h.textContent = cat; box.appendChild(h);
     cfg.feeds.filter(f => (f.cat || "Other") === cat).forEach(f => {
       const hs = health[f.url];
+      // A one-line-per-relay breakdown: which host answered (or didn't), how
+      // long it took, and why it failed — not just whatever the last attempt
+      // happened to be.
+      const attemptLines = a => a.map(x => x.host + ": " + (x.ok ? "ok (" + x.ms + "ms)" : x.err + " (" + x.ms + "ms)"));
       const r = el("div", "row");
       const d = el("span", "hd" + (hs ? (hs.ok ? " ok" : " bad") : ""));
-      d.title = hs ? (hs.ok ? hs.n + " stories" : hs.err) : "not checked yet";
+      d.title = hs
+        ? (hs.ok
+            ? hs.n + " stories" + (hs.attempts ? "\n" + attemptLines(hs.attempts).join("\n") : "")
+            : (hs.attempts ? attemptLines(hs.attempts).join("\n") : hs.err))
+        : "not checked yet";
 
       const g = el("div", "g");
       const n = el("div", "n");
@@ -1375,7 +1425,9 @@ function renderFeeds() {
       const nm = el("span"); nm.textContent = f.name; n.appendChild(nm);
       if (hs && hs.ok) {
         const rt = el("span", "route " + (hs.direct ? "direct" : "relay"));
-        rt.textContent = hs.direct ? "direct" : "relay";
+        const winner = hs.attempts && hs.attempts.find(a => a.ok);
+        rt.textContent = (hs.direct ? "direct" : "relay") + (winner ? " · " + winner.ms + "ms" : "");
+        rt.title = hs.attempts ? attemptLines(hs.attempts).join("\n") : "";
         n.appendChild(rt);
       }
       if (isPaywalled(f)) {
@@ -1386,8 +1438,23 @@ function renderFeeds() {
       }
       g.appendChild(n);
       const u = el("div", "u");
-      u.textContent = (hs && !hs.ok) ? hs.err : f.url;
-      if (hs && !hs.ok) u.className = "e";
+      // On failure, show every relay's outcome on its own line (not just the
+      // last one tried) so it's clear whether it's one bad relay or all of them.
+      if (hs && !hs.ok) {
+        u.className = (hs.attempts && hs.attempts.length) ? "e multi" : "e";
+        if (hs.attempts && hs.attempts.length) {
+          u.innerHTML = "";
+          hs.attempts.forEach(a => {
+            const line = el("div");
+            line.textContent = a.host + ": " + (a.ok ? "ok" : a.err) + " (" + a.ms + "ms)";
+            u.appendChild(line);
+          });
+        } else {
+          u.textContent = hs.err;
+        }
+      } else {
+        u.textContent = f.url;
+      }
       g.appendChild(u);
 
       const x = el("button", "x");
@@ -1681,8 +1748,8 @@ $("#f-test").onclick = async () => {
   b.textContent = "Testing…"; b.disabled = true;
   await Promise.all(cfg.feeds.map(f =>
     grab(f.url).then(x => parseFeed(x, f.name, f.url)).then(
-      list => { health[f.url] = { ok: true, at: Date.now(), n: list.length, direct: isDirect(f.url) }; },
-      err  => { health[f.url] = { ok: false, at: Date.now(), err: String(err && err.message || err) }; }
+      list => { health[f.url] = { ok: true, at: Date.now(), n: list.length, direct: isDirect(f.url), attempts: attemptLog[f.url] }; },
+      err  => { health[f.url] = { ok: false, at: Date.now(), err: String(err && err.message || err), attempts: err && err.attempts }; }
     )
   ));
   saveHealth(); renderFeeds();
