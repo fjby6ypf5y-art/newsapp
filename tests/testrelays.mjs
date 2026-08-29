@@ -102,4 +102,46 @@ const fingerprinted=Object.values(h2).filter(x=>x.sig).length;
 console.log('feeds with a fingerprint :', fingerprinted+'/'+FEEDS.length, fingerprinted===FEEDS.length?'':'*** MISSING ***');
 
 console.log('\n'+(errs.length?'*** ERRORS '+errs.join(';'):'no JS errors'));
-await b.close();srv.close();
+await ctx.close();
+
+// The failure mode from a real log: one relay was serving most feeds happily
+// and returned 4xx for two of them, which benched it for everything - and the
+// feeds that only it could reach then had no route at all.
+console.log('\n=== a 4xx on one feed must not bench the relay for the rest ===');
+{
+  const hits2={};
+  const ctx2=await b.newContext({...devices['iPhone 14 Pro']});const p2=await ctx2.newPage();
+  const FEEDS2=Array.from({length:6},(_,i)=>({id:'g'+i,cat:'World',name:'feed'+i,url:'https://pub'+i+'.test/rss'}));
+  await ctx2.route('**/*',async route=>{const u=route.request().url();
+   if(u.startsWith('http://localhost:8090'))return route.continue();
+   const host=new URL(u).host;
+   hits2[host]=(hits2[host]||0)+1;
+   const d=decodeURIComponent(u);
+   const id=(d.match(/\/\/(pub\d+)\.test/)||[])[1]||'x';
+   if(/^pub\d/.test(host)) return route.abort('failed');
+   // picky.test will not proxy two particular feeds, and is fine with the rest
+   if(host==='picky.test'){
+     if(id==='pub0'||id==='pub1') return route.fulfill({status:406,contentType:'text/plain',body:'no'});
+     return route.fulfill({status:200,contentType:'application/xml',body:body(id)});
+   }
+   return new Promise(()=>{});                       // the other relay hangs
+  });
+  await p2.addInitScript(x=>localStorage.setItem('breaking.v1',x),
+    JSON.stringify({migrated:13,idleResetMin:0,feeds:FEEDS2,
+      proxies:['https://picky.test/p?url=','https://hangs.test/p?url=']}));
+  await p2.goto('http://localhost:8090/index.html');
+  await p2.waitForTimeout(9000);
+  const h=await p2.evaluate(()=>JSON.parse(localStorage.getItem('breaking.v1.health')));
+  const rel=await p2.evaluate(()=>JSON.parse(localStorage.getItem('breaking.v1.relays')||'{}'));
+  const good=Object.values(h).filter(x=>x.ok).length;
+  console.log('feeds working        :', good+'/6', good===4?'(the four it will serve)':good<4?'*** THE RELAY WAS BENCHED FOR EVERYONE ***':'');
+  const picky=rel['picky.test']||{};
+  console.log('picky.test record    :', picky.ok+' ok / '+picky.fail+' failed',
+    picky.until>Date.now()?'*** BENCHED OVER A PER-FEED 4xx ***':'(still in play)');
+  const lg=await p2.evaluate(()=>JSON.parse(localStorage.getItem('breaking.v1.log')||'[]'));
+  const benched=lg.filter(e=>e.k==='relay').map(e=>e.n);
+  console.log('benchings logged     :', JSON.stringify(benched),
+    benched.includes('hangs.test')?'(the one that really is down)':'*** the dead relay was benched with nothing said');
+  await ctx2.close();
+}
+srv.close();await b.close();

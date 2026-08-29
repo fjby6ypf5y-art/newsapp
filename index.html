@@ -964,17 +964,41 @@ let relays = {};
 try { relays = JSON.parse(localStorage.getItem(KEY + ".relays") || "{}"); } catch {}
 const saveRelays = () => store(KEY + ".relays", JSON.stringify(relays));
 
-function noteRelay(host, ok, ms) {
+// A relay that refuses one URL is not a relay that is down. An HTTP 4xx means
+// the far end read the request and made a decision about *that feed* - will
+// not proxy it, does not like its length, does not like its host - and taking
+// the relay away from the other fifteen feeds over it is how a working relay
+// disappears. A connection that never landed, a timeout, an empty body, a 5xx
+// or a 429 is about the relay itself, and that is what the cooldown is for.
+function relayAtFault(err) {
+  const m = /^HTTP (\d\d\d)/.exec(String(err || ""));
+  if (!m) return true;                       // never landed, timed out, empty
+  const code = +m[1];
+  return code === 408 || code === 425 || code === 429 || code >= 500;
+}
+
+function noteRelay(host, ok, ms, err) {
   const s = relays[host] || (relays[host] = { ok: 0, fail: 0, ms: 0, run: 0, until: 0 });
   if (ok) {
     s.ok++; s.run = 0; s.until = 0;
     // Weighted towards the recent: a relay that was fast last month and is
     // slow this morning should sort like a slow relay.
     s.ms = s.ms ? Math.round(s.ms * 0.7 + ms * 0.3) : ms;
-  } else {
-    s.fail++; s.run++;
-    if (s.run >= RELAY_FAILS) s.until = Date.now() + RELAY_COOLDOWN_MS;
+    return;
   }
+  // The tally counts every failure, so the record in Settings stays honest.
+  // Only the relay's own failures advance the run that benches it.
+  s.fail++;
+  if (!relayAtFault(err)) return;
+  s.run++;
+  if (s.run < RELAY_FAILS || s.until > Date.now()) return;
+  s.until = Date.now() + RELAY_COOLDOWN_MS;
+  // Benching happens inside grabs that mostly went on to succeed through some
+  // other relay, so none of it reaches the log as a feed failure - and then a
+  // relay is simply missing from every attempt list with nothing to say why.
+  logEvent({ kind: "relay", name: host,
+             why: "benched for " + Math.round(RELAY_COOLDOWN_MS / 60000) + " minutes",
+             attempts: [{ host, err: String(err || "failed") + " (" + s.run + " in a row)", ms }] });
 }
 
 // Lower is better: typical latency, plus a penalty for how often it fails.
@@ -1099,7 +1123,7 @@ function grab(url) {
       // keeps its optimistic score and gets tried first forever.
       running.forEach(r => {
         if (r.c === c || Date.now() - r.t0 < HEDGE_MS) return;
-        if (r.c.i) noteRelay(r.c.label, false, Date.now() - r.t0);
+        if (r.c.i) noteRelay(r.c.label, false, Date.now() - r.t0, "overtaken");
         attempts.push({ host: r.c.label, ok: false, err: "overtaken", ms: Date.now() - r.t0 });
       });
       stop();
@@ -1141,7 +1165,7 @@ function grab(url) {
         // A candidate we cancelled ourselves has already been accounted for.
         if (done || ctl.cancelled) return;
         attempts.push({ host: c.label, ok: false, err: e.message, ms: Date.now() - t0 });
-        if (c.i) noteRelay(c.label, false, Date.now() - t0);
+        if (c.i) noteRelay(c.label, false, Date.now() - t0, e.message);
         clearTimeout(hedge); hedge = null;
         launch();                       // nothing left to hedge against
       });
@@ -2147,7 +2171,7 @@ function renderLog() {
     const line = (t, cls) => { const n = el("div", cls); n.textContent = t; d.appendChild(n); };
     line(new Date(e.t).toLocaleString() + " · " + timeAgo(e.t)
          + (e.w ? " · " + e.w : ""), "when");
-    line((e.k === "ok" ? "recovered: " : "") + e.n, "who");
+    line((e.k === "ok" ? "recovered: " : e.k === "relay" ? "relay benched: " : "") + e.n, "who");
     if (e.r) line(e.r, "try");
     (e.a || []).forEach(a => line(a.h + ": " + (a.e || "ok") + " (" + a.ms + "ms)",
                                   e.r ? "body" : "try"));
@@ -2169,7 +2193,8 @@ $("#close-log").onclick = () => openLog(false);
 // is not this app.
 $("#log-copy").onclick = async () => {
   const text = log.map(e =>
-    new Date(e.t).toISOString() + "  " + (e.k === "ok" ? "RECOVERED" : e.k === "store" ? "STORAGE" : "FAILED")
+    new Date(e.t).toISOString() + "  "
+    + (e.k === "ok" ? "RECOVERED" : e.k === "store" ? "STORAGE" : e.k === "relay" ? "RELAY BENCHED" : "FAILED")
     + "  " + e.n + (e.w ? "  (" + e.w + ")" : "")
     + (e.r ? "\n  " + e.r : "")
     + (e.u ? "\n  " + e.u : "")
@@ -2915,7 +2940,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-29.71";
+const BUILD = "2026-08-29.72";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

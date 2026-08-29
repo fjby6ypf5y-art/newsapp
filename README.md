@@ -346,6 +346,18 @@ So they are raced instead:
   one that matters most: without it, one dead relay costs a *timeout per feed*,
   sixteen times over. Settings shows each relay's record and whether it's
   currently sitting out.
+- **Only the relay's own failures bench it.** An HTTP 4xx means the far end
+  read the request and made a decision about *that feed* — will not proxy it,
+  does not like its host — so it counts in the relay's record but does not
+  advance the run that benches it. A connection that never landed, a timeout,
+  an empty body, a 5xx or a 429 is about the relay, and those do. The first
+  version made no distinction, and the result was the bug this rule exists for:
+  two feeds a relay wouldn't serve took that relay away from the other
+  fourteen, and feeds only it could reach were left with no route at all.
+- Benching is logged. It happens inside grabs that mostly went on to succeed
+  through some other relay, so none of it reaches the log as a feed failure —
+  without an entry of its own, a relay just quietly stops appearing in the
+  attempt lists with nothing anywhere to say why.
 - At most four requests are in flight to any one host. Past that the browser
   queues them itself, invisibly, and a queued request burns its timeout sitting
   in the queue — which then reads as the relay being slow when it was the phone
@@ -394,6 +406,13 @@ How to read the common ones:
 | `timed out (7s)` on every line | Reachable but too slow — a feed that does this consistently is worth replacing |
 | `bad XML` with `response began: <!doctype html` | A relay error page, not the feed. Usually transient |
 | `empty response` | Answered with nothing at all, which is a relay fault more often than a publisher one |
+| `relay benched: <host>` | That relay is sitting out for ten minutes, and why. It will be missing from attempt lists until it comes back |
+
+A relay that is genuinely dead shows a distinctive shape: one slow failure
+(the real connection attempt) followed by a run of one- and two-millisecond
+ones, because the browser caches the fact that a host is unreachable and stops
+trying. A run of instant `blocked or unreachable` against a relay means the
+host is gone, not that the network is slow — take it out of the list.
 
 The log lives in `localStorage` under `breaking.v1.log`, capped at 60 entries
 with every string length-capped on the way in, so it cannot grow into the space
