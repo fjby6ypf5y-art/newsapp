@@ -335,8 +335,8 @@ So they are raced instead:
   seconds** the next one starts *alongside* it rather than replacing it. First
   answer wins, the losers are aborted. A slow relay costs 1.8s, not seven.
 - One attempt is capped at 7s and the whole search at **15s**, whatever the
-  length of the list. Adding a sixth relay widens the search; it can't lengthen
-  the wait.
+  length of the list. A longer list widens the search; it can't lengthen the
+  wait.
 - "Most promising" comes from a **scoreboard the phone keeps**: how often each
   relay has answered, and how quickly, weighted towards the recent. A relay
   that hangs and gets overtaken is scored as having failed — otherwise a relay
@@ -354,6 +354,12 @@ So they are raced instead:
 A cold start still has to try the bad relays once to find out they're bad. The
 refresh after that skips them. In the test fixture — five relays of which three
 are broken — that's the difference between 12s and 170ms.
+
+**The list is capped at five**, which pulls against all of the above: racing
+makes a long list cheap, so the only reason left not to have one is that every
+relay on it is another party who gets to see a feed request. Speed stopped
+being the constraint; privacy still is. Five is enough redundancy that the odds
+of all of them being down at once are not worth planning for.
 
 ### Not fetching things that can't have changed
 
@@ -489,8 +495,21 @@ Opening it offers to restore, and adding *that* link to the Home Screen brings
 everything back on first launch.
 
 A setup link is treated as untrusted — it could come from anyone — so it never
-applies itself. It says how many feeds it holds and waits to be accepted, and a
-malformed one is ignored rather than breaking the app.
+applies itself. The offer bar names the publishers it would install and waits to
+be accepted, and a malformed one is ignored rather than breaking the app.
+
+The relay list in a link is a separate question, because a relay is the one
+thing in here with real reach (see below). A link carrying one shows it as an
+unticked box naming the host, and does nothing unless you tick it; a link can
+turn **Direct only** *on* but never off. Only absolute `https://` prefixes are
+accepted, and at most five. Until build 70 none of that was true: a link could
+repoint every fetch through a host of its choosing while saying nothing but
+"N feeds", and the relay box in Settings was read by nothing, so the relay it
+installed could not be removed from the phone.
+
+Anyone who has the link has your whole feed list in it — it is base64, not
+encryption. That is fine for a mail to yourself and not fine for a screenshot in
+a group chat.
 
 The JSON export and OPML export in the same section are the other two routes:
 JSON is the complete config, OPML moves your feeds to any other reader.
@@ -522,6 +541,10 @@ So the app minimises it, and shows you exactly where you stand:
 - **Direct only** disables relays completely. Nothing but your phone and the
   publisher. Feeds that need a relay then fail honestly rather than quietly
   routing through a stranger — check the health dots and swap them out.
+- The relay list is editable: clear the box to run with no relay at all.
+  Anything that is not a full `https://` prefix is refused and said so, and
+  changing the list forgets which route each feed last used, so nothing keeps
+  going through a relay you just removed.
 
 Because relay output is untrusted, the app treats feed content as hostile:
 
@@ -532,6 +555,15 @@ Because relay output is untrusted, the app treats feed content as hostile:
 - Titles and summaries are inserted as text nodes, never as HTML, so markup in
   a feed renders as visible characters rather than executing.
 - The service worker never caches feed responses — only the app's own files.
+- Titles and ids are length-capped and the cache is capped at 400 stories, so a
+  feed that sends megabytes cannot fill the storage quota. A refresh that fails
+  anyway — full disk, a parser throwing — always puts the screen back rather
+  than leaving it dimmed and loading, and the story cache is trimmed to fit
+  rather than being left unwritable. Before build 70 one oversized feed wedged
+  the app on every launch.
+- Feed addresses arriving from a setup link or an OPML file must be absolute
+  `http(s)`, matching what the feed editor has always required. A relative one
+  used to resolve against the app's own origin.
 
 **A Content-Security-Policy** is set in the page. `connect-src` has to stay
 open — feeds and relays live on arbitrary origins, and that is the whole point
@@ -540,6 +572,13 @@ from anywhere else, and an injected `<base>` cannot re-point relative URLs.
 `'unsafe-inline'` is required because the script and styles live in this file;
 a hash would be stronger, but with no build step a stale hash would silently
 brick the app, which is the worse failure mode.
+
+**Not covered.** The page can be framed by another site: `frame-ancestors` is
+the one directive a `<meta>` policy cannot express, and GitHub Pages does not
+let you set headers. Clickjacking a personal reader is a thin prize, so this is
+noted rather than worked around — a JS frame-buster would add a way for the app
+to show a blank screen in some future web view, which is a worse trade for the
+device this runs on.
 
 **A public repo is fine, with one caveat.** The source contains no secrets,
 no keys and no personal data, and a GitHub Pages site is publicly reachable
