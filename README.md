@@ -341,7 +341,12 @@ So they are raced instead:
   cap exists to make room for the next candidate, so when there is no next
   candidate it buys nothing — and a feed slow enough to need nine seconds was
   being cut off at seven with every relay already spent and nothing left to
-  try.
+  try. It stops a fraction short of the deadline so that it reports its own
+  timeout, naming itself, rather than being swept up in the grab giving up.
+- **However a fetch ends, every route it tried is named.** When the 15s ran
+  out the log used to print one line — `all 4 routes: gave up` — which erased
+  the only thing worth knowing: which relay was still working, and how long it
+  had had. Each route now reports for itself.
 - "Most promising" comes from a **scoreboard the phone keeps**: how often each
   relay has answered, and how quickly, weighted towards the recent. A relay
   that hangs and gets overtaken is scored as having failed — otherwise a relay
@@ -486,11 +491,19 @@ Two separate ideas, both aimed at "only do the work if there's something new":
   nothing new, so it isn't parsed, isn't merged and doesn't repaint the list.
   The status line says `nothing new` rather than claiming an update.
 
-Requests use `cache: "no-cache"` rather than `no-store`, so the browser still
-revalidates with the server but an unchanged feed can come back as a 304 with
-no body to download. The obvious next step — sending `If-Modified-Since`
-ourselves — isn't available: it isn't a CORS-safelisted request header, so it
-would force a preflight that most public relays fail.
+Requests use `cache: "no-store"`. Build .69 changed that to `no-cache`, so the
+browser would revalidate and an unchanged feed could come back as a 304 with no
+body to download; .76 changed it back. The saving was never measured, and
+afterwards two feeds started collecting 4xx from a relay that had been serving
+them. That is not proof it was to blame — the relay in question is a free-tier
+service that has bad days — but an unproven optimisation does not get to stay
+in the frame while a real failure is being diagnosed, and the fingerprint above
+already skips the expensive half of an unchanged feed, which was most of the
+point.
+
+Sending `If-Modified-Since` ourselves isn't available either: it isn't a
+CORS-safelisted request header, so it would force a preflight that most public
+relays fail.
 
 ---
 

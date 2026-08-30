@@ -1079,10 +1079,15 @@ async function tryOnce(target, ctl, budget) {
   // queued behind other requests to the same host.
   const timer = setTimeout(() => ctl.abort(), wait);
   try {
-    // no-cache rather than no-store: the browser still revalidates with the
-    // server, but a feed that has not changed can come back as a 304 with no
-    // body to download. no-store forbade even that.
-    const res = await fetch(target, { signal: ctl.signal, cache: "no-cache" });
+    // no-store. Build .69 changed this to no-cache, so the browser would
+    // revalidate and an unchanged feed could come back as a 304 with no body
+    // to download. The saving was never measured, and afterwards two feeds
+    // began collecting 4xx from a relay that had served them - which is not
+    // proof it was to blame, but an unproven optimisation does not get to
+    // stay in the frame while a real failure is being diagnosed. The
+    // fingerprint below already skips the expensive half of an unchanged
+    // feed, which was most of the point.
+    const res = await fetch(target, { signal: ctl.signal, cache: "no-store" });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const text = await res.text();
     if (!text.trim()) throw new Error("empty response");
@@ -1220,7 +1225,9 @@ function grab(url) {
       const drop = () => { const i = running.indexOf(rec); if (i >= 0) running.splice(i, 1); };
       const took = () => Date.now() - (ctl.startedAt || t0);
       // Nothing left to move on to, so there is nothing to cut this short for.
-      const budget = launched >= cands.length ? deadlineAt - Date.now() : TIMEOUT;
+      // A margin under the deadline, so the attempt reports its own timeout
+      // rather than being swept up in the grab giving up.
+      const budget = launched >= cands.length ? deadlineAt - Date.now() - 400 : TIMEOUT;
       tryOnce(c.target, ctl, budget).then(text => {
         live--; drop();
         if (done) return;
@@ -1242,7 +1249,18 @@ function grab(url) {
 
     deadline = setTimeout(() => {
       if (done) return;
-      attempts.push({ host: "all " + cands.length + " routes", ok: false, err: "gave up", ms: DEADLINE });
+      // What each route was still doing, not one line saying they all gave up.
+      // The generic line erased the only thing worth knowing - which relay was
+      // still working when the clock ran out, and how long it had had - from
+      // the log whose entire job is to say which relay did what.
+      running.forEach(r => {
+        const el = r.ctl.startedAt ? Date.now() - r.ctl.startedAt : 0;
+        attempts.push({ host: r.c.label, ok: false, ms: el,
+                        err: r.ctl.startedAt
+                          ? "still going at " + Math.round(el / 1000) + "s, out of time"
+                          : "not sent" });
+        if (r.c.i && r.ctl.startedAt) pending.push({ host: r.c.label, ms: el, err: "timed out" });
+      });
       launched = cands.length; live = 0;
       lose();
     }, DEADLINE);
@@ -3033,7 +3051,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-30.75";
+const BUILD = "2026-08-30.76";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

@@ -138,6 +138,15 @@ console.log('\n=== a 4xx on one feed must not bench the relay for the rest ===')
   const picky=rel['picky.test']||{};
   console.log('picky.test record    :', picky.ok+' ok / '+picky.fail+' failed',
     picky.until>Date.now()?'*** BENCHED OVER A PER-FEED 4xx ***':'(still in play)');
+  // When the grab runs out of time, the log must still say which relay was
+  // still going and for how long - not one line covering all of them.
+  // However a grab ends, every route it tried must be named. A single line
+  // saying they all gave up hid the one relay still running.
+  const dud=Object.values(h).find(x=>!x.ok);
+  const lines=(dud&&dud.attempts||[]).map(a=>a.host+': '+(a.ok?'ok':a.err));
+  console.log('a failed feed reads  :', JSON.stringify(lines));
+  if(lines.some(l=>/^all \d+ routes/.test(l))) console.log('*** the routes were summarised instead of named');
+  if(!lines.some(l=>/hangs\.test/.test(l))) console.log('*** the relay that ran out the clock is missing');
   const lg=await p2.evaluate(()=>JSON.parse(localStorage.getItem('breaking.v1.log')||'[]'));
   const benched=lg.filter(e=>e.k==='relay').map(e=>e.n);
   // Nothing is benched here, and that is the rule working: every grab that
