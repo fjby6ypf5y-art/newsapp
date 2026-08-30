@@ -988,7 +988,7 @@ function relayAtFault(err) {
 // every feed with one route, and made the current leader unassailable - it
 // won, so it penalised the others, so they sat out, so it won. All a lost
 // race can honestly do is make a relay sort slower.
-function noteRelay(host, outcome, ms, err) {
+function noteRelay(host, outcome, ms, err, bench) {
   const s = relays[host] || (relays[host] = { ok: 0, fail: 0, ms: 0, run: 0, until: 0 });
   if (outcome === "ok") {
     s.ok++; s.run = 0; s.until = 0;
@@ -1004,7 +1004,7 @@ function noteRelay(host, outcome, ms, err) {
   // The tally counts every failure, so the record in Settings stays honest.
   // Only the relay's own failures advance the run that benches it.
   s.fail++;
-  if (!relayAtFault(err)) return;
+  if (bench === false || !relayAtFault(err)) return;
   s.run++;
   if (s.run < RELAY_FAILS || s.until > Date.now()) return;
   s.until = Date.now() + RELAY_COOLDOWN_MS;
@@ -1060,7 +1060,12 @@ function hostFree(host) {
 
 // Turn a raw fetch failure into a short, specific reason instead of a
 // generic browser message like "Failed to fetch" or "The operation was aborted".
-async function tryOnce(target, ctl) {
+// budget: how long this attempt gets. TIMEOUT exists to make room for the next
+// candidate, so when there is no next candidate it buys nothing - a feed slow
+// enough to need nine seconds was being cut off at seven with four relays
+// already spent and nothing else to try. The last one standing gets whatever
+// is left of the grab's deadline instead.
+async function tryOnce(target, ctl, budget) {
   const host = hostOf(target);
   await hostSlot(host);
   if (ctl.cancelled) { hostFree(host); throw new Error("not needed"); }
@@ -1069,9 +1074,10 @@ async function tryOnce(target, ctl) {
   // charging it to the relay made a relay that answered in 600ms look like one
   // that took five seconds.
   ctl.startedAt = Date.now();
+  const wait = Math.max(1000, budget || TIMEOUT);
   // The clock starts when the request actually goes out, not while it is
   // queued behind other requests to the same host.
-  const timer = setTimeout(() => ctl.abort(), TIMEOUT);
+  const timer = setTimeout(() => ctl.abort(), wait);
   try {
     // no-cache rather than no-store: the browser still revalidates with the
     // server, but a feed that has not changed can come back as a 304 with no
@@ -1082,7 +1088,7 @@ async function tryOnce(target, ctl) {
     if (!text.trim()) throw new Error("empty response");
     return text;
   } catch (e) {
-    if (e.name === "AbortError") throw new Error("timed out (" + (TIMEOUT / 1000) + "s)");
+    if (e.name === "AbortError") throw new Error("timed out (" + Math.round(wait / 1000) + "s)");
     // A CORS rejection, DNS failure, or offline network all surface to JS as
     // a bare TypeError with no further detail — that's the browser's doing,
     // not something this app can see past.
@@ -1147,6 +1153,19 @@ function grab(url) {
     let launched = 0, live = 0, done = false;
     const running = [];              // candidates still in flight, oldest first
     let hedge = null, deadline = null;
+    const deadlineAt = Date.now() + DEADLINE;
+
+    // Relay failures are judged once the grab is over, not as they happen. If
+    // every route failed - the publisher and every relay - then the feed is
+    // the common factor, and benching four relays because one feed is too slow
+    // for all of them takes them away from the thirty feeds they were serving
+    // perfectly. The failures still go in each relay's record; they just do
+    // not count towards sitting out.
+    const pending = [];
+    const flush = bench => {
+      pending.forEach(x => noteRelay(x.host, "fail", x.ms, x.err, bench));
+      pending.length = 0;
+    };
 
     const stop = () => {
       clearTimeout(hedge); clearTimeout(deadline);
@@ -1169,6 +1188,7 @@ function grab(url) {
         attempts.push({ host: r.c.label, ok: false, err: "overtaken", ms: el });
         if (r.c.i) noteRelay(r.c.label, "slow", el);
       });
+      flush(true);                     // something worked; the rest are on their own
       stop();
       routes[url] = { i: c.i, t: Date.now() };
       store(KEY + ".routes", JSON.stringify(routes));
@@ -1178,6 +1198,7 @@ function grab(url) {
     const lose = () => {
       if (done || live > 0 || launched < cands.length) return;
       done = true; stop();
+      flush(false);                    // nothing worked; that is about the feed
       delete routes[url];
       store(KEY + ".routes", JSON.stringify(routes));
       saveRelays();
@@ -1198,7 +1219,9 @@ function grab(url) {
       live++;
       const drop = () => { const i = running.indexOf(rec); if (i >= 0) running.splice(i, 1); };
       const took = () => Date.now() - (ctl.startedAt || t0);
-      tryOnce(c.target, ctl).then(text => {
+      // Nothing left to move on to, so there is nothing to cut this short for.
+      const budget = launched >= cands.length ? deadlineAt - Date.now() : TIMEOUT;
+      tryOnce(c.target, ctl, budget).then(text => {
         live--; drop();
         if (done) return;
         attempts.push({ host: c.label, ok: true, ms: took() });
@@ -1209,7 +1232,7 @@ function grab(url) {
         // A candidate we cancelled ourselves has already been accounted for.
         if (done || ctl.cancelled) return;
         attempts.push({ host: c.label, ok: false, err: e.message, ms: took() });
-        if (c.i) noteRelay(c.label, "fail", took(), e.message);
+        if (c.i) pending.push({ host: c.label, ms: took(), err: e.message });
         clearTimeout(hedge); hedge = null;
         launch();                       // nothing left to hedge against
       });
@@ -3010,7 +3033,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-29.74";
+const BUILD = "2026-08-30.75";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

@@ -337,6 +337,11 @@ So they are raced instead:
 - One attempt is capped at 7s and the whole search at **15s**, whatever the
   length of the list. A longer list widens the search; it can't lengthen the
   wait.
+- **The last route standing gets the rest of the 15s**, not 7. The per-attempt
+  cap exists to make room for the next candidate, so when there is no next
+  candidate it buys nothing — and a feed slow enough to need nine seconds was
+  being cut off at seven with every relay already spent and nothing left to
+  try.
 - "Most promising" comes from a **scoreboard the phone keeps**: how often each
   relay has answered, and how quickly, weighted towards the recent. A relay
   that hangs and gets overtaken is scored as having failed — otherwise a relay
@@ -373,6 +378,20 @@ So they are raced instead:
   every relay going down at once. Benching them for it costs ten minutes of
   sitting out beginning exactly when the signal comes back, which is when you
   picked the phone up to read something.
+- **A feed that no route could fetch is evidence about the feed.** The same
+  reasoning one level down: relay failures inside one fetch are judged after
+  it finishes, and if every route failed — the publisher and every relay —
+  none of them is benched. One feed too slow for all of them was taking every
+  relay away from the thirty feeds they were serving perfectly. A genuinely
+  dead relay still gets caught, because it also fails on the feeds that go on
+  to succeed through somebody else.
+
+The net of all that: benching is now reserved for a relay that fails while
+another one succeeds. Everything else — losing a race, refusing one URL, a
+feed nothing can reach, a phone with no signal — only moves a relay down the
+order. That turns out to be enough on its own: in the test fixture the dead
+and hanging relays are never even reached on the second refresh, because a
+proven fast one sorts ahead of them and answers before the hedge fires.
 - Benching is logged. It happens inside grabs that mostly went on to succeed
   through some other relay, so none of it reaches the log as a feed failure —
   without an entry of its own, a relay just quietly stops appearing in the

@@ -94,7 +94,7 @@ for(let i=0;i<120;i++){ await page.waitForTimeout(100);
   if(/^Updated/.test(await settled())){took=Date.now()-t1;break;} }
 const dead2=(hits['dead.test']||0)-d0, slow2=(hits['slow.test']||0)-s0;
 console.log('good.test requests       :', (hits['good.test']||0)-n0, ((hits['good.test']||0)-n0)>0?'(refetched)':'*** IGNORED THE ARROW ***');
-console.log('dead + slow relays asked :', dead2+slow2, dead2+slow2===0?'(sitting out)':'*** STILL BEING TRIED ***');
+console.log('dead + slow relays asked :', dead2+slow2, dead2+slow2===0?'(never reached — they sort last)':'*** STILL BEING TRIED ***');
 console.log('  status                 :', await settled());
 console.log('  time to finish         :', took+'ms', took<4000?'(no longer paying for the bad relays)':'*** STILL SLOW ***');
 const h2=await page.evaluate(()=>JSON.parse(localStorage.getItem('breaking.v1.health')));
@@ -130,7 +130,7 @@ console.log('\n=== a 4xx on one feed must not bench the relay for the rest ===')
     JSON.stringify({migrated:13,idleResetMin:0,feeds:FEEDS2,
       proxies:['https://picky.test/p?url=','https://hangs.test/p?url=']}));
   await p2.goto('http://localhost:8090/index.html');
-  await p2.waitForTimeout(9000);
+  await p2.waitForTimeout(18000);   // a hanging last candidate now runs to the grab deadline
   const h=await p2.evaluate(()=>JSON.parse(localStorage.getItem('breaking.v1.health')));
   const rel=await p2.evaluate(()=>JSON.parse(localStorage.getItem('breaking.v1.relays')||'{}'));
   const good=Object.values(h).filter(x=>x.ok).length;
@@ -140,8 +140,12 @@ console.log('\n=== a 4xx on one feed must not bench the relay for the rest ===')
     picky.until>Date.now()?'*** BENCHED OVER A PER-FEED 4xx ***':'(still in play)');
   const lg=await p2.evaluate(()=>JSON.parse(localStorage.getItem('breaking.v1.log')||'[]'));
   const benched=lg.filter(e=>e.k==='relay').map(e=>e.n);
+  // Nothing is benched here, and that is the rule working: every grab that
+  // failed, failed on every route, so each one is evidence about its feed.
+  // A genuinely dead relay is still caught by the first block above, where
+  // other feeds succeed through a different one.
   console.log('benchings logged     :', JSON.stringify(benched),
-    benched.includes('hangs.test')?'(the one that really is down)':'*** the dead relay was benched with nothing said');
+    benched.length?'*** benched on grabs where nothing worked at all':'(none — those grabs failed on every route)');
   await ctx2.close();
 }
 // Straight from a real log: one relay answered every feed, and the two that
@@ -207,5 +211,58 @@ console.log('\n=== a total blackout is the connection, not the relays ===');
   console.log('once it is back      :', good+'/4 feeds', good===4?'(straight back to work)':'*** STILL FAILING ***');
   console.log('status               :', await p4.evaluate(()=>document.querySelector('#status').textContent));
   await ctx4.close();
+}
+// Phys.org, from a real log: four routes tried, and the last two were cut off
+// at exactly seven seconds with nothing else left to try.
+console.log('\n=== the last route left gets the rest of the deadline ===');
+{
+  const ctx5=await b.newContext({...devices['iPhone 14 Pro']});const p5=await ctx5.newPage();
+  await ctx5.route('**/*',async route=>{const u=route.request().url();
+   if(u.startsWith('http://localhost:8090'))return route.continue();
+   const host=new URL(u).host;
+   if(/^pub\d/.test(host)) return route.abort('failed');
+   if(host==='picky2.test') return route.fulfill({status:404,contentType:'text/plain',body:'no'});
+   await new Promise(r=>setTimeout(r,9000));       // slower than TIMEOUT, inside DEADLINE
+   return route.fulfill({status:200,contentType:'application/xml',body:body('pub0')});});
+  await p5.addInitScript(x=>localStorage.setItem('breaking.v1',x),
+    JSON.stringify({migrated:13,idleResetMin:0,
+      feeds:[{id:'s1',cat:'World',name:'slow feed',url:'https://pub0.test/rss'}],
+      proxies:['https://picky2.test/p?url=','https://slow9.test/p?url=']}));
+  await p5.goto('http://localhost:8090/index.html');
+  await p5.waitForTimeout(14000);
+  const h=await p5.evaluate(()=>JSON.parse(localStorage.getItem('breaking.v1.health')));
+  const e=Object.values(h)[0]||{};
+  console.log('feed              :', e.ok?'ok':'*** STILL CUT OFF AT 7s ***');
+  console.log('attempts          :', JSON.stringify((e.attempts||[]).map(a=>a.host+': '+(a.ok?'ok':a.err)+' '+a.ms+'ms')));
+  await ctx5.close();
+}
+
+// The other half of the same log: both relays benched because one feed was
+// too slow for either of them.
+console.log('\n=== a feed nothing can fetch must not bench every relay ===');
+{
+  const ctx6=await b.newContext({...devices['iPhone 14 Pro']});const p6=await ctx6.newPage();
+  await ctx6.route('**/*',async route=>{const u=route.request().url();
+   if(u.startsWith('http://localhost:8090'))return route.continue();
+   const host=new URL(u).host, d=decodeURIComponent(u);
+   if(/^pub|^bad/.test(host)) return route.abort('failed');
+   if(/bad\d\.test/.test(d)) return route.abort('failed');   // no relay can fetch these
+   return route.fulfill({status:200,contentType:'application/xml',body:body('ok')});});
+  await p6.addInitScript(x=>localStorage.setItem('breaking.v1',x),
+    JSON.stringify({migrated:13,idleResetMin:0,proxies:['https://r1.test/p?url=','https://r2.test/p?url='],
+      feeds:[{id:'o',cat:'World',name:'fine',url:'https://pub9.test/rss'},
+             {id:'b1',cat:'World',name:'bad one',url:'https://bad1.test/rss'},
+             {id:'b2',cat:'World',name:'bad two',url:'https://bad2.test/rss'},
+             {id:'b3',cat:'World',name:'bad three',url:'https://bad3.test/rss'}]}));
+  await p6.goto('http://localhost:8090/index.html');
+  await p6.waitForTimeout(6000);
+  const rel=await p6.evaluate(()=>JSON.parse(localStorage.getItem('breaking.v1.relays')||'{}'));
+  const bench=Object.entries(rel).filter(([,st])=>st.until>Date.now()).map(([h])=>h);
+  console.log('relay records     :', Object.entries(rel).map(([h,st])=>`${h} ${st.ok}ok/${st.fail}bad`).join(' · '));
+  console.log('benched           :', JSON.stringify(bench),
+    bench.length?'*** BENCHED FOR FEEDS NOBODY COULD FETCH ***':'(none — the feeds were the problem)');
+  const h=await p6.evaluate(()=>JSON.parse(localStorage.getItem('breaking.v1.health')));
+  console.log('good feed still ok:', (h['https://pub9.test/rss']||{}).ok===true);
+  await ctx6.close();
 }
 srv.close();await b.close();
