@@ -1423,6 +1423,7 @@ function feedFailed(f, err, why) {
 // opts.quiet   - do not hold the screen back; the reader is not waiting on it
 // opts.name    - category name for the status line, when the scope is one
 // opts.summary - report on every feed at the end, not just this pass
+// opts.follow  - the trailing pass of a cycle: no status line while it runs
 async function refresh(scope, opts) {
   // A refresh requested while one is already running used to be dropped on the
   // floor. Opening the app starts an auto-refresh, so a pull a second later hit
@@ -1484,9 +1485,15 @@ async function refresh(scope, opts) {
     // did not expect is indistinguishable from one you did.
     const why = o.why ? " · " + o.why : "";
     const skipped = current.length ? " · " + current.length + " already current" : "";
-    setStatus(o.quiet && o.summary
-      ? "Updating the rest in the background" + why + "…"
-      : "Fetching " + feeds.length + " " + name
+    // The trailing pass of a cycle says nothing while it runs. It starts when
+    // the near feeds have already landed and their result is on the status
+    // line, so announcing it there replaced a result the reader had just been
+    // given with "background refresh · app opened" - a line naming something
+    // that happened half a minute earlier, arriving out of nowhere. The dimmed
+    // arrow is the honest sign that something is still going; the summary at
+    // the end is the report.
+    if (!o.follow)
+      setStatus("Fetching " + feeds.length + " " + name
         + "feed" + (feeds.length === 1 ? "" : "s") + why + skipped + "…");
 
     const merged = new Map(items.map(i => [i.id, i]));
@@ -1621,6 +1628,28 @@ async function refresh(scope, opts) {
   }
 }
 
+// Arriving at a category is the moment its stories are being read, so it is
+// the moment to check them. Only the circular arrow refreshes everything; this
+// fetches the one category you have just turned to, and only when its feeds
+// have not answered recently - swiping back and forth along the chip row must
+// not cost a fetch per turn. It is quiet: a page turn that dimmed the screen
+// and took the swipe away would be worse than a slightly old list.
+const TAB_FRESH_MS = 5 * 60 * 1000;
+function refreshArrival(cat) {
+  if (!cfg.autoRefresh || !cat) return;
+  // A refresh already in flight is either fetching this category or about to;
+  // queueing behind it would displace whatever else is waiting its turn.
+  if (loading) return;
+  const have = new Set(items.map(i => i.source));
+  const stale = cfg.feeds.filter(f => {
+    if ((f.cat || "Other") !== cat) return false;
+    const h = health[f.url];
+    return !(h && h.ok && Date.now() - h.at < TAB_FRESH_MS && have.has(f.name));
+  });
+  if (!stale.length) return;
+  refresh(stale, { quiet: true, name: cat, why: "you opened " + cat });
+}
+
 // The categories you can reach without leaving the screen: the one you are
 // reading and the two a swipe away. Everything else can arrive later - waiting
 // on sixteen feeds to read the first one is the whole delay.
@@ -1644,7 +1673,7 @@ async function stagedRefresh(quiet, why, maxAge) {
   const rest  = cfg.feeds.filter(f => !near.has(f.cat || "Other"));
   if (!first.length) return refresh(undefined, { quiet, summary: true, why, maxAge });
   await refresh(first, { quiet, summary: !rest.length, why, maxAge });
-  if (rest.length) await refresh(rest, { quiet: true, summary: true, why, maxAge });
+  if (rest.length) await refresh(rest, { quiet: true, summary: true, follow: true, why, maxAge });
 }
 
 // A launch within this of the last successful read of a feed serves what is
@@ -1838,6 +1867,7 @@ function renderChips() {
       render();
       $("#list").scrollTop = 0;     // direct assignment, not a scroll request
       revealChip([...document.querySelectorAll(".chip")].find(x => x.textContent === c));
+      refreshArrival(active);
     };
     chips.appendChild(b);
   });
@@ -2977,6 +3007,9 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
       park();
       animating = false;
       queuePrime();
+      // After the turn, not during it: a fetch that lands mid-slide repaints
+      // the panel the finger is still moving.
+      refreshArrival(active);
     });
   }
 
@@ -3128,7 +3161,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-30.77";
+const BUILD = "2026-08-30.78";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
