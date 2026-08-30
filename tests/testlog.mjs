@@ -101,5 +101,33 @@ await page.click('#log-clear'); await page.waitForTimeout(300);
 console.log('after Clear        :', (await readLog()).length, 'entries ·',
   await page.evaluate(()=>document.querySelector('#log-msg').textContent));
 
+// The report that started this: clear the log, run Test all feeds, watch a
+// feed fail, and find the log still empty - because only refresh() logged.
+console.log('\n=== Test all feeds writes to the log too ===');
+sickMode='429';
+await page.click('#close-log'); await page.waitForTimeout(200);
+await page.click('#open-feeds'); await page.waitForTimeout(300);
+await page.click('#f-test'); await page.waitForTimeout(4000);
+console.log('button says        :', await page.evaluate(()=>document.querySelector('#f-test').textContent));
+let after=await readLog();
+console.log('entries after test :', after.length, after.length?'':'*** A TEST RUN THAT FAILED LOGGED NOTHING ***');
+const t=after.find(e=>e.k==='fail');
+console.log('  what             :', t&&t.n, '·', JSON.stringify(t&&t.w), '·', JSON.stringify((t&&t.a||[]).map(a=>a.h+': '+a.e)));
+if(t&&t.w!=='test all feeds') console.log('*** the entry does not say the test asked for it');
+if(after.some(e=>e.n==='Good Feed'&&e.k==='fail')) console.log('*** a working feed was logged as failing');
+
+// Watching the log while something fails should show it arrive.
+console.log('\n=== the sheet updates while it is open ===');
+await page.click('#close-feeds'); await page.waitForTimeout(200);
+await page.click('#open-settings'); await page.waitForTimeout(200);
+await page.click('#open-log'); await page.waitForTimeout(200);
+await page.click('#log-clear'); await page.waitForTimeout(200);
+const before0=await page.evaluate(()=>document.querySelectorAll('#log-list .log-entry').length);
+await page.evaluate(()=>refresh(undefined,{quiet:true,why:'a background pass'}));
+await page.waitForTimeout(3500);
+const after0=await page.evaluate(()=>document.querySelectorAll('#log-list .log-entry').length);
+console.log('rows on screen     :', before0, '->', after0, after0>before0?'(arrived without reopening)':'*** THE OPEN SHEET DID NOT UPDATE ***');
+console.log('  sheet still open :', await page.evaluate(()=>document.querySelector('#log-sheet').classList.contains('open')));
+
 console.log('\n'+(errs.length?'*** ERRORS '+errs.join(';'):'no JS errors'));
 await b.close();srv.close();

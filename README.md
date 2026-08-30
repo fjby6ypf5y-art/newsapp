@@ -409,6 +409,13 @@ usually returns an HTML error page under a `200`, which parses as `bad XML` and
 tells you nothing, and seeing `<!doctype html>…502 Bad Gateway` in the entry
 ends the guessing immediately.
 
+Everything that fetches a feed writes to it — the refreshes and **Test all
+feeds** alike, through one shared pair of functions. That is not a detail: for
+one build they were two separate code paths and only the refresh logged, so
+running a test, watching two feeds fail and finding an empty log made the page
+look broken rather than merely incomplete. If the sheet is open while
+something fails, the entry appears without closing and reopening it.
+
 **Copy log** puts the whole thing on the clipboard as plain text with the build
 stamp on top, which is the form to paste into a bug report or a session. A
 storage failure that trims the story cache is logged too, since stories quietly

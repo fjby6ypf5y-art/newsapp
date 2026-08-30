@@ -931,6 +931,10 @@ function logEvent(e) {
   });
   if (log.length > LOG_MAX) log.length = LOG_MAX;
   saveLog();
+  // If you are watching the log while something is failing, you should see it
+  // arrive rather than having to close the sheet and open it again.
+  const sheet = $("#log-sheet");
+  if (sheet && sheet.classList.contains("open")) renderLog();
 }
 
 // One attempt's ceiling. Anything slower than this is not worth waiting for
@@ -1330,6 +1334,45 @@ function parseXmlFeed(xml, source, feedUrl) {
   }).filter(i => i.title !== "(untitled)" || i.link);
 }
 
+// parseFeed, with the opening of the response attached to whatever it throws.
+// A relay having a bad day answers 200 with an HTML error page, which parses
+// as "bad XML" and says nothing on its own about where the junk came from.
+function parseWithBody(text, f) {
+  try { return parseFeed(text, f.name, f.url); }
+  catch (e) { e.body = text.slice(0, 160); throw e; }
+}
+
+// Recording what happened to one feed: the health entry the dots are drawn
+// from, and the log entry you go looking for afterwards. Both a refresh and
+// "Test all feeds" come through here. They did not - only refresh() logged -
+// and a test run that ended in two failures and an empty log made the whole
+// page look broken rather than merely incomplete.
+function feedWorked(f, list, fp, why) {
+  const prev = health[f.url];
+  // The other half of "is this broken or is it flaky".
+  if (prev && !prev.ok)
+    logEvent({ kind: "ok", name: f.name, url: f.url, why, attempts: attemptLog[f.url] });
+  health[f.url] = {
+    ok: true, at: Date.now(), n: list.length, sig: fp,
+    newest: list.reduce((m, i) => Math.max(m, i.ts || 0), 0),
+    direct: isDirect(f.url), attempts: attemptLog[f.url]
+  };
+}
+
+function feedFailed(f, err, why) {
+  const attempts = (err && err.attempts) || attemptLog[f.url];
+  const msg = String((err && err.message) || err);
+  health[f.url] = { ok: false, at: Date.now(), err: msg, attempts };
+  logEvent({ kind: "fail", name: f.name, url: f.url, why,
+             attempts: attempts || [{ host: "?", err: msg, ms: 0 }],
+             // When a relay answered and the failure came afterwards, the
+             // reason is not in the route lines - they all say "ok". When
+             // nothing answered, grab()'s message *is* the route lines, and
+             // repeating it above them helps nobody.
+             reason: attempts && attempts.some(a => a.ok) ? msg : "",
+             body: err && err.body });
+}
+
 // scope: an array of feeds to fetch, or omitted for all of them.
 // opts.quiet   - do not hold the screen back; the reader is not waiting on it
 // opts.name    - category name for the status line, when the scope is one
@@ -1447,39 +1490,14 @@ async function refresh(scope, opts) {
             health[f.url] = { ...prev, at: Date.now(), sig: fp, direct: isDirect(f.url), attempts: attemptLog[f.url] };
             return;
           }
-          let list;
-          try { list = parseFeed(text, f.name, f.url); }
-          catch (e) {
-            // What a relay hands back when it is unhappy is usually an HTML
-            // error page under a 200, which parses as "bad XML" and tells you
-            // nothing at all. The opening of the response says which it was.
-            e.body = text.slice(0, 160);
-            throw e;
-          }
-          // Worth writing down: a feed that comes back after failing is the
-          // other half of the question "is this broken, or is it flaky".
-          if (prev && !prev.ok)
-            logEvent({ kind: "ok", name: f.name, url: f.url, why: o.why, attempts: attemptLog[f.url] });
-          health[f.url] = {
-            ok: true, at: Date.now(), n: list.length, sig: fp,
-            newest: list.reduce((m, i) => Math.max(m, i.ts || 0), 0),
-            direct: isDirect(f.url), attempts: attemptLog[f.url]
-          };
+          const list = parseWithBody(text, f);
+          feedWorked(f, list, fp, o.why);
           if (absorb(list)) scheduleRender(); else same++;
           ok++;
         }
       ).catch(err => {
         failed.push(f.name);
-        const attempts = (err && err.attempts) || attemptLog[f.url];
-        health[f.url] = { ok: false, at: Date.now(), err: String(err && err.message || err), attempts };
-        logEvent({ kind: "fail", name: f.name, url: f.url, why: o.why,
-                   attempts: attempts || [{ host: "?", err: String(err && err.message || err), ms: 0 }],
-                   // When a relay answered and the failure came afterwards, the
-                   // reason is not in the route lines - they all say "ok". When
-                   // nothing answered, grab()'s message *is* the route lines,
-                   // and repeating it above them helps nobody.
-                   reason: attempts && attempts.some(a => a.ok) ? String(err && err.message || err) : "",
-                   body: err && err.body });
+        feedFailed(f, err, o.why);
       }).finally(() => {
         done++;
         if (done < total && !(o.quiet && o.summary))
@@ -2357,15 +2375,11 @@ $("#f-test").onclick = async () => {
   const b = $("#f-test");
   b.textContent = "Testing…"; b.disabled = true;
   await Promise.all(cfg.feeds.map(f =>
-    grab(f.url).then(x => ({ list: parseFeed(x, f.name, f.url), sig: sig(x) })).then(
-      // The fingerprint goes in alongside the result: a test that dropped it
-      // would make the next refresh reparse and re-merge every feed for
-      // nothing.
-      r => { health[f.url] = { ok: true, at: Date.now(), n: r.list.length, sig: r.sig,
-        newest: r.list.reduce((m, i) => Math.max(m, i.ts || 0), 0),
-        direct: isDirect(f.url), attempts: attemptLog[f.url] }; },
-      err  => { health[f.url] = { ok: false, at: Date.now(), err: String(err && err.message || err), attempts: err && err.attempts }; }
-    )
+    // The fingerprint goes in alongside the result: a test that dropped it
+    // would make the next refresh reparse and re-merge every feed for nothing.
+    grab(f.url)
+      .then(text => feedWorked(f, parseWithBody(text, f), sig(text), "test all feeds"))
+      .catch(err => feedFailed(f, err, "test all feeds"))
   ));
   saveHealth(); renderFeeds();
   const bad = cfg.feeds.filter(f => health[f.url] && !health[f.url].ok).length;
@@ -2996,7 +3010,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-29.73";
+const BUILD = "2026-08-29.74";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
