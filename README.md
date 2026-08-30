@@ -100,6 +100,28 @@ something about to rearrange itself. The remaining feeds follow in the
 background with nothing dimmed. The status line stays at full strength
 throughout and reports on every feed at the end.
 
+**The second pass says nothing while it runs.** It used to announce itself —
+`Updating the rest in the background · app opened…` — which arrived at the one
+moment it was least wanted: the near feeds had just landed, their result was on
+the status line, and it was replaced by a line naming something that had
+happened half a minute earlier. On a slow connection "app opened" could show up
+long after the app was opened, reading as a refresh nobody asked for. So the
+trailing pass is silent: the near pass's result stays up, the dimmed ↻ arrow is
+the sign that something is still going, and the summary at the end is the
+report.
+
+**Turning to a category checks it.** The stories you are about to read are the
+ones worth being current, so arriving at a category — by chip or by page turn —
+fetches its feeds if they have not answered in the last five minutes. Before,
+nothing but the arrow, a pull, or coming back after five minutes away fetched
+anything, so a session left open drifted: every category you turned to showed
+what it had when the app opened, and the only way to get today's stories in it
+was to pull down. The check is quiet (it never dims the screen or takes the
+swipe away), it runs after the page turn rather than during it, it is skipped
+while another refresh is in flight, and swiping back and forth along the chip
+row costs nothing — a category read seconds ago is left alone. **Refresh
+automatically** in Settings turns it off with everything else.
+
 **The hold is bounded, and the background pass never holds at all.** Two
 things used to go wrong here. A refresh running at all — including a quiet
 background one — blocked chip taps and swipes, so the second pass quietly made

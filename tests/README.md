@@ -33,6 +33,7 @@ If Chromium is somewhere else, set `CHROMIUM_PATH`.
 | `testslide` `testspringback` `testmidbuild` | The page turn, the spring back, and a swipe taken while a panel is still filling |
 | `testcost2` `testhandover` | Frame times through a committed swipe; is the screen ever blank? |
 | `teststaged` | Near categories first behind the dimmed screen, the rest in the background |
+| `testarrival` | Turning to a category fetches it when it is old, and leaves it alone when it is not |
 | `testsheets` | Closing Feeds or Settings fetches only what changed |
 | `testwhy` | Traces every `refresh()` and what asked for it, on the real default feed list |
 | `testbusy` | Is the reading surface held back while feeds land? |
