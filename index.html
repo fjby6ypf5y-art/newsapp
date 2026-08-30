@@ -238,9 +238,14 @@ select.sel{width:100%;background:var(--panel);border:1px solid var(--line);
   text-transform:uppercase;color:var(--dim)}
 .lib{display:flex;flex-wrap:wrap;gap:6px}
 .lib button{padding:6px 11px;border-radius:999px;border:1px solid var(--line);
-  background:transparent;color:var(--dim);font-size:0.8125rem;text-align:left}
-.lib button[data-on="1"]{background:var(--panel2);border-color:var(--dim);color:var(--text);font-weight:600}
-.lib button[data-on="1"]::before{content:"✓ ";color:#4bd76d}
+  background:transparent;color:var(--dim);font-size:0.8125rem;text-align:left;font-weight:600}
+/* A chip is exactly the same size on as off: the tick is always there, merely
+   invisible, and the weight never changes. Anything that alters a chip's width
+   re-wraps the whole row, so tapping one moves the ones around it - which on a
+   phone means the next tap lands on a feed you did not choose. */
+.lib button::before{content:"✓ ";color:#4bd76d;visibility:hidden}
+.lib button[data-on="1"]{background:var(--panel2);border-color:var(--dim);color:var(--text)}
+.lib button[data-on="1"]::before{visibility:visible}
 .lib button[data-pay="1"]::after{content:" $";color:#c9a227;font-weight:700}
 /* ---------- loading ---------- */
 /* While feeds are still arriving the stories are half built, so the whole
@@ -1955,6 +1960,51 @@ function renderItem(i, list) {
 /* -------------------------------------------------------------- settings */
 let editing = null;          // id of the feed whose editor is open
 
+// Adding a feed makes the list above the library one row taller (two, if it is
+// the first feed in a category), and everything below it slides down by that
+// much - under a finger that is still on the chip it just tapped. Every rebuild
+// of the sheet goes through here: it measures where the thing you were touching
+// sat before, and puts the scroll back afterwards so it has not moved.
+// `find` is the element itself when it survives the rebuild, or a function that
+// looks it up again when it does not.
+function keepStill(find, work) {
+  const sheet = $("#feeds-sheet"), box = $("#feeds");
+  const at = t => (typeof t === "function" ? t() : t);
+  const before = at(find);
+  const y = before ? before.getBoundingClientRect().top : 0;
+  work();
+  const after = at(find);
+  if (!before || !after) return;
+  let moved = after.getBoundingClientRect().top - y;
+  // Scrolling can only take back space that was added. A list that got shorter
+  // with the sheet already at the top has nowhere to scroll to, so it holds on
+  // to whatever height it cannot scroll back until the sheet is closed: a blank
+  // strip under the last feed costs nothing, and switching a feed off does not
+  // drag the chips under the finger up by a whole row.
+  // Twice, because putting a floor on the box changes what the last row's
+  // margin contributes to its height, so the first correction lands short.
+  for (let i = 0; i < 2 && sheet.scrollTop + moved < -0.5; i++) {
+    const floor = parseFloat(box.style.minHeight) || box.getBoundingClientRect().height;
+    box.style.minHeight = (floor - (sheet.scrollTop + moved)) + "px";
+    moved = at(find).getBoundingClientRect().top - y;
+  }
+  if (moved) sheet.scrollTop += moved;
+}
+
+// A feed you have just switched on is checked on its own, there and then. It is
+// the one feed whose health nobody knows yet, and the dot appearing next to it
+// is the answer to "did that work" - which is what "Test all feeds", a fetch of
+// every feed you have, was being used for.
+async function testFeeds(added) {
+  if (!added.length) return;
+  await refresh(added, { quiet: true, why: added.length === 1 ? "feed added" : "feeds added" });
+  // Closing the sheet fetches what changed while it was open; these have just
+  // been fetched, so they are folded into the snapshot rather than read twice.
+  // A feed the queue dropped has no health entry and stays in the close pass.
+  if (sheetSnapshot) added.forEach(f => { if (health[f.url]) sheetSnapshot.set(f.id, feedLine(f)); });
+  keepStill($("#library"), renderFeeds);
+}
+
 function renderFeeds() {
   const box = $("#feeds");
   box.innerHTML = "";
@@ -2166,11 +2216,21 @@ function renderLibrary() {
     all.style.cssText = "margin-left:auto;background:transparent;border:0;color:var(--dim);"
       + "font-size:0.6875rem;font-weight:700;letter-spacing:.6px;text-transform:uppercase;padding:0";
     all.onclick = () => {
+      const added = [];
       if (allOn) cfg.feeds = cfg.feeds.filter(f => !list.some(c => c.url === f.url));
-      else free.forEach(f => { if (!have.has(f.url)) cfg.feeds.push({ ...f, id: newId() }); });
-      save(); pruneOrphans(); renderFeeds(); renderLibrary(); render();
+      else free.forEach(f => {
+        if (have.has(f.url)) return;
+        const one = { ...f, id: newId() };
+        cfg.feeds.push(one); added.push(one);
+      });
+      save(); pruneOrphans();
+      keepStill(() => box.querySelector('[data-cat="' + cat + '"]'), () => {
+        renderFeeds(); renderLibrary(); render();
+      });
+      testFeeds(added);
     };
     h.appendChild(all);
+    h.dataset.cat = cat;
     box.appendChild(h);
     const wrap = el("div", "lib");
     list.forEach(f => {
@@ -2181,10 +2241,17 @@ function renderLibrary() {
         b.dataset.pay = "1";
         b.title = "Headlines are free; the article asks for a subscription";
       }
+      b.dataset.feed = f.url;
       b.onclick = () => {
+        const added = [];
         if (have.has(f.url)) cfg.feeds = cfg.feeds.filter(o => o.url !== f.url);
-        else cfg.feeds.push({ ...f, id: newId() });
-        save(); pruneOrphans(); renderFeeds(); renderLibrary(); render();
+        else { const one = { ...f, id: newId() }; cfg.feeds.push(one); added.push(one); }
+        save(); pruneOrphans();
+        // The chip you tapped is rebuilt, so it is found again by its feed.
+        keepStill(() => [...box.querySelectorAll(".lib button")].find(x => x.dataset.feed === f.url), () => {
+          renderFeeds(); renderLibrary(); render();
+        });
+        testFeeds(added);
       };
       wrap.appendChild(b);
     });
@@ -2197,15 +2264,20 @@ function renderLibrary() {
 // has already fetched them - left the app greying out and doing it all again.
 // Only feeds that are actually new or changed are fetched now, and quietly;
 // the circular arrow remains the only thing that refreshes the lot.
+// Keyed by id rather than joined into one string: a feed checked the moment it
+// was switched on is written back into the snapshot on its own, and only that
+// feed stops counting as changed.
 let sheetSnapshot = null;
-const feedPrint = () => cfg.feeds.map(f => f.id + "|" + f.url + "|" + f.name + "|" + (f.cat || "")).join("\n");
+const feedLine  = f => f.id + "|" + f.url + "|" + f.name + "|" + (f.cat || "");
+const feedPrint = () => new Map(cfg.feeds.map(f => [f.id, feedLine(f)]));
 
 function refreshChanged() {
-  const before = sheetSnapshot; sheetSnapshot = null;
-  if (before === null) return;
-  const was = new Map(before.split("\n").filter(Boolean).map(l => [l.split("|")[0], l]));
-  const fresh = cfg.feeds.filter(f => was.get(f.id) !== (f.id + "|" + f.url + "|" + f.name + "|" + (f.cat || "")));
-  if (feedPrint() === before) return;                  // nothing was touched
+  const was = sheetSnapshot; sheetSnapshot = null;
+  if (was === null) return;
+  const now = feedPrint();
+  const untouched = now.size === was.size && [...now].every(([id, l]) => was.get(id) === l);
+  if (untouched) return;                               // nothing was touched
+  const fresh = cfg.feeds.filter(f => was.get(f.id) !== feedLine(f));
   pruneOrphans();
   render();
   if (fresh.length) refresh(fresh, { quiet: true, why: "feeds changed" });
@@ -2219,6 +2291,9 @@ function showSheet(id, open) {
 }
 
 function openFeeds(open) {
+  // The reserved height keepStill leaves behind is only there to stop the page
+  // moving under a finger; it belongs to one visit to this page, not the next.
+  $("#feeds").style.minHeight = "";
   if (open) {
     showSheet("#settings", false);
     showSheet("#log-sheet", false);
@@ -2351,11 +2426,13 @@ $("#f-add").onclick = async () => {
     if (cfg.feeds.some(f => f.url === found.url)) throw new Error("You already have that feed.");
     const name = $("#f-name").value.trim() || found.name
       || (() => { try { return new URL(found.url).hostname.replace(/^www\./, ""); } catch { return "Feed"; } })();
-    cfg.feeds.push({ id: newId(), name, url: found.url, cat: $("#f-cat").value || "Other" });
+    const one = { id: newId(), name, url: found.url, cat: $("#f-cat").value || "Other" };
+    cfg.feeds.push(one);
     save();
     $("#f-url").value = ""; $("#f-name").value = "";
     msg.textContent = "Added " + name + " — " + found.url;
-    renderFeeds(); renderLibrary(); render();
+    keepStill($("#f-add"), () => { renderFeeds(); renderLibrary(); render(); });
+    testFeeds([one]);
   } catch (e) {
     msg.style.color = "var(--accent)";
     msg.textContent = e && e.message ? e.message : "Could not read that as a feed.";
@@ -3051,7 +3128,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-30.76";
+const BUILD = "2026-08-30.77";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

@@ -40,6 +40,7 @@ If Chromium is somewhere else, set `CHROMIUM_PATH`.
 | `testptr` `testscoped` | Pull to refresh, the idle reset, and category-scoped fetching |
 | `testformats` | RSS, Atom, RDF, JSON Feed, and what a broken feed does |
 | `testfeeds` `testdiscover` | Feed editing, and finding a feed from a page address |
+| `testadd` | Switching a feed on: is only that feed fetched, and do the chips under your finger stay put? |
 | `testrelays` | Five relays, three of them broken: how long a refresh takes, whether the screen comes back, and whether a dead relay costs one timeout per feed |
 | `testcsp` `testsec` | The policy blocks what it should; a hostile feed gets nothing through |
 | `testsetup` | The setup link restores feeds and refuses a corrupt one |

@@ -134,6 +134,22 @@ which has just fetched them — greyed the app out and did it all again. Now onl
 feeds you actually added or edited are fetched, in the background. The circular
 arrow is the only thing that refreshes everything.
 
+**Adding a feed checks that feed, and nothing else.** A feed switched on in the
+library — or added by URL, or brought in by **Add all** — is fetched the moment
+it is added, in the background, so its health dot answers "did that work"
+straight away. That check is the reason nobody has to reach for **Test all
+feeds**, which fetches every feed you have, to find out about one. A feed
+checked this way is not fetched again when the sheet closes.
+
+**Toggling a feed does not move the page.** The list above the library grows a
+row (two, if it is the first feed in a category) every time a feed goes on, and
+everything below it used to slide under the finger that had just tapped a chip —
+so the next tap landed on a feed nobody chose. The sheet's scroll is now
+corrected by exactly the height that appeared above whatever you touched, and a
+library chip is the same size on as off: the tick is always in the layout, just
+invisible while the feed is off, and the weight no longer changes. Nothing
+re-wraps, so nothing moves.
+
 **The chip row holds still.** Landing on a category that is already visible
 moves nothing; only a category off the end of the row scrolls it, and then by
 the least it can, leaving a neighbour peeking so the row still reads as a row.
@@ -182,7 +198,8 @@ Tap the **⚙** button to configure.
   for destructive actions throughout, so Save is never red.
   Editing an address clears what was learned about the old one; renaming a feed
   relabels the stories already fetched under the old name. **Test all feeds**
-  re-checks every one on demand.
+  re-checks every one on demand — it is for the whole list, not for a feed you
+  have just added, which is checked on its own as it goes in.
 - **Add from library** — 82 curated feeds across the seven categories, with an
   **Add all** button per category.
   Digital-native outlets sit alongside legacy ones: Axios, Vox, The Intercept,
