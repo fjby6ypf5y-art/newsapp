@@ -385,6 +385,17 @@ lesson generalises - a feed only needs `SWAPPED` (not a straight edit) once
 there's any real chance a device has already added it, not only once one is
 confirmed to have.
 
+`SWAPPED` only matches the exact URL it lists, though, and WSJ's whole feed
+platform had moved - a feed on some other `feeds.a.dj.com` section that
+migration 16 didn't happen to name (added by hand in the feed editor, or
+from a section this library never carried) sailed through untouched.
+Migration 17 catches every remaining `feeds.a.dj.com/rss/<section>.xml` by
+pattern instead of by exact URL, rewriting each to the same
+`feeds.content.dowjones.io` host under its own section name - except
+`RSSMarketsMain` (WSJ Markets), which `DEAD_FEEDS` still removes outright
+rather than lets reappear, since WSJ Business replaces it in the library
+on purpose rather than under its old name.
+
 **On feeds that fail:** whether a feed works depends on your network and on
 which relay can reach it, so the only place the answer is true is your phone.
 That's what the health dots are for. If one goes red, drop it and try another

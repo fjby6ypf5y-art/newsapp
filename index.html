@@ -852,6 +852,28 @@ function migrate(c) {
     });
     c.migrated = 16;
   }
+
+  // SWAPPED only catches the exact URLs it lists - a feed pointed at
+  // feeds.a.dj.com under some other WSJ section (added before this library
+  // ever offered it, or hand-edited in the feed editor) would sail through
+  // migration 16 untouched. WSJ's whole RSS platform moved to the same new
+  // host under the same path segment, so catch every remaining one by
+  // pattern instead of by exact match. RSSMarketsMain (WSJ Markets) never
+  // reaches here - DEAD_FEEDS above already removed it, and on purpose:
+  // WSJ Business replaces it in the library rather than reappearing under
+  // its old section name.
+  if (c.migrated < 17) {
+    const have = new Set(c.feeds.map(f => f.url));
+    c.feeds = c.feeds.flatMap(f => {
+      const m = /^https:\/\/feeds\.a\.dj\.com\/rss\/([^/?]+)\.xml$/i.exec(f.url);
+      if (!m) return [f];
+      const url = `https://feeds.content.dowjones.io/public/rss/${m[1]}`;
+      if (have.has(url)) return [];               // already have it under the new URL
+      have.add(url);
+      return [{ ...f, url }];
+    });
+    c.migrated = 17;
+  }
   return c;
 }
 
@@ -3272,7 +3294,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-09-01.83";
+const BUILD = "2026-09-01.84";
 // Full stamp stays in Settings (the only place it was ever findable before);
 // this is just enough to tell two builds apart at a glance without opening
 // a sheet - the trailing counter, not the date, since the date rarely
