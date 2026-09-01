@@ -344,6 +344,34 @@ URL saved. CTV's Bell Media endpoint was the first entry; WSJ Markets
 (`RSSMarketsMain.xml`) was the second, its XML stuck on 2025 articles, and
 WSJ Business replaces it in the library.
 
+**Freshness sweep, September 2026.** WSJ Markets going stale prompted a check
+of the rest of the catalogue against a simple bar: at least one post a month,
+ideally more, with evidence of something from August 2026 or later. The
+sandbox has no outbound network, so nothing here was fetched directly - the
+check was web search only, looking for dated recent articles, current
+third-party feed directories, and signs of retired infrastructure. That
+found `feeds.a.dj.com` - WSJ's old feed host - dead across the board, not
+just for Markets: World News and Tech shared the same stuck infrastructure,
+now pointed at `feeds.content.dowjones.io` instead, WSJ's current host.
+Three more turned up outside WSJ: Axios's `api.axios.com/feed/` has been
+erroring since around 2021 (now `axios.com/feeds/feed.rss`); Calculated Risk
+stopped posting to Blogspot in January 2026 after 21 years and moved to
+Substack; and CBC retired the `rss.cbc.ca/lineup/*.xml` scheme for Arts in
+favour of `cbc.ca/webfeed`. CBC Arts is a `DEFAULT`, so its swap reaches
+every fresh install as well as existing ones. All four retired URLs are in
+`SWAPPED`, behind migration 15. Toronto Star and Vancouver Sun's URLs were
+also corrected before ever shipping to a real device (the plain `/feed`
+paths were suspect on both), so those went straight into `CATALOG` with no
+migration needed.
+
+A handful of feeds came back genuinely uncertain rather than confirmed
+either way - Bloomberg Markets, Washington Post Business, Washington Post
+Tech's exact path, Yahoo Sports, and the paywalled NYT sections - because
+search can't see past a subscribe wall or doesn't index a small feed's
+publish dates. Nothing was removed on an absence of evidence; the health
+dots and "Test all feeds" are the actual verdict, same as for every other
+entry in this catalogue.
+
 **On feeds that fail:** whether a feed works depends on your network and on
 which relay can reach it, so the only place the answer is true is your phone.
 That's what the health dots are for. If one goes red, drop it and try another

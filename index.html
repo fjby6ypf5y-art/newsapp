@@ -432,7 +432,7 @@ const CATALOG = [
   ["World", "France 24",          "https://www.france24.com/en/rss"],
   ["World", "CBC World",          "https://rss.cbc.ca/lineup/world.xml"],
   ["World", "ABC Australia",      "https://www.abc.net.au/news/feed/51120/rss.xml"],
-  ["World", "Axios",              "https://api.axios.com/feed/"],
+  ["World", "Axios",              "https://www.axios.com/feeds/feed.rss"],
   ["World", "Vox",                "https://www.vox.com/rss/index.xml"],
   ["World", "The Intercept",      "https://theintercept.com/feed/?rss"],
   ["World", "Rest of World",      "https://restofworld.org/feed/latest"],
@@ -443,7 +443,7 @@ const CATALOG = [
 
   // Paywalled national papers. Off by default, same as the metered feeds
   // under Business below.
-  ["World", "WSJ World News",     "https://feeds.a.dj.com/rss/RSSWorldNews.xml", true],
+  ["World", "WSJ World News",     "https://feeds.content.dowjones.io/public/rss/RSSWorldNews", true],
   ["World", "NYT World",          "https://rss.nytimes.com/services/xml/rss/nyt/World.xml", true],
   ["World", "Washington Post World","https://feeds.washingtonpost.com/rss/world", true],
 
@@ -465,7 +465,9 @@ const CATALOG = [
   ["Business", "Abnormal Returns","https://abnormalreturns.com/feed/"],
   ["Business", "Musings on Markets","https://aswathdamodaran.substack.com/feed"],
   ["Business", "Klement on Investing","https://klementoninvesting.substack.com/feed"],
-  ["Business", "Calculated Risk", "https://www.calculatedriskblog.com/feeds/posts/default?alt=rss"],
+  // The Blogspot original stopped posting in January 2026 after 21 years;
+  // the author moved to Substack, so the library follows.
+  ["Business", "Calculated Risk", "https://calculatedrisk.substack.com/feed"],
 
   // Primary sources: the release itself, ahead of anyone's write-up of it.
   ["Business", "Federal Reserve", "https://www.federalreserve.gov/feeds/press_all.xml"],
@@ -476,8 +478,10 @@ const CATALOG = [
   // Off by default and added only on purpose - "Add all" skips them.
   ["Business", "FT Markets",      "https://www.ft.com/markets?format=rss", true],
   // WSJ Markets (RSSMarketsMain.xml) was dropped here: confirmed dead, see
-  // DEAD_FEEDS below. WSJ Business replaces it.
-  ["Business", "WSJ Business",    "https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml", true],
+  // DEAD_FEEDS below. WSJ Business replaces it, on Dow Jones's current feed
+  // host - feeds.a.dj.com turned out to be retired infrastructure across the
+  // board, not just this one section (see the World and Tech entries below).
+  ["Business", "WSJ Business",    "https://feeds.content.dowjones.io/public/rss/WSJcomUSBusiness", true],
   ["Business", "Bloomberg Markets","https://feeds.bloomberg.com/markets/news.rss", true],
   ["Business", "Financial Post",  "https://financialpost.com/feed/", true],
   ["Business", "Economist Finance","https://www.economist.com/finance-and-economics/rss.xml", true],
@@ -498,9 +502,9 @@ const CATALOG = [
   ["Tech",  "Bleeping Computer",  "https://www.bleepingcomputer.com/feed/"],
   ["Tech",  "Schneier",           "https://www.schneier.com/feed/atom/"],
   ["Tech",  "BBC Technology",     "https://feeds.bbci.co.uk/news/technology/rss.xml"],
-  ["Tech",  "WSJ Tech",           "https://feeds.a.dj.com/rss/RSSWSJD.xml", true],
+  ["Tech",  "WSJ Tech",           "https://feeds.content.dowjones.io/public/rss/RSSWSJD", true],
   ["Tech",  "NYT Technology",     "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml", true],
-  ["Tech",  "Washington Post Tech","https://feeds.washingtonpost.com/rss/technology", true],
+  ["Tech",  "Washington Post Tech","https://feeds.washingtonpost.com/rss/business/technology", true],
 
   ["Canada","CBC Canada",         "https://rss.cbc.ca/lineup/canada.xml"],
   // CBC's front page: national plus international. Overlaps CBC World, which
@@ -519,8 +523,8 @@ const CATALOG = [
   ["Canada","Bank of Canada",     "https://www.bankofcanada.ca/content_type/press-releases/feed/"],
   ["Canada","StatCan The Daily",  "https://www150.statcan.gc.ca/n1/dai-quo/rss/new-nouveau-eng.xml"],
   ["Canada","Globe and Mail",     "https://www.theglobeandmail.com/arc/outboundfeeds/rss/category/canada/", true],
-  ["Canada","Vancouver Sun",      "https://vancouversun.com/feed", true],
-  ["Canada","Toronto Star",       "https://www.thestar.com/feed", true],
+  ["Canada","Vancouver Sun",      "https://vancouversun.com/feed/atom", true],
+  ["Canada","Toronto Star",       "https://www.thestar.com/content/thestar/feed.RSSManagerServlet.articles.topstories.rss", true],
 
 
   ["Science","Quanta Magazine",   "https://api.quantamagazine.org/feed/"],
@@ -543,7 +547,7 @@ const CATALOG = [
   ["Sport", "NYT Sports",         "https://rss.nytimes.com/services/xml/rss/nyt/Sports.xml", true],
 
   ["Entertainment","BBC Entertainment","https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml"],
-  ["Entertainment","CBC Arts",        "https://rss.cbc.ca/lineup/arts.xml"],
+  ["Entertainment","CBC Arts",        "https://www.cbc.ca/webfeed/rss/rss-arts"],
   ["Entertainment","Guardian Culture","https://www.theguardian.com/culture/rss"],
   ["Entertainment","NPR Music",       "https://feeds.npr.org/1039/rss.xml"],
   ["Entertainment","Variety",         "https://variety.com/feed/"],
@@ -580,7 +584,7 @@ const DEFAULTS = {
     { cat:"Canada", name:"CBC Canada",   url:"https://rss.cbc.ca/lineup/canada.xml" },
     { cat:"Canada", name:"CBC Politics", url:"https://rss.cbc.ca/lineup/politics.xml" },
     { cat:"Canada", name:"Global News",  url:"https://globalnews.ca/feed/" },
-    { cat:"Entertainment",name:"CBC Arts",url:"https://rss.cbc.ca/lineup/arts.xml" },
+    { cat:"Entertainment",name:"CBC Arts",url:"https://www.cbc.ca/webfeed/rss/rss-arts" },
     { cat:"Entertainment",name:"BBC Entertainment",url:"https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml" },
     { cat:"Tech",  name:"Ars Technica",url:"https://feeds.arstechnica.com/arstechnica/index" },
     { cat:"Tech",  name:"Hacker News", url:"https://news.ycombinator.com/rss" },
@@ -624,7 +628,19 @@ const SWAPPED = {
   // CBC's front page mixes international news into the Canada tab; the Canada
   // desk is the one that belongs there, and CBC World covers the rest.
   "https://rss.cbc.ca/lineup/topstories.xml":
-    { cat:"Canada", name:"CBC Canada", url:"https://rss.cbc.ca/lineup/canada.xml" }
+    { cat:"Canada", name:"CBC Canada", url:"https://rss.cbc.ca/lineup/canada.xml" },
+  // CBC retired the rss.cbc.ca/lineup/*.xml scheme for Arts; the current one
+  // is under cbc.ca/webfeed. It's a DEFAULT, so this reaches every install.
+  "https://rss.cbc.ca/lineup/arts.xml":
+    { cat:"Entertainment", name:"CBC Arts", url:"https://www.cbc.ca/webfeed/rss/rss-arts" },
+  // api.axios.com/feed/ has been returning errors since ~2021; Axios's
+  // current feed lives at a different host entirely.
+  "https://api.axios.com/feed/":
+    { cat:"World", name:"Axios", url:"https://www.axios.com/feeds/feed.rss" },
+  // The Blogspot original went quiet in January 2026 after 21 years; the
+  // author moved to Substack.
+  "https://www.calculatedriskblog.com/feeds/posts/default?alt=rss":
+    { cat:"Business", name:"Calculated Risk", url:"https://calculatedrisk.substack.com/feed" }
 };
 
 const DEAD_FEEDS = [
@@ -683,7 +699,7 @@ const SEED_CANADA = [
 
 const SEED_ENTERTAINMENT = [
   { cat:"Entertainment", name:"BBC Entertainment", url:"https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml" },
-  { cat:"Entertainment", name:"CBC Arts",          url:"https://rss.cbc.ca/lineup/arts.xml" },
+  { cat:"Entertainment", name:"CBC Arts",          url:"https://www.cbc.ca/webfeed/rss/rss-arts" },
   { cat:"Entertainment", name:"Guardian Culture",  url:"https://www.theguardian.com/culture/rss" },
   { cat:"Entertainment", name:"Variety",           url:"https://variety.com/feed/" }
 ];
@@ -795,6 +811,19 @@ function migrate(c) {
     const dead = new Set(DEAD_FEEDS);
     c.feeds = c.feeds.filter(f => !dead.has(f.url));
     c.migrated = 14;
+  }
+
+  // A freshness sweep on the whole catalogue turned up three more retired
+  // endpoints (CBC Arts, Axios, Calculated Risk - see SWAPPED above). Same
+  // swap logic as migration 9, run again for the entries added since.
+  if (c.migrated < 15) {
+    const have = new Set(c.feeds.map(f => f.url));
+    c.feeds = c.feeds.flatMap(f => {
+      const swap = SWAPPED[f.url];
+      if (!swap) return [f];
+      return have.has(swap.url) ? [] : [{ ...swap }];
+    });
+    c.migrated = 15;
   }
   return c;
 }
@@ -3216,7 +3245,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-09-01.81";
+const BUILD = "2026-09-01.82";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
