@@ -52,7 +52,9 @@ and shows your last stories even with no bars.
 
 The header has three buttons: **↻** refresh, **☰** feeds, **⚙** settings. Feeds
 live on their own page because they are the part you actually maintain;
-Settings holds behaviour, privacy, the relay list and backup.
+Settings holds behaviour, privacy, the relay list and backup. Next to the
+title is a small `b<n>` chip — the build number, so two builds can be told
+apart without opening Settings for the full stamp.
 
 The chips under the header are **pages, not filters** — one per category, each
 showing only that category, newest first. Tapping one always lands you at the
@@ -371,6 +373,17 @@ search can't see past a subscribe wall or doesn't index a small feed's
 publish dates. Nothing was removed on an absence of evidence; the health
 dots and "Test all feeds" are the actual verdict, same as for every other
 entry in this catalogue.
+
+**The `CATALOG` fix wasn't enough on its own.** WSJ Business had already
+been added from the library on the build before the sweep, while its URL
+was still the dead `feeds.a.dj.com` one - a subscribed feed doesn't pick up
+a change to its library entry, only a new `addFeeds` from one it was never
+in. So the phone kept fetching the old host after `CATALOG` was already
+fixed. All three WSJ entries went into `SWAPPED` behind migration 16 to
+reach anyone in the same spot: added once, catalogue since corrected. The
+lesson generalises - a feed only needs `SWAPPED` (not a straight edit) once
+there's any real chance a device has already added it, not only once one is
+confirmed to have.
 
 **On feeds that fail:** whether a feed works depends on your network and on
 which relay can reach it, so the only place the answer is true is your phone.

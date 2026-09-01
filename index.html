@@ -71,6 +71,7 @@ header{
 .bar{display:flex;align-items:center;gap:10px}
 .brand{display:flex;align-items:baseline;gap:8px;flex:1;min-width:0}
 h1{margin:0;font-size:1.375rem;font-weight:800;letter-spacing:-.4px}
+.verchip{font-size:0.6875rem;color:var(--faint);font-variant-numeric:tabular-nums}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none;align-self:center}
 .dot.live{animation:pulse 2s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
@@ -260,7 +261,7 @@ body.busy .chips{filter:saturate(.3)}
 
 <header>
   <div class="bar">
-    <div class="brand"><span class="dot live"></span><h1>News</h1></div>
+    <div class="brand"><span class="dot live"></span><h1>News</h1><span class="verchip" id="ver-short"></span></div>
     <button class="iconbtn" id="refresh" aria-label="Refresh">&#8635;</button>
     <button class="iconbtn" id="open-feeds" aria-label="Feeds">&#9776;</button>
     <button class="iconbtn" id="open-settings" aria-label="Settings">&#9881;</button>
@@ -640,7 +641,18 @@ const SWAPPED = {
   // The Blogspot original went quiet in January 2026 after 21 years; the
   // author moved to Substack.
   "https://www.calculatedriskblog.com/feeds/posts/default?alt=rss":
-    { cat:"Business", name:"Calculated Risk", url:"https://calculatedrisk.substack.com/feed" }
+    { cat:"Business", name:"Calculated Risk", url:"https://calculatedrisk.substack.com/feed" },
+  // feeds.a.dj.com is WSJ's retired feed host (see DEAD_FEEDS's WSJ Markets
+  // entry). CATALOG picked up the feeds.content.dowjones.io replacements
+  // before this reached a real device for World/Business/Tech - but WSJ
+  // Business specifically had already been added from the library on an
+  // earlier build, so its subscribed copy needs the same swap.
+  "https://feeds.a.dj.com/rss/RSSWorldNews.xml":
+    { cat:"World", name:"WSJ World News", url:"https://feeds.content.dowjones.io/public/rss/RSSWorldNews", paywall:true },
+  "https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml":
+    { cat:"Business", name:"WSJ Business", url:"https://feeds.content.dowjones.io/public/rss/WSJcomUSBusiness", paywall:true },
+  "https://feeds.a.dj.com/rss/RSSWSJD.xml":
+    { cat:"Tech", name:"WSJ Tech", url:"https://feeds.content.dowjones.io/public/rss/RSSWSJD", paywall:true }
 };
 
 const DEAD_FEEDS = [
@@ -824,6 +836,21 @@ function migrate(c) {
       return have.has(swap.url) ? [] : [{ ...swap }];
     });
     c.migrated = 15;
+  }
+
+  // WSJ Business had already been added from the library (feeds.a.dj.com)
+  // before the freshness sweep replaced it in CATALOG - a subscribed copy
+  // doesn't pick up a library change, so it was still pointed at the dead
+  // host. Same swap logic again, for the three WSJ entries added to
+  // SWAPPED since migration 15.
+  if (c.migrated < 16) {
+    const have = new Set(c.feeds.map(f => f.url));
+    c.feeds = c.feeds.flatMap(f => {
+      const swap = SWAPPED[f.url];
+      if (!swap) return [f];
+      return have.has(swap.url) ? [] : [{ ...swap }];
+    });
+    c.migrated = 16;
   }
   return c;
 }
@@ -3245,7 +3272,12 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-09-01.82";
+const BUILD = "2026-09-01.83";
+// Full stamp stays in Settings (the only place it was ever findable before);
+// this is just enough to tell two builds apart at a glance without opening
+// a sheet - the trailing counter, not the date, since the date rarely
+// differs between two builds worth telling apart.
+$("#ver-short").textContent = "b" + BUILD.split(".").pop();
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

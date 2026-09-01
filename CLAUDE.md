@@ -12,10 +12,11 @@ something that went wrong on the device.
 
 ## Every change
 
-- **Bump `BUILD` in `index.html` and `SHELL` in `sw.js` together.** The build
-  stamp is shown in Settings and is the only way to tell, from the phone,
-  which version is running. A change shipped without bumping both is a change
-  that cannot be diagnosed.
+- **Bump `BUILD` in `index.html` and `SHELL` in `sw.js` together.** The full
+  stamp is in Settings; a short `b<n>` chip next to the header title (`#ver-short`)
+  is the same number, for telling two builds apart without opening a sheet.
+  Either is the only way to tell, from the phone, which version is running. A
+  change shipped without bumping both is a change that cannot be diagnosed.
 - **Run the tests** (`node tests/run.mjs`, see `tests/README.md`). They drive
   the real file in an iPhone viewport with the network stubbed.
 - **Update `README.md`** when behaviour changes. It is the only account of why
