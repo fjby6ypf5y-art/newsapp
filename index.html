@@ -2758,17 +2758,27 @@ stagedRefresh(false, "app opened", FRESH_MS);
 // screen exactly as it was - not a greyed-out list refetching every feed. So
 // the return refresh only happens once the stories are actually old, and it
 // runs in the background either way.
+//
+// None of this means anything for a bookmarked desktop tab. There is no app
+// switcher discarding it behind your back, so a plain alt-tab has none of the
+// "was this reclaimed?" uncertainty a home-screen launch does - it is just a
+// tab you looked away from. Gate the whole return-from-background routine
+// (stale refetch, category reset, dropping the parked side panels) to when
+// the app is actually installed; a browser tab gets none of it.
 const STALE_MIN = 5;
 const fetchedAt = () => +(localStorage.getItem(KEY + ".fetchedAt") || 0);
+const isHomeScreenApp = () =>
+  matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     markSeen();
-    if (window.releaseSides) window.releaseSides();
+    if (isHomeScreenApp() && window.releaseSides) window.releaseSides();
     return;
   }
-  if (resetTabIfStale()) { render(); $("#list").scrollTop = 0; }
+  if (isHomeScreenApp() && resetTabIfStale()) { render(); $("#list").scrollTop = 0; }
   markSeen();
   render();                                   // timestamps, at least, are stale
+  if (!isHomeScreenApp()) return;
   if (window.primeSides) window.primeSides();
   if (!cfg.autoRefresh) return;
   if (Date.now() - fetchedAt() < STALE_MIN * 60000) return;
@@ -2807,7 +2817,12 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
   const spare = [...document.querySelectorAll(".panel")].filter(p => p !== live);
   const panels = { "-1": spare[0], "1": spare[1] };
   const holds  = { "-1": "", "1": "" };     // category each parked panel shows
-  const width = () => live.clientWidth || 390;
+  // live.clientWidth is short by the scrollbar's own width wherever a classic
+  // (space-reserving) scrollbar is showing - desktop, never iOS. Parking the
+  // side panels that little bit short of fully off-screen left a sliver of
+  // the next category's own left edge - heat rail included - visible at the
+  // right of the screen. .pane never scrolls, so its width is the real one.
+  const width = () => pane.clientWidth || live.clientWidth || 390;
   let dir0 = 0;                             // side this gesture is using
 
   const park = () => {
@@ -3161,7 +3176,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-30.78";
+const BUILD = "2026-09-01.80";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

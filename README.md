@@ -76,6 +76,16 @@ the screen is animating, which is what used to cost a dropped frame at the end
 of every swipe. The panel that is left holding the wrong category is rebuilt
 afterwards, a couple of dozen rows per frame.
 
+"Parked off screen" is measured, and the measurement has to match whatever
+actually clips the panel. iOS scrolls with an overlay indicator that takes no
+layout space, so a panel's own width is the whole story. A desktop browser
+reserves real space for its scrollbar, shrinking a scrolling panel's own width
+below the space it's actually given — measuring off that would park it that
+much short of fully hidden, leaving a sliver of the next category's own left
+edge, heat rail included, showing at the edge of the screen. The panels are
+parked against `.pane`'s width instead — the wrapper around all three, which
+never scrolls and so is never shrunk by a scrollbar.
+
 A gesture is finished from the window rather than from the list, so anything
 that interrupts it — a second finger, a refresh dimming the pane, the app being
 backgrounded, an OS gesture taking over — still puts the panels back. A
@@ -149,6 +159,14 @@ the network on a launch before serving the cached shell: with a hanging
 connection that is the difference between the app appearing in 2.7 seconds and
 sitting blank for as long as the request takes. Neither stops iOS reclaiming
 the app; they make the return cheap instead.
+
+Both of these are answers to "was this discarded behind my back?", a question
+that only makes sense for an installed Home Screen app. A bookmarked desktop
+tab is never silently evicted, so none of it applies there: `matchMedia
+("(display-mode: standalone)")` (falling back to `navigator.standalone` on
+older iOS) gates the whole return-from-background routine, and a browser tab
+you alt-tab back to just shows what was already on screen, with nothing
+refetched or reset.
 
 **Closing a sheet is not a refresh.** Leaving the Feeds or Settings page used
 to refetch every feed, so looking at your feeds — or running Test all feeds,
