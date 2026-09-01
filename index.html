@@ -116,15 +116,6 @@ h1{margin:0;font-size:1.375rem;font-weight:800;letter-spacing:-.4px}
   background:var(--bg);
   will-change:transform;
 }
-/* iOS shows no persistent scrollbar at all, so the heat rail down the left
-   edge is the only colour in the list. A desktop browser draws a real one on
-   the right, and left unstyled it picks up the OS accent colour - on a red
-   accent theme that reads as a second, unintended heat line. Pin it to the
-   app's own neutral border colour instead, on every scrollable surface. */
-.panel,.sheet{scrollbar-width:thin;scrollbar-color:var(--line) transparent}
-.panel::-webkit-scrollbar,.sheet::-webkit-scrollbar{width:10px}
-.panel::-webkit-scrollbar-track,.sheet::-webkit-scrollbar-track{background:transparent}
-.panel::-webkit-scrollbar-thumb,.sheet::-webkit-scrollbar-thumb{background:var(--line);border-radius:6px}
 /* The three panels are styled identically and never restyled. Changing a
    class on one is a style recalculation for every row inside it - 22ms for a
    long category, spent in the frame that finishes a page turn. Which panel is
@@ -2826,7 +2817,12 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
   const spare = [...document.querySelectorAll(".panel")].filter(p => p !== live);
   const panels = { "-1": spare[0], "1": spare[1] };
   const holds  = { "-1": "", "1": "" };     // category each parked panel shows
-  const width = () => live.clientWidth || 390;
+  // live.clientWidth is short by the scrollbar's own width wherever a classic
+  // (space-reserving) scrollbar is showing - desktop, never iOS. Parking the
+  // side panels that little bit short of fully off-screen left a sliver of
+  // the next category's own left edge - heat rail included - visible at the
+  // right of the screen. .pane never scrolls, so its width is the real one.
+  const width = () => pane.clientWidth || live.clientWidth || 390;
   let dir0 = 0;                             // side this gesture is using
 
   const park = () => {
@@ -3180,7 +3176,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-09-01.79";
+const BUILD = "2026-09-01.80";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

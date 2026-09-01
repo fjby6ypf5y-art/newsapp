@@ -76,6 +76,16 @@ the screen is animating, which is what used to cost a dropped frame at the end
 of every swipe. The panel that is left holding the wrong category is rebuilt
 afterwards, a couple of dozen rows per frame.
 
+"Parked off screen" is measured, and the measurement has to match whatever
+actually clips the panel. iOS scrolls with an overlay indicator that takes no
+layout space, so a panel's own width is the whole story. A desktop browser
+reserves real space for its scrollbar, shrinking a scrolling panel's own width
+below the space it's actually given — measuring off that would park it that
+much short of fully hidden, leaving a sliver of the next category's own left
+edge, heat rail included, showing at the edge of the screen. The panels are
+parked against `.pane`'s width instead — the wrapper around all three, which
+never scrolls and so is never shrunk by a scrollbar.
+
 A gesture is finished from the window rather than from the list, so anything
 that interrupts it — a second finger, a refresh dimming the pane, the app being
 backgrounded, an OS gesture taking over — still puts the panels back. A
@@ -349,12 +359,6 @@ order rather than on brightness. What actually pins a story down is the
 timestamp printed on every row (`01:20 AM`, `Yesterday 11:25 PM`,
 `Aug 21 04:05 PM`) next to the relative age. All seven bands clear 4:1
 contrast on the app surface.
-
-iOS shows no persistent scrollbar, so the rail is the only colour in the list.
-A desktop browser draws a real one, and left unstyled it picks up the OS
-accent colour — on a red accent theme that reads as a second, unintended heat
-line sitting on the right. `scrollbar-color` / `::-webkit-scrollbar-thumb`
-pin every scrollable surface to the app's own neutral border colour instead.
 
 A useful trick for any topic that has no dedicated feed — Google News will
 build one for you from a search query:
