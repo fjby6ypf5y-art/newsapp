@@ -120,7 +120,7 @@ const lib=await page.evaluate(()=>[...document.querySelectorAll('#library .lib b
   .map(b=>({name:b.textContent,pay:b.dataset.pay==='1',on:b.dataset.on==='1'})));
 const paid=lib.filter(x=>x.pay).map(x=>x.name);
 console.log('  marked paywalled :',paid);
-if(!paid.includes('FT Markets')||!paid.includes('WSJ Markets')||!paid.includes('Bloomberg Markets'))
+if(!paid.includes('FT Markets')||!paid.includes('WSJ Business')||!paid.includes('Bloomberg Markets'))
   console.log('*** a paywalled feed is not marked in the library');
 if(lib.some(x=>x.pay&&x.on)) console.log('*** a paywalled feed is switched on by default');
 
@@ -131,8 +131,8 @@ await page.waitForTimeout(600);
 const after=await names();
 console.log('  Business feeds now:',after.length);
 console.log('  free ones added   :',after.includes('Marketplace'),'(Marketplace, free)');
-console.log('  paid ones added   :',after.filter(n=>['FT Markets','WSJ Markets','Bloomberg Markets','Financial Post','Economist Finance'].includes(n)));
-if(after.some(n=>['FT Markets','WSJ Markets','Bloomberg Markets','Financial Post','Economist Finance'].includes(n)))
+console.log('  paid ones added   :',after.filter(n=>['FT Markets','WSJ Business','Bloomberg Markets','Financial Post','Economist Finance'].includes(n)));
+if(after.some(n=>['FT Markets','WSJ Business','Bloomberg Markets','Financial Post','Economist Finance'].includes(n)))
   console.log('*** "Add all" subscribed the reader to a paywalled feed');
 if(!after.includes('Marketplace')) console.log('*** "Add all" did not add the free feeds');
 const label=await page.evaluate(()=>[...document.querySelectorAll('#library .cat')]
@@ -142,10 +142,10 @@ if(label!=='Remove all') console.log('*** the button did not flip once every fre
 
 console.log('\n=== a paywalled feed, once chosen, says so in the feed list ===');
 await page.evaluate(()=>[...document.querySelectorAll('#library .lib button')]
-  .find(b=>b.textContent.startsWith('WSJ Markets')).click());
+  .find(b=>b.textContent.startsWith('WSJ Business')).click());
 await page.waitForTimeout(600);
 const chips=await page.evaluate(()=>[...document.querySelectorAll('#feeds .row')]
-  .filter(r=>r.textContent.includes('WSJ Markets')).map(r=>[...r.querySelectorAll('.route')].map(s=>s.textContent)));
+  .filter(r=>r.textContent.includes('WSJ Business')).map(r=>[...r.querySelectorAll('.route')].map(s=>s.textContent)));
 console.log('  WSJ row chips    :',chips);
 if(!chips.some(c=>c.includes('paywall'))) console.log('*** the paywall chip is missing from the feed row');
 

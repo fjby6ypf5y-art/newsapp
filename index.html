@@ -441,6 +441,12 @@ const CATALOG = [
   ["World", "Grist",              "https://grist.org/feed/"],
   ["World", "Sky News",           "https://feeds.skynews.com/feeds/rss/world.xml"],
 
+  // Paywalled national papers. Off by default, same as the metered feeds
+  // under Business below.
+  ["World", "WSJ World News",     "https://feeds.a.dj.com/rss/RSSWorldNews.xml", true],
+  ["World", "NYT World",          "https://rss.nytimes.com/services/xml/rss/nyt/World.xml", true],
+  ["World", "Washington Post World","https://feeds.washingtonpost.com/rss/world", true],
+
   ["Business", "BBC Business",    "https://feeds.bbci.co.uk/news/business/rss.xml"],
   ["Business", "NPR Business",    "https://feeds.npr.org/1006/rss.xml"],
   ["Business", "CBC Business",    "https://rss.cbc.ca/lineup/business.xml"],
@@ -469,10 +475,15 @@ const CATALOG = [
   // Paywalled: the headline arrives, the article asks for a subscription.
   // Off by default and added only on purpose - "Add all" skips them.
   ["Business", "FT Markets",      "https://www.ft.com/markets?format=rss", true],
-  ["Business", "WSJ Markets",     "https://feeds.a.dj.com/rss/RSSMarketsMain.xml", true],
+  // WSJ Markets (RSSMarketsMain.xml) was dropped here: confirmed dead, see
+  // DEAD_FEEDS below. WSJ Business replaces it.
+  ["Business", "WSJ Business",    "https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml", true],
   ["Business", "Bloomberg Markets","https://feeds.bloomberg.com/markets/news.rss", true],
   ["Business", "Financial Post",  "https://financialpost.com/feed/", true],
   ["Business", "Economist Finance","https://www.economist.com/finance-and-economics/rss.xml", true],
+  ["Business", "NYT Business",    "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml", true],
+  ["Business", "Washington Post Business","https://feeds.washingtonpost.com/rss/business", true],
+  ["Business", "Globe and Mail Business","https://www.theglobeandmail.com/arc/outboundfeeds/rss/category/business/", true],
 
   ["Tech",  "Ars Technica",       "https://feeds.arstechnica.com/arstechnica/index"],
   ["Tech",  "The Verge",          "https://www.theverge.com/rss/index.xml"],
@@ -487,6 +498,9 @@ const CATALOG = [
   ["Tech",  "Bleeping Computer",  "https://www.bleepingcomputer.com/feed/"],
   ["Tech",  "Schneier",           "https://www.schneier.com/feed/atom/"],
   ["Tech",  "BBC Technology",     "https://feeds.bbci.co.uk/news/technology/rss.xml"],
+  ["Tech",  "WSJ Tech",           "https://feeds.a.dj.com/rss/RSSWSJD.xml", true],
+  ["Tech",  "NYT Technology",     "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml", true],
+  ["Tech",  "Washington Post Tech","https://feeds.washingtonpost.com/rss/technology", true],
 
   ["Canada","CBC Canada",         "https://rss.cbc.ca/lineup/canada.xml"],
   // CBC's front page: national plus international. Overlaps CBC World, which
@@ -504,6 +518,9 @@ const CATALOG = [
   ["Canada","National Post",      "https://nationalpost.com/feed/"],
   ["Canada","Bank of Canada",     "https://www.bankofcanada.ca/content_type/press-releases/feed/"],
   ["Canada","StatCan The Daily",  "https://www150.statcan.gc.ca/n1/dai-quo/rss/new-nouveau-eng.xml"],
+  ["Canada","Globe and Mail",     "https://www.theglobeandmail.com/arc/outboundfeeds/rss/category/canada/", true],
+  ["Canada","Vancouver Sun",      "https://vancouversun.com/feed", true],
+  ["Canada","Toronto Star",       "https://www.thestar.com/feed", true],
 
 
   ["Science","Quanta Magazine",   "https://api.quantamagazine.org/feed/"],
@@ -516,12 +533,14 @@ const CATALOG = [
   ["Science","ESA",               "https://www.esa.int/rssfeed/Our_Activities/Space_News"],
   ["Science","USGS Quakes M2.5+", "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.atom"],
   ["Science","BBC Science",       "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml"],
+  ["Science","NYT Science",       "https://rss.nytimes.com/services/xml/rss/nyt/Science.xml", true],
 
   ["Sport", "BBC Sport",          "https://feeds.bbci.co.uk/sport/rss.xml"],
   ["Sport", "Guardian Sport",     "https://www.theguardian.com/sport/rss"],
   ["Sport", "ESPN",               "https://www.espn.com/espn/rss/news"],
   ["Sport", "Defector",           "https://defector.com/feed"],
   ["Sport", "Yahoo Sports",       "https://sports.yahoo.com/rss/"],
+  ["Sport", "NYT Sports",         "https://rss.nytimes.com/services/xml/rss/nyt/Sports.xml", true],
 
   ["Entertainment","BBC Entertainment","https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml"],
   ["Entertainment","CBC Arts",        "https://rss.cbc.ca/lineup/arts.xml"],
@@ -534,7 +553,8 @@ const CATALOG = [
   ["Entertainment","Pitchfork",       "https://pitchfork.com/rss/news/"],
   ["Entertainment","The A.V. Club",   "https://www.avclub.com/rss"],
   ["Entertainment","Polygon",         "https://www.polygon.com/rss/index.xml"],
-  ["Entertainment","Aftermath",       "https://aftermath.site/feed"]
+  ["Entertainment","Aftermath",       "https://aftermath.site/feed"],
+  ["Entertainment","NYT Arts",        "https://rss.nytimes.com/services/xml/rss/nyt/Arts.xml", true]
 ].map(([cat, name, url, paywall]) => paywall ? { cat, name, url, paywall:true }
                                         : { cat, name, url });
 
@@ -609,8 +629,21 @@ const SWAPPED = {
 
 const DEAD_FEEDS = [
   // CTV retired this Bell Media endpoint; no working replacement found.
-  "https://www.ctvnews.ca/rss/ctvnews-ca-top-stories-public-rss-1.822009"
+  "https://www.ctvnews.ca/rss/ctvnews-ca-top-stories-public-rss-1.822009",
+  // Confirmed dead on the phone: the XML was stuck on 2025 articles.
+  // Replaced in the catalogue by WSJ Business (WSJcomUSBusiness.xml).
+  "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"
 ];
+
+// WSJ, NYT, Washington Post, Globe and Mail, Vancouver Sun and Toronto Star
+// were requested by name, but every one of them is paywalled - and
+// paywalled feeds are off by default, added only on purpose (see the
+// Business library comment above). So unlike MORE_BUSINESS/RESTORE_66,
+// these are not pushed into an existing feed list; they only go into
+// CATALOG, for the reader to switch on from Feeds. None of these URLs have
+// been reachable from here to confirm - the sandbox has no outbound
+// network - so the health dots and "Test all feeds" are the first word on
+// whether each one is actually alive.
 
 // Investing and markets feeds added to the Business list by the migration
 // below, rather than left in the library where a new entry is invisible until
@@ -755,6 +788,13 @@ function migrate(c) {
     addFeeds(c, MORE_BUSINESS);
     addFeeds(c, RESTORE_66);
     c.migrated = 13;
+  }
+
+  // WSJ Markets confirmed dead (see DEAD_FEEDS above).
+  if (c.migrated < 14) {
+    const dead = new Set(DEAD_FEEDS);
+    c.feeds = c.feeds.filter(f => !dead.has(f.url));
+    c.migrated = 14;
   }
   return c;
 }
@@ -3176,7 +3216,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-09-01.80";
+const BUILD = "2026-09-01.81";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

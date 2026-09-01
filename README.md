@@ -240,7 +240,7 @@ Tap the **⚙** button to configure.
   relabels the stories already fetched under the old name. **Test all feeds**
   re-checks every one on demand — it is for the whole list, not for a feed you
   have just added, which is checked on its own as it goes in.
-- **Add from library** — 82 curated feeds across the seven categories, with an
+- **Add from library** — 109 curated feeds across the seven categories, with an
   **Add all** button per category.
   Digital-native outlets sit alongside legacy ones: Axios, Vox, The Intercept,
   Rest of World, 404 Media, The Markup, Quanta, Defector, ProPublica, The
@@ -311,15 +311,24 @@ Fresh installs are unaffected either way: `DEFAULTS` carries no `migrated`, so
 `undefined < n` is false and every migration is skipped.
 
 **Paywalled feeds are offered, and marked.** The FT, WSJ, Bloomberg, Financial
-Post and Economist used to be left out because their links dead-end on a
-subscribe wall. They are in the library now: a headline is worth having even
-when the article is out of reach, and that trade is the reader's to make as
-long as it is visible. A catalogue entry carries a fourth field,
-`paywall`, and it shows up everywhere the feed can be chosen: a `$` on the
-library chip and a `paywall` tag on the feed's row, next to `direct`/`relay`.
-None is on by default, and **"Add all" adds the free feeds only** — it is a
-shortcut, not a decision to start paying for five newspapers. "Remove all"
-still clears the category, paywalled entries included.
+Post, Economist, NYT, Washington Post, Globe and Mail, Vancouver Sun and
+Toronto Star used to be left out because their links dead-end on a subscribe
+wall. They are in the library now: a headline is worth having even when the
+article is out of reach, and that trade is the reader's to make as long as it
+is visible. A catalogue entry carries a fourth field, `paywall`, and it shows
+up everywhere the feed can be chosen: a `$` on the library chip and a
+`paywall` tag on the feed's row, next to `direct`/`relay`. None is on by
+default, and **"Add all" adds the free feeds only** — it is a shortcut, not a
+decision to start paying for ten newspapers. "Remove all" still clears the
+category, paywalled entries included.
+
+WSJ, NYT and Washington Post are spread across World, Business and Tech (NYT
+also reaches Science, Sport and Entertainment, where each has a dedicated
+section); Globe and Mail is in Canada and Business; Vancouver Sun and Toronto
+Star are in Canada. None of them were pushed into an existing feed list on
+upgrade — every one is paywalled, and paywalled feeds are opt-in, not
+migrated in. They are additions to the library only, switched on from Feeds
+like any other paywalled entry.
 
 **Removing a feed removes its stories.** Cached stories live in local storage
 for 72 hours independently of the feed list, so deleting a feed used to leave
@@ -331,7 +340,9 @@ feed is removed.
 confirmed dead on a real device its URL goes into `DEAD_FEEDS` in `index.html`
 and a migration removes it from every installed feed list — shipping a
 replacement in the library does nothing for anyone who already has the broken
-URL saved. CTV's Bell Media endpoint was the first entry.
+URL saved. CTV's Bell Media endpoint was the first entry; WSJ Markets
+(`RSSMarketsMain.xml`) was the second, its XML stuck on 2025 articles, and
+WSJ Business replaces it in the library.
 
 **On feeds that fail:** whether a feed works depends on your network and on
 which relay can reach it, so the only place the answer is true is your phone.
