@@ -150,6 +150,14 @@ connection that is the difference between the app appearing in 2.7 seconds and
 sitting blank for as long as the request takes. Neither stops iOS reclaiming
 the app; they make the return cheap instead.
 
+Both of these are answers to "was this discarded behind my back?", a question
+that only makes sense for an installed Home Screen app. A bookmarked desktop
+tab is never silently evicted, so none of it applies there: `matchMedia
+("(display-mode: standalone)")` (falling back to `navigator.standalone` on
+older iOS) gates the whole return-from-background routine, and a browser tab
+you alt-tab back to just shows what was already on screen, with nothing
+refetched or reset.
+
 **Closing a sheet is not a refresh.** Leaving the Feeds or Settings page used
 to refetch every feed, so looking at your feeds — or running Test all feeds,
 which has just fetched them — greyed the app out and did it all again. Now only
@@ -341,6 +349,12 @@ order rather than on brightness. What actually pins a story down is the
 timestamp printed on every row (`01:20 AM`, `Yesterday 11:25 PM`,
 `Aug 21 04:05 PM`) next to the relative age. All seven bands clear 4:1
 contrast on the app surface.
+
+iOS shows no persistent scrollbar, so the rail is the only colour in the list.
+A desktop browser draws a real one, and left unstyled it picks up the OS
+accent colour — on a red accent theme that reads as a second, unintended heat
+line sitting on the right. `scrollbar-color` / `::-webkit-scrollbar-thumb`
+pin every scrollable surface to the app's own neutral border colour instead.
 
 A useful trick for any topic that has no dedicated feed — Google News will
 build one for you from a search query:

@@ -116,6 +116,15 @@ h1{margin:0;font-size:1.375rem;font-weight:800;letter-spacing:-.4px}
   background:var(--bg);
   will-change:transform;
 }
+/* iOS shows no persistent scrollbar at all, so the heat rail down the left
+   edge is the only colour in the list. A desktop browser draws a real one on
+   the right, and left unstyled it picks up the OS accent colour - on a red
+   accent theme that reads as a second, unintended heat line. Pin it to the
+   app's own neutral border colour instead, on every scrollable surface. */
+.panel,.sheet{scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.panel::-webkit-scrollbar,.sheet::-webkit-scrollbar{width:10px}
+.panel::-webkit-scrollbar-track,.sheet::-webkit-scrollbar-track{background:transparent}
+.panel::-webkit-scrollbar-thumb,.sheet::-webkit-scrollbar-thumb{background:var(--line);border-radius:6px}
 /* The three panels are styled identically and never restyled. Changing a
    class on one is a style recalculation for every row inside it - 22ms for a
    long category, spent in the frame that finishes a page turn. Which panel is
@@ -2758,17 +2767,27 @@ stagedRefresh(false, "app opened", FRESH_MS);
 // screen exactly as it was - not a greyed-out list refetching every feed. So
 // the return refresh only happens once the stories are actually old, and it
 // runs in the background either way.
+//
+// None of this means anything for a bookmarked desktop tab. There is no app
+// switcher discarding it behind your back, so a plain alt-tab has none of the
+// "was this reclaimed?" uncertainty a home-screen launch does - it is just a
+// tab you looked away from. Gate the whole return-from-background routine
+// (stale refetch, category reset, dropping the parked side panels) to when
+// the app is actually installed; a browser tab gets none of it.
 const STALE_MIN = 5;
 const fetchedAt = () => +(localStorage.getItem(KEY + ".fetchedAt") || 0);
+const isHomeScreenApp = () =>
+  matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     markSeen();
-    if (window.releaseSides) window.releaseSides();
+    if (isHomeScreenApp() && window.releaseSides) window.releaseSides();
     return;
   }
-  if (resetTabIfStale()) { render(); $("#list").scrollTop = 0; }
+  if (isHomeScreenApp() && resetTabIfStale()) { render(); $("#list").scrollTop = 0; }
   markSeen();
   render();                                   // timestamps, at least, are stale
+  if (!isHomeScreenApp()) return;
   if (window.primeSides) window.primeSides();
   if (!cfg.autoRefresh) return;
   if (Date.now() - fetchedAt() < STALE_MIN * 60000) return;
@@ -3161,7 +3180,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-08-30.78";
+const BUILD = "2026-09-01.79";
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>

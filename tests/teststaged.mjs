@@ -26,6 +26,9 @@ await ctx.route('**/*',async route=>{const u=route.request().url();
  return route.fulfill({status:200,contentType:'application/xml',
   body:`<?xml version="1.0"?><rss version="2.0"><channel><title>${id}</title>${items}</channel></rss>`});});
 const errs=[];page.on('pageerror',e=>errs.push(e.message));
+// The "returning from another app" section below is the home-screen-app
+// scenario, so it needs to look like one.
+await page.addInitScript(()=>Object.defineProperty(navigator,'standalone',{value:true,configurable:true}));
 // six categories: World (active), Business, Tech, Canada, Science, Sport
 await page.addInitScript(()=>localStorage.setItem('breaking.v1',JSON.stringify({migrated:11,idleResetMin:0,
  proxies:['https://api.allorigins.win/raw?url='],feeds:[
