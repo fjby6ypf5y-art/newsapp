@@ -313,24 +313,29 @@ Fresh installs are unaffected either way: `DEFAULTS` carries no `migrated`, so
 `undefined < n` is false and every migration is skipped.
 
 **Paywalled feeds are offered, and marked.** The FT, WSJ, Bloomberg, Financial
-Post, Economist, NYT, Washington Post, Globe and Mail, Vancouver Sun and
-Toronto Star used to be left out because their links dead-end on a subscribe
-wall. They are in the library now: a headline is worth having even when the
-article is out of reach, and that trade is the reader's to make as long as it
-is visible. A catalogue entry carries a fourth field, `paywall`, and it shows
-up everywhere the feed can be chosen: a `$` on the library chip and a
-`paywall` tag on the feed's row, next to `direct`/`relay`. None is on by
-default, and **"Add all" adds the free feeds only** — it is a shortcut, not a
-decision to start paying for ten newspapers. "Remove all" still clears the
-category, paywalled entries included.
+Post, Economist, NYT, Washington Post, Globe and Mail and Vancouver Sun used
+to be left out because their links dead-end on a subscribe wall. They are in
+the library now: a headline is worth having even when the article is out of
+reach, and that trade is the reader's to make as long as it is visible. A
+catalogue entry carries a fourth field, `paywall`, and it shows up everywhere
+the feed can be chosen: a `$` on the library chip and a `paywall` tag on the
+feed's row, next to `direct`/`relay`. None is on by default, and **"Add all"
+adds the free feeds only** — it is a shortcut, not a decision to start paying
+for ten newspapers. "Remove all" still clears the category, paywalled
+entries included.
 
 WSJ, NYT and Washington Post are spread across World, Business and Tech (NYT
 also reaches Science, Sport and Entertainment, where each has a dedicated
-section); Globe and Mail is in Canada and Business; Vancouver Sun and Toronto
-Star are in Canada. None of them were pushed into an existing feed list on
-upgrade — every one is paywalled, and paywalled feeds are opt-in, not
-migrated in. They are additions to the library only, switched on from Feeds
-like any other paywalled entry.
+section); Globe and Mail is in Canada and Business; Vancouver Sun is in
+Canada. None of them were pushed into an existing feed list on upgrade —
+every one is paywalled, and paywalled feeds are opt-in, not migrated in.
+They are additions to the library only, switched on from Feeds like any
+other paywalled entry.
+
+Toronto Star was in this list too, briefly. Its RSS never came through on
+the phone — a site redesign broke it, confirmed by outside reports of the
+same 404, with no working replacement found anywhere. It's back out of the
+library and into `DEAD_FEEDS`, same as any other confirmed-dead feed.
 
 **Removing a feed removes its stories.** Cached stories live in local storage
 for 72 hours independently of the feed list, so deleting a feed used to leave
@@ -363,7 +368,8 @@ favour of `cbc.ca/webfeed`. CBC Arts is a `DEFAULT`, so its swap reaches
 every fresh install as well as existing ones. All four retired URLs are in
 `SWAPPED`, behind migration 15. Toronto Star and Vancouver Sun's URLs were
 also corrected before ever shipping to a real device (the plain `/feed`
-paths were suspect on both), so those went straight into `CATALOG` with no
+paths were suspect on both; Toronto Star's guessed fix later turned out
+wrong too - see below), so those went straight into `CATALOG` with no
 migration needed.
 
 A handful of feeds came back genuinely uncertain rather than confirmed
@@ -395,6 +401,13 @@ pattern instead of by exact URL, rewriting each to the same
 `RSSMarketsMain` (WSJ Markets), which `DEAD_FEEDS` still removes outright
 rather than lets reappear, since WSJ Business replaces it in the library
 on purpose rather than under its old name.
+
+Toronto Star's guessed replacement URL (`RSSManagerServlet...topstories.rss`)
+turned out wrong as well - confirmed never coming through on the phone, and
+outside reports describe the same failure after a thestar.com redesign, with
+no replacement anywhere. Unlike WSJ, there was nowhere to move it to, so it
+came out of `CATALOG` entirely and its URL went into `DEAD_FEEDS` behind
+migration 18, on the chance it had already been added.
 
 **On feeds that fail:** whether a feed works depends on your network and on
 which relay can reach it, so the only place the answer is true is your phone.

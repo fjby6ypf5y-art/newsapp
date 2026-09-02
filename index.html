@@ -525,7 +525,9 @@ const CATALOG = [
   ["Canada","StatCan The Daily",  "https://www150.statcan.gc.ca/n1/dai-quo/rss/new-nouveau-eng.xml"],
   ["Canada","Globe and Mail",     "https://www.theglobeandmail.com/arc/outboundfeeds/rss/category/canada/", true],
   ["Canada","Vancouver Sun",      "https://vancouversun.com/feed/atom", true],
-  ["Canada","Toronto Star",       "https://www.thestar.com/content/thestar/feed.RSSManagerServlet.articles.topstories.rss", true],
+  // Toronto Star dropped here: confirmed dead on the phone, see DEAD_FEEDS
+  // below. thestar.com's RSS broke in a site redesign and, unlike WSJ,
+  // never resurfaced anywhere - no replacement found.
 
 
   ["Science","Quanta Magazine",   "https://api.quantamagazine.org/feed/"],
@@ -660,7 +662,10 @@ const DEAD_FEEDS = [
   "https://www.ctvnews.ca/rss/ctvnews-ca-top-stories-public-rss-1.822009",
   // Confirmed dead on the phone: the XML was stuck on 2025 articles.
   // Replaced in the catalogue by WSJ Business (WSJcomUSBusiness.xml).
-  "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"
+  "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+  // Confirmed dead on the phone: never comes through. thestar.com broke its
+  // RSS in a site redesign; no working replacement found.
+  "https://www.thestar.com/content/thestar/feed.RSSManagerServlet.articles.topstories.rss"
 ];
 
 // WSJ, NYT, Washington Post, Globe and Mail, Vancouver Sun and Toronto Star
@@ -873,6 +878,13 @@ function migrate(c) {
       return [{ ...f, url }];
     });
     c.migrated = 17;
+  }
+
+  // Toronto Star confirmed dead on the phone (see DEAD_FEEDS above).
+  if (c.migrated < 18) {
+    const dead = new Set(DEAD_FEEDS);
+    c.feeds = c.feeds.filter(f => !dead.has(f.url));
+    c.migrated = 18;
   }
   return c;
 }
@@ -3294,7 +3306,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-09-01.84";
+const BUILD = "2026-09-01.85";
 // Full stamp stays in Settings (the only place it was ever findable before);
 // this is just enough to tell two builds apart at a glance without opening
 // a sheet - the trailing counter, not the date, since the date rarely
