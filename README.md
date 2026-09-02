@@ -52,7 +52,9 @@ and shows your last stories even with no bars.
 
 The header has three buttons: **↻** refresh, **☰** feeds, **⚙** settings. Feeds
 live on their own page because they are the part you actually maintain;
-Settings holds behaviour, privacy, the relay list and backup.
+Settings holds behaviour, privacy, the relay list and backup. Next to the
+title is a small `b<n>` chip — the build number, so two builds can be told
+apart without opening Settings for the full stamp.
 
 The chips under the header are **pages, not filters** — one per category, each
 showing only that category, newest first. Tapping one always lands you at the
@@ -240,7 +242,7 @@ Tap the **⚙** button to configure.
   relabels the stories already fetched under the old name. **Test all feeds**
   re-checks every one on demand — it is for the whole list, not for a feed you
   have just added, which is checked on its own as it goes in.
-- **Add from library** — 82 curated feeds across the seven categories, with an
+- **Add from library** — 109 curated feeds across the seven categories, with an
   **Add all** button per category.
   Digital-native outlets sit alongside legacy ones: Axios, Vox, The Intercept,
   Rest of World, 404 Media, The Markup, Quanta, Defector, ProPublica, The
@@ -311,15 +313,29 @@ Fresh installs are unaffected either way: `DEFAULTS` carries no `migrated`, so
 `undefined < n` is false and every migration is skipped.
 
 **Paywalled feeds are offered, and marked.** The FT, WSJ, Bloomberg, Financial
-Post and Economist used to be left out because their links dead-end on a
-subscribe wall. They are in the library now: a headline is worth having even
-when the article is out of reach, and that trade is the reader's to make as
-long as it is visible. A catalogue entry carries a fourth field,
-`paywall`, and it shows up everywhere the feed can be chosen: a `$` on the
-library chip and a `paywall` tag on the feed's row, next to `direct`/`relay`.
-None is on by default, and **"Add all" adds the free feeds only** — it is a
-shortcut, not a decision to start paying for five newspapers. "Remove all"
-still clears the category, paywalled entries included.
+Post, Economist, NYT, Washington Post, Globe and Mail and Vancouver Sun used
+to be left out because their links dead-end on a subscribe wall. They are in
+the library now: a headline is worth having even when the article is out of
+reach, and that trade is the reader's to make as long as it is visible. A
+catalogue entry carries a fourth field, `paywall`, and it shows up everywhere
+the feed can be chosen: a `$` on the library chip and a `paywall` tag on the
+feed's row, next to `direct`/`relay`. None is on by default, and **"Add all"
+adds the free feeds only** — it is a shortcut, not a decision to start paying
+for ten newspapers. "Remove all" still clears the category, paywalled
+entries included.
+
+WSJ, NYT and Washington Post are spread across World, Business and Tech (NYT
+also reaches Science, Sport and Entertainment, where each has a dedicated
+section); Globe and Mail is in Canada and Business; Vancouver Sun is in
+Canada. None of them were pushed into an existing feed list on upgrade —
+every one is paywalled, and paywalled feeds are opt-in, not migrated in.
+They are additions to the library only, switched on from Feeds like any
+other paywalled entry.
+
+Toronto Star was in this list too, briefly. Its RSS never came through on
+the phone — a site redesign broke it, confirmed by outside reports of the
+same 404, with no working replacement found anywhere. It's back out of the
+library and into `DEAD_FEEDS`, same as any other confirmed-dead feed.
 
 **Removing a feed removes its stories.** Cached stories live in local storage
 for 72 hours independently of the feed list, so deleting a feed used to leave
@@ -331,7 +347,67 @@ feed is removed.
 confirmed dead on a real device its URL goes into `DEAD_FEEDS` in `index.html`
 and a migration removes it from every installed feed list — shipping a
 replacement in the library does nothing for anyone who already has the broken
-URL saved. CTV's Bell Media endpoint was the first entry.
+URL saved. CTV's Bell Media endpoint was the first entry; WSJ Markets
+(`RSSMarketsMain.xml`) was the second, its XML stuck on 2025 articles, and
+WSJ Business replaces it in the library.
+
+**Freshness sweep, September 2026.** WSJ Markets going stale prompted a check
+of the rest of the catalogue against a simple bar: at least one post a month,
+ideally more, with evidence of something from August 2026 or later. The
+sandbox has no outbound network, so nothing here was fetched directly - the
+check was web search only, looking for dated recent articles, current
+third-party feed directories, and signs of retired infrastructure. That
+found `feeds.a.dj.com` - WSJ's old feed host - dead across the board, not
+just for Markets: World News and Tech shared the same stuck infrastructure,
+now pointed at `feeds.content.dowjones.io` instead, WSJ's current host.
+Three more turned up outside WSJ: Axios's `api.axios.com/feed/` has been
+erroring since around 2021 (now `axios.com/feeds/feed.rss`); Calculated Risk
+stopped posting to Blogspot in January 2026 after 21 years and moved to
+Substack; and CBC retired the `rss.cbc.ca/lineup/*.xml` scheme for Arts in
+favour of `cbc.ca/webfeed`. CBC Arts is a `DEFAULT`, so its swap reaches
+every fresh install as well as existing ones. All four retired URLs are in
+`SWAPPED`, behind migration 15. Toronto Star and Vancouver Sun's URLs were
+also corrected before ever shipping to a real device (the plain `/feed`
+paths were suspect on both; Toronto Star's guessed fix later turned out
+wrong too - see below), so those went straight into `CATALOG` with no
+migration needed.
+
+A handful of feeds came back genuinely uncertain rather than confirmed
+either way - Bloomberg Markets, Washington Post Business, Washington Post
+Tech's exact path, Yahoo Sports, and the paywalled NYT sections - because
+search can't see past a subscribe wall or doesn't index a small feed's
+publish dates. Nothing was removed on an absence of evidence; the health
+dots and "Test all feeds" are the actual verdict, same as for every other
+entry in this catalogue.
+
+**The `CATALOG` fix wasn't enough on its own.** WSJ Business had already
+been added from the library on the build before the sweep, while its URL
+was still the dead `feeds.a.dj.com` one - a subscribed feed doesn't pick up
+a change to its library entry, only a new `addFeeds` from one it was never
+in. So the phone kept fetching the old host after `CATALOG` was already
+fixed. All three WSJ entries went into `SWAPPED` behind migration 16 to
+reach anyone in the same spot: added once, catalogue since corrected. The
+lesson generalises - a feed only needs `SWAPPED` (not a straight edit) once
+there's any real chance a device has already added it, not only once one is
+confirmed to have.
+
+`SWAPPED` only matches the exact URL it lists, though, and WSJ's whole feed
+platform had moved - a feed on some other `feeds.a.dj.com` section that
+migration 16 didn't happen to name (added by hand in the feed editor, or
+from a section this library never carried) sailed through untouched.
+Migration 17 catches every remaining `feeds.a.dj.com/rss/<section>.xml` by
+pattern instead of by exact URL, rewriting each to the same
+`feeds.content.dowjones.io` host under its own section name - except
+`RSSMarketsMain` (WSJ Markets), which `DEAD_FEEDS` still removes outright
+rather than lets reappear, since WSJ Business replaces it in the library
+on purpose rather than under its old name.
+
+Toronto Star's guessed replacement URL (`RSSManagerServlet...topstories.rss`)
+turned out wrong as well - confirmed never coming through on the phone, and
+outside reports describe the same failure after a thestar.com redesign, with
+no replacement anywhere. Unlike WSJ, there was nowhere to move it to, so it
+came out of `CATALOG` entirely and its URL went into `DEAD_FEEDS` behind
+migration 18, on the chance it had already been added.
 
 **On feeds that fail:** whether a feed works depends on your network and on
 which relay can reach it, so the only place the answer is true is your phone.

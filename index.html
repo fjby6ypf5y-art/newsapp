@@ -71,6 +71,7 @@ header{
 .bar{display:flex;align-items:center;gap:10px}
 .brand{display:flex;align-items:baseline;gap:8px;flex:1;min-width:0}
 h1{margin:0;font-size:1.375rem;font-weight:800;letter-spacing:-.4px}
+.verchip{font-size:0.6875rem;color:var(--faint);font-variant-numeric:tabular-nums}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none;align-self:center}
 .dot.live{animation:pulse 2s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
@@ -260,7 +261,7 @@ body.busy .chips{filter:saturate(.3)}
 
 <header>
   <div class="bar">
-    <div class="brand"><span class="dot live"></span><h1>News</h1></div>
+    <div class="brand"><span class="dot live"></span><h1>News</h1><span class="verchip" id="ver-short"></span></div>
     <button class="iconbtn" id="refresh" aria-label="Refresh">&#8635;</button>
     <button class="iconbtn" id="open-feeds" aria-label="Feeds">&#9776;</button>
     <button class="iconbtn" id="open-settings" aria-label="Settings">&#9881;</button>
@@ -432,7 +433,7 @@ const CATALOG = [
   ["World", "France 24",          "https://www.france24.com/en/rss"],
   ["World", "CBC World",          "https://rss.cbc.ca/lineup/world.xml"],
   ["World", "ABC Australia",      "https://www.abc.net.au/news/feed/51120/rss.xml"],
-  ["World", "Axios",              "https://api.axios.com/feed/"],
+  ["World", "Axios",              "https://www.axios.com/feeds/feed.rss"],
   ["World", "Vox",                "https://www.vox.com/rss/index.xml"],
   ["World", "The Intercept",      "https://theintercept.com/feed/?rss"],
   ["World", "Rest of World",      "https://restofworld.org/feed/latest"],
@@ -440,6 +441,12 @@ const CATALOG = [
   ["World", "The Conversation",   "https://theconversation.com/articles.atom"],
   ["World", "Grist",              "https://grist.org/feed/"],
   ["World", "Sky News",           "https://feeds.skynews.com/feeds/rss/world.xml"],
+
+  // Paywalled national papers. Off by default, same as the metered feeds
+  // under Business below.
+  ["World", "WSJ World News",     "https://feeds.content.dowjones.io/public/rss/RSSWorldNews", true],
+  ["World", "NYT World",          "https://rss.nytimes.com/services/xml/rss/nyt/World.xml", true],
+  ["World", "Washington Post World","https://feeds.washingtonpost.com/rss/world", true],
 
   ["Business", "BBC Business",    "https://feeds.bbci.co.uk/news/business/rss.xml"],
   ["Business", "NPR Business",    "https://feeds.npr.org/1006/rss.xml"],
@@ -459,7 +466,9 @@ const CATALOG = [
   ["Business", "Abnormal Returns","https://abnormalreturns.com/feed/"],
   ["Business", "Musings on Markets","https://aswathdamodaran.substack.com/feed"],
   ["Business", "Klement on Investing","https://klementoninvesting.substack.com/feed"],
-  ["Business", "Calculated Risk", "https://www.calculatedriskblog.com/feeds/posts/default?alt=rss"],
+  // The Blogspot original stopped posting in January 2026 after 21 years;
+  // the author moved to Substack, so the library follows.
+  ["Business", "Calculated Risk", "https://calculatedrisk.substack.com/feed"],
 
   // Primary sources: the release itself, ahead of anyone's write-up of it.
   ["Business", "Federal Reserve", "https://www.federalreserve.gov/feeds/press_all.xml"],
@@ -469,10 +478,17 @@ const CATALOG = [
   // Paywalled: the headline arrives, the article asks for a subscription.
   // Off by default and added only on purpose - "Add all" skips them.
   ["Business", "FT Markets",      "https://www.ft.com/markets?format=rss", true],
-  ["Business", "WSJ Markets",     "https://feeds.a.dj.com/rss/RSSMarketsMain.xml", true],
+  // WSJ Markets (RSSMarketsMain.xml) was dropped here: confirmed dead, see
+  // DEAD_FEEDS below. WSJ Business replaces it, on Dow Jones's current feed
+  // host - feeds.a.dj.com turned out to be retired infrastructure across the
+  // board, not just this one section (see the World and Tech entries below).
+  ["Business", "WSJ Business",    "https://feeds.content.dowjones.io/public/rss/WSJcomUSBusiness", true],
   ["Business", "Bloomberg Markets","https://feeds.bloomberg.com/markets/news.rss", true],
   ["Business", "Financial Post",  "https://financialpost.com/feed/", true],
   ["Business", "Economist Finance","https://www.economist.com/finance-and-economics/rss.xml", true],
+  ["Business", "NYT Business",    "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml", true],
+  ["Business", "Washington Post Business","https://feeds.washingtonpost.com/rss/business", true],
+  ["Business", "Globe and Mail Business","https://www.theglobeandmail.com/arc/outboundfeeds/rss/category/business/", true],
 
   ["Tech",  "Ars Technica",       "https://feeds.arstechnica.com/arstechnica/index"],
   ["Tech",  "The Verge",          "https://www.theverge.com/rss/index.xml"],
@@ -487,6 +503,9 @@ const CATALOG = [
   ["Tech",  "Bleeping Computer",  "https://www.bleepingcomputer.com/feed/"],
   ["Tech",  "Schneier",           "https://www.schneier.com/feed/atom/"],
   ["Tech",  "BBC Technology",     "https://feeds.bbci.co.uk/news/technology/rss.xml"],
+  ["Tech",  "WSJ Tech",           "https://feeds.content.dowjones.io/public/rss/RSSWSJD", true],
+  ["Tech",  "NYT Technology",     "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml", true],
+  ["Tech",  "Washington Post Tech","https://feeds.washingtonpost.com/rss/business/technology", true],
 
   ["Canada","CBC Canada",         "https://rss.cbc.ca/lineup/canada.xml"],
   // CBC's front page: national plus international. Overlaps CBC World, which
@@ -504,6 +523,11 @@ const CATALOG = [
   ["Canada","National Post",      "https://nationalpost.com/feed/"],
   ["Canada","Bank of Canada",     "https://www.bankofcanada.ca/content_type/press-releases/feed/"],
   ["Canada","StatCan The Daily",  "https://www150.statcan.gc.ca/n1/dai-quo/rss/new-nouveau-eng.xml"],
+  ["Canada","Globe and Mail",     "https://www.theglobeandmail.com/arc/outboundfeeds/rss/category/canada/", true],
+  ["Canada","Vancouver Sun",      "https://vancouversun.com/feed/atom", true],
+  // Toronto Star dropped here: confirmed dead on the phone, see DEAD_FEEDS
+  // below. thestar.com's RSS broke in a site redesign and, unlike WSJ,
+  // never resurfaced anywhere - no replacement found.
 
 
   ["Science","Quanta Magazine",   "https://api.quantamagazine.org/feed/"],
@@ -516,15 +540,17 @@ const CATALOG = [
   ["Science","ESA",               "https://www.esa.int/rssfeed/Our_Activities/Space_News"],
   ["Science","USGS Quakes M2.5+", "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.atom"],
   ["Science","BBC Science",       "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml"],
+  ["Science","NYT Science",       "https://rss.nytimes.com/services/xml/rss/nyt/Science.xml", true],
 
   ["Sport", "BBC Sport",          "https://feeds.bbci.co.uk/sport/rss.xml"],
   ["Sport", "Guardian Sport",     "https://www.theguardian.com/sport/rss"],
   ["Sport", "ESPN",               "https://www.espn.com/espn/rss/news"],
   ["Sport", "Defector",           "https://defector.com/feed"],
   ["Sport", "Yahoo Sports",       "https://sports.yahoo.com/rss/"],
+  ["Sport", "NYT Sports",         "https://rss.nytimes.com/services/xml/rss/nyt/Sports.xml", true],
 
   ["Entertainment","BBC Entertainment","https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml"],
-  ["Entertainment","CBC Arts",        "https://rss.cbc.ca/lineup/arts.xml"],
+  ["Entertainment","CBC Arts",        "https://www.cbc.ca/webfeed/rss/rss-arts"],
   ["Entertainment","Guardian Culture","https://www.theguardian.com/culture/rss"],
   ["Entertainment","NPR Music",       "https://feeds.npr.org/1039/rss.xml"],
   ["Entertainment","Variety",         "https://variety.com/feed/"],
@@ -534,7 +560,8 @@ const CATALOG = [
   ["Entertainment","Pitchfork",       "https://pitchfork.com/rss/news/"],
   ["Entertainment","The A.V. Club",   "https://www.avclub.com/rss"],
   ["Entertainment","Polygon",         "https://www.polygon.com/rss/index.xml"],
-  ["Entertainment","Aftermath",       "https://aftermath.site/feed"]
+  ["Entertainment","Aftermath",       "https://aftermath.site/feed"],
+  ["Entertainment","NYT Arts",        "https://rss.nytimes.com/services/xml/rss/nyt/Arts.xml", true]
 ].map(([cat, name, url, paywall]) => paywall ? { cat, name, url, paywall:true }
                                         : { cat, name, url });
 
@@ -560,7 +587,7 @@ const DEFAULTS = {
     { cat:"Canada", name:"CBC Canada",   url:"https://rss.cbc.ca/lineup/canada.xml" },
     { cat:"Canada", name:"CBC Politics", url:"https://rss.cbc.ca/lineup/politics.xml" },
     { cat:"Canada", name:"Global News",  url:"https://globalnews.ca/feed/" },
-    { cat:"Entertainment",name:"CBC Arts",url:"https://rss.cbc.ca/lineup/arts.xml" },
+    { cat:"Entertainment",name:"CBC Arts",url:"https://www.cbc.ca/webfeed/rss/rss-arts" },
     { cat:"Entertainment",name:"BBC Entertainment",url:"https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml" },
     { cat:"Tech",  name:"Ars Technica",url:"https://feeds.arstechnica.com/arstechnica/index" },
     { cat:"Tech",  name:"Hacker News", url:"https://news.ycombinator.com/rss" },
@@ -604,13 +631,52 @@ const SWAPPED = {
   // CBC's front page mixes international news into the Canada tab; the Canada
   // desk is the one that belongs there, and CBC World covers the rest.
   "https://rss.cbc.ca/lineup/topstories.xml":
-    { cat:"Canada", name:"CBC Canada", url:"https://rss.cbc.ca/lineup/canada.xml" }
+    { cat:"Canada", name:"CBC Canada", url:"https://rss.cbc.ca/lineup/canada.xml" },
+  // CBC retired the rss.cbc.ca/lineup/*.xml scheme for Arts; the current one
+  // is under cbc.ca/webfeed. It's a DEFAULT, so this reaches every install.
+  "https://rss.cbc.ca/lineup/arts.xml":
+    { cat:"Entertainment", name:"CBC Arts", url:"https://www.cbc.ca/webfeed/rss/rss-arts" },
+  // api.axios.com/feed/ has been returning errors since ~2021; Axios's
+  // current feed lives at a different host entirely.
+  "https://api.axios.com/feed/":
+    { cat:"World", name:"Axios", url:"https://www.axios.com/feeds/feed.rss" },
+  // The Blogspot original went quiet in January 2026 after 21 years; the
+  // author moved to Substack.
+  "https://www.calculatedriskblog.com/feeds/posts/default?alt=rss":
+    { cat:"Business", name:"Calculated Risk", url:"https://calculatedrisk.substack.com/feed" },
+  // feeds.a.dj.com is WSJ's retired feed host (see DEAD_FEEDS's WSJ Markets
+  // entry). CATALOG picked up the feeds.content.dowjones.io replacements
+  // before this reached a real device for World/Business/Tech - but WSJ
+  // Business specifically had already been added from the library on an
+  // earlier build, so its subscribed copy needs the same swap.
+  "https://feeds.a.dj.com/rss/RSSWorldNews.xml":
+    { cat:"World", name:"WSJ World News", url:"https://feeds.content.dowjones.io/public/rss/RSSWorldNews", paywall:true },
+  "https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml":
+    { cat:"Business", name:"WSJ Business", url:"https://feeds.content.dowjones.io/public/rss/WSJcomUSBusiness", paywall:true },
+  "https://feeds.a.dj.com/rss/RSSWSJD.xml":
+    { cat:"Tech", name:"WSJ Tech", url:"https://feeds.content.dowjones.io/public/rss/RSSWSJD", paywall:true }
 };
 
 const DEAD_FEEDS = [
   // CTV retired this Bell Media endpoint; no working replacement found.
-  "https://www.ctvnews.ca/rss/ctvnews-ca-top-stories-public-rss-1.822009"
+  "https://www.ctvnews.ca/rss/ctvnews-ca-top-stories-public-rss-1.822009",
+  // Confirmed dead on the phone: the XML was stuck on 2025 articles.
+  // Replaced in the catalogue by WSJ Business (WSJcomUSBusiness.xml).
+  "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+  // Confirmed dead on the phone: never comes through. thestar.com broke its
+  // RSS in a site redesign; no working replacement found.
+  "https://www.thestar.com/content/thestar/feed.RSSManagerServlet.articles.topstories.rss"
 ];
+
+// WSJ, NYT, Washington Post, Globe and Mail, Vancouver Sun and Toronto Star
+// were requested by name, but every one of them is paywalled - and
+// paywalled feeds are off by default, added only on purpose (see the
+// Business library comment above). So unlike MORE_BUSINESS/RESTORE_66,
+// these are not pushed into an existing feed list; they only go into
+// CATALOG, for the reader to switch on from Feeds. None of these URLs have
+// been reachable from here to confirm - the sandbox has no outbound
+// network - so the health dots and "Test all feeds" are the first word on
+// whether each one is actually alive.
 
 // Investing and markets feeds added to the Business list by the migration
 // below, rather than left in the library where a new entry is invisible until
@@ -650,7 +716,7 @@ const SEED_CANADA = [
 
 const SEED_ENTERTAINMENT = [
   { cat:"Entertainment", name:"BBC Entertainment", url:"https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml" },
-  { cat:"Entertainment", name:"CBC Arts",          url:"https://rss.cbc.ca/lineup/arts.xml" },
+  { cat:"Entertainment", name:"CBC Arts",          url:"https://www.cbc.ca/webfeed/rss/rss-arts" },
   { cat:"Entertainment", name:"Guardian Culture",  url:"https://www.theguardian.com/culture/rss" },
   { cat:"Entertainment", name:"Variety",           url:"https://variety.com/feed/" }
 ];
@@ -755,6 +821,70 @@ function migrate(c) {
     addFeeds(c, MORE_BUSINESS);
     addFeeds(c, RESTORE_66);
     c.migrated = 13;
+  }
+
+  // WSJ Markets confirmed dead (see DEAD_FEEDS above).
+  if (c.migrated < 14) {
+    const dead = new Set(DEAD_FEEDS);
+    c.feeds = c.feeds.filter(f => !dead.has(f.url));
+    c.migrated = 14;
+  }
+
+  // A freshness sweep on the whole catalogue turned up three more retired
+  // endpoints (CBC Arts, Axios, Calculated Risk - see SWAPPED above). Same
+  // swap logic as migration 9, run again for the entries added since.
+  if (c.migrated < 15) {
+    const have = new Set(c.feeds.map(f => f.url));
+    c.feeds = c.feeds.flatMap(f => {
+      const swap = SWAPPED[f.url];
+      if (!swap) return [f];
+      return have.has(swap.url) ? [] : [{ ...swap }];
+    });
+    c.migrated = 15;
+  }
+
+  // WSJ Business had already been added from the library (feeds.a.dj.com)
+  // before the freshness sweep replaced it in CATALOG - a subscribed copy
+  // doesn't pick up a library change, so it was still pointed at the dead
+  // host. Same swap logic again, for the three WSJ entries added to
+  // SWAPPED since migration 15.
+  if (c.migrated < 16) {
+    const have = new Set(c.feeds.map(f => f.url));
+    c.feeds = c.feeds.flatMap(f => {
+      const swap = SWAPPED[f.url];
+      if (!swap) return [f];
+      return have.has(swap.url) ? [] : [{ ...swap }];
+    });
+    c.migrated = 16;
+  }
+
+  // SWAPPED only catches the exact URLs it lists - a feed pointed at
+  // feeds.a.dj.com under some other WSJ section (added before this library
+  // ever offered it, or hand-edited in the feed editor) would sail through
+  // migration 16 untouched. WSJ's whole RSS platform moved to the same new
+  // host under the same path segment, so catch every remaining one by
+  // pattern instead of by exact match. RSSMarketsMain (WSJ Markets) never
+  // reaches here - DEAD_FEEDS above already removed it, and on purpose:
+  // WSJ Business replaces it in the library rather than reappearing under
+  // its old section name.
+  if (c.migrated < 17) {
+    const have = new Set(c.feeds.map(f => f.url));
+    c.feeds = c.feeds.flatMap(f => {
+      const m = /^https:\/\/feeds\.a\.dj\.com\/rss\/([^/?]+)\.xml$/i.exec(f.url);
+      if (!m) return [f];
+      const url = `https://feeds.content.dowjones.io/public/rss/${m[1]}`;
+      if (have.has(url)) return [];               // already have it under the new URL
+      have.add(url);
+      return [{ ...f, url }];
+    });
+    c.migrated = 17;
+  }
+
+  // Toronto Star confirmed dead on the phone (see DEAD_FEEDS above).
+  if (c.migrated < 18) {
+    const dead = new Set(DEAD_FEEDS);
+    c.feeds = c.feeds.filter(f => !dead.has(f.url));
+    c.migrated = 18;
   }
   return c;
 }
@@ -3176,7 +3306,12 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-09-01.80";
+const BUILD = "2026-09-01.85";
+// Full stamp stays in Settings (the only place it was ever findable before);
+// this is just enough to tell two builds apart at a glance without opening
+// a sheet - the trailing counter, not the date, since the date rarely
+// differs between two builds worth telling apart.
+$("#ver-short").textContent = "b" + BUILD.split(".").pop();
 $("#ver").textContent = "News · build " + BUILD + " · "
   + cfg.feeds.length + " feeds · all data stays on this device";
 </script>
