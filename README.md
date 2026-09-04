@@ -467,7 +467,11 @@ migration 18, on the chance it had already been added.
 fetch: a feed that hands back the same stories it handed back yesterday passes
 every test there is. Each feed therefore also carries the age of the newest
 story it was holding the last time it was read — `newest 20m ago` next to the
-route badge, and amber once nothing has arrived in a day. Green dot, amber age
+route badge, and amber once nothing has arrived in a day. A feed that answers
+and parses but carries no items at all reads `no stories`, in amber — NYT
+Sports turned out to be exactly that in a sweep: valid RSS, a `lastBuildDate`
+stamped the same minute it was fetched, a channel `pubDate` frozen sixteen
+months earlier, and not one item in the document. Green dot, amber age
 is the signature of a feed that is being fetched but is not moving: either the
 publisher has gone quiet, or what's coming back is a cached copy — a public
 relay serving its own cache is the usual culprit, and **Direct only** in
@@ -680,16 +684,26 @@ untrusted strings, so every value in it goes in through `textContent` —
 `testlog` serves an error page containing a `<script>` tag and checks that what
 lands on screen is characters rather than markup.
 
-Story snippets have a milder version of the same problem. Publishers put whole
-embedded widgets in a description — carousels, players, their own loader
-scripts — and stripping the tags out of one keeps whatever sat *between* them,
-so a `<script>` in a description arrived as the story's snippet: a Globe and
-Mail row about Gloria Steinem's death read `function loadGIResources(jsUrls) {`.
-Never dangerous — a snippet reaches the page through `textContent`, and the CSP
-would refuse to run it either way — but it read as a broken app. `stripMarkup`
-drops what `<script>` and `<style>` carry rather than just their tags,
-terminated or not, and keeps the prose either side. `testsec` covers both
+Story snippets are hardened against a milder version of the same thing.
+Publishers put whole embedded widgets in a story's body — carousels, players,
+their own loader scripts — and stripping the tags out of one keeps whatever
+sat *between* them, so a `<script>` there would arrive as the story's snippet.
+`stripMarkup` drops what `<script>` and `<style>` carry rather than just their
+tags, terminated or not, and keeps the prose either side; `testsec` covers both
 shapes.
+
+This one is precautionary, and the honest version of its history is worth
+keeping. It went in believing a Globe and Mail row about Gloria Steinem's death
+was showing `function loadGIResources(jsUrls) {` on screen. It was not. That
+item does carry a carousel and its loader — but in `<content:encoded>`, and
+`txt()` asks for `description`, `summary`, `content`, none of which match a
+namespaced `content:encoded` in an XML document. The Globe's `<description>`
+holds the plain prose, which is what the app was showing all along. A sweep of
+all 109 library feeds, fetched from the publishers, found no item anywhere with
+a script in the field the app actually reads. The change stays because it costs
+one pass over a string already being rewritten and what a publisher puts in a
+`<description>` is not this app's decision — but it fixed nothing that was
+broken, which is a different claim from the one first made for it.
 
 ### Not fetching things that can't have changed
 
