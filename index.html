@@ -1492,6 +1492,17 @@ const shortId = raw => {
 // Shared by both parsers so a JSON feed's content_html reads the same as an
 // RSS description.
 const stripMarkup = raw => String(raw || "")
+  // Publishers put whole embedded widgets in a description - Globe and Mail
+  // ships a media carousel with its own loader inline. Stripping tags alone
+  // keeps what is *between* them, so the script's source became the story's
+  // snippet: a row about Gloria Steinem's death reading "function
+  // loadGIResources(jsUrls) {...". Never a security problem - it reaches the
+  // page through textContent and the CSP would refuse it anyway - but the row
+  // read as broken. Drop what these two carry, not just their tags. The
+  // second pass catches an unterminated one, where a browser would also treat
+  // the rest of the document as script.
+  .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, " ")
+  .replace(/<(script|style)\b[^>]*>[\s\S]*$/i, " ")
   .replace(/<[^>]*>/g, " ")
   .replace(/&[a-z#0-9]+;/gi, " ")
   .replace(/\s+/g, " ")
@@ -3557,7 +3568,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-09-04.87";
+const BUILD = "2026-09-04.88";
 // Full stamp stays in Settings (the only place it was ever findable before);
 // this is just enough to tell two builds apart at a glance without opening
 // a sheet - the trailing counter, not the date, since the date rarely

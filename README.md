@@ -680,6 +680,17 @@ untrusted strings, so every value in it goes in through `textContent` —
 `testlog` serves an error page containing a `<script>` tag and checks that what
 lands on screen is characters rather than markup.
 
+Story snippets have a milder version of the same problem. Publishers put whole
+embedded widgets in a description — carousels, players, their own loader
+scripts — and stripping the tags out of one keeps whatever sat *between* them,
+so a `<script>` in a description arrived as the story's snippet: a Globe and
+Mail row about Gloria Steinem's death read `function loadGIResources(jsUrls) {`.
+Never dangerous — a snippet reaches the page through `textContent`, and the CSP
+would refuse to run it either way — but it read as a broken app. `stripMarkup`
+drops what `<script>` and `<style>` carry rather than just their tags,
+terminated or not, and keeps the prose either side. `testsec` covers both
+shapes.
+
 ### Not fetching things that can't have changed
 
 Two separate ideas, both aimed at "only do the work if there's something new":
