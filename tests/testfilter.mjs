@@ -26,7 +26,10 @@ const STORIES={
   a:['Alpha budget vote','Alpha flood warning','Alpha election night'],
   b:['Bravo budget leak','Bravo storm damage'],
   c:['Charlie ferry delay'],
-  t:['Tango chip budget','Tango phone launch']
+  t:['Tango chip budget','Tango phone launch'],
+  // Same source name as b, on a different URL: what a feed added twice under
+  // two addresses looks like. It is one source to the reader, so one switch.
+  d:['Bravo late edition']
 };
 await ctx.route('**/*',route=>{const u=route.request().url();
  if(u.startsWith('http://localhost:8073'))return route.continue();
@@ -43,7 +46,8 @@ await page.addInitScript(()=>localStorage.getItem('breaking.v1')||localStorage.s
  feeds:[{id:'1',cat:'World',name:'Alpha',url:'https://a.test/f'},
         {id:'2',cat:'World',name:'Bravo',url:'https://b.test/f'},
         {id:'3',cat:'World',name:'Charlie',url:'https://c.test/f'},
-        {id:'4',cat:'Tech', name:'Tango',url:'https://t.test/f'}]})));
+        {id:'4',cat:'Tech', name:'Tango',url:'https://t.test/f'},
+        {id:'5',cat:'World',name:'Bravo',url:'https://d.test/f'}]})));
 await page.goto('http://localhost:8073/index.html');await page.waitForTimeout(2500);
 
 const shown=()=>page.evaluate(()=>[...document.querySelectorAll('#list .item .ttl')].map(n=>n.textContent));
@@ -56,8 +60,9 @@ console.log('--- the bar is folded away until asked for ---');
 say('filters hidden', await page.evaluate(()=>document.querySelector('#filters').hidden));
 await page.click('#open-filter'); await page.waitForTimeout(200);
 say('after tapping filter', await page.evaluate(()=>document.querySelector('#filters').hidden));
-say('source switches', await page.evaluate(()=>[...document.querySelectorAll('#srcs button')]
-  .map(b=>b.textContent+':'+b.getAttribute('aria-pressed'))));
+// Five World feeds, but only three names: two of them are both called Bravo.
+want('one switch per name', await page.evaluate(()=>[...document.querySelectorAll('#srcs button')]
+  .map(b=>b.textContent)), ['Alpha','Bravo','Charlie']);
 
 console.log('\n--- switching a source off ---');
 say('before', await shown());
@@ -67,6 +72,14 @@ const after=await shown();
 want('no Alpha stories left', after.filter(t=>t.startsWith('Alpha')), []);
 say('still showing', after);
 say('header button lit', await page.evaluate(()=>document.querySelector('#open-filter').classList.contains('on')));
+
+console.log('\n--- one switch covers every feed with that name ---');
+await page.evaluate(()=>[...document.querySelectorAll('#srcs button')].find(b=>b.textContent==='Bravo').click());
+await page.waitForTimeout(400);
+want('both Bravo feeds off', (await shown()).filter(t=>t.startsWith('Bravo')), []);
+await page.evaluate(()=>[...document.querySelectorAll('#srcs button')].find(b=>b.textContent==='Bravo').click());
+await page.waitForTimeout(400);
+want('and both back on', (await shown()).filter(t=>t.startsWith('Bravo')).length, 3);
 
 console.log('\n--- and it survives a reload ---');
 await page.reload(); await page.waitForTimeout(2500);
@@ -89,7 +102,7 @@ await page.fill('#kw','zzz'); await page.press('#kw','Enter'); await page.waitFo
 say('empty state', await page.evaluate(()=>document.querySelector('#list .empty').textContent.trim().slice(0,80)));
 await page.evaluate(()=>document.querySelector('#list .empty .btn').click());
 await page.waitForTimeout(400);
-want('Clear filters brings them back', (await shown()).length, 6);
+want('Clear filters brings them back', (await shown()).length, 7);
 
 console.log('\n--- and it does not follow you to the next tab ---');
 await page.fill('#kw','budget'); await page.press('#kw','Enter'); await page.waitForTimeout(400);
@@ -99,6 +112,13 @@ await page.evaluate(()=>[...document.querySelectorAll('.chip')].find(c=>c.textCo
 await page.waitForTimeout(600);
 want('Tech is whole', await shown(), ['Tango chip budget','Tango phone launch']);
 want('box is empty again', await page.inputValue('#kw'), '');
+
+console.log('\n--- the feeds page says how old each feed\'s newest story is ---');
+await page.click('#open-feeds'); await page.waitForTimeout(600);
+const ages=await page.evaluate(()=>[...document.querySelectorAll('#feeds .row')]
+  .map(r=>[r.querySelector('.n span').textContent,(r.querySelector('.route.age')||{}).textContent]));
+say('newest per feed', ages);
+want('every working feed dated', ages.every(([,a])=>a&&/newest/.test(a)), true);
 
 console.log('\n'+(errs.length?'ERRORS '+errs.join(';'):'no JS errors'));
 await b.close();srv.close();

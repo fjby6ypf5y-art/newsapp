@@ -245,6 +245,11 @@ select.sel{width:100%;background:var(--panel);border:1px solid var(--line);
 /* A feed whose links land on a subscribe wall. Marked everywhere it can be
    chosen, so a dead-end link is never a surprise. */
 .route.paywall{color:#c9a227;border:1px solid rgba(201,162,39,.4)}
+/* How old the newest story in a feed was, last time the feed was read. A dot
+   that is green and an age that is two days old is a feed that is answering
+   and saying nothing - which is the one failure the dots could never show. */
+.route.age{color:var(--dim);border:1px solid var(--line);text-transform:none;letter-spacing:0}
+.route.age.old{color:#f5a623;border-color:rgba(245,166,35,.35)}
 .row .e{font-size:0.6875rem;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* Per-relay failure breakdown: one line per attempt (renderFeeds gives this
    the extra "multi" class), so unlike a plain single-line .e string these
@@ -489,6 +494,7 @@ const CATALOG = [
   ["World", "WSJ World News",     "https://feeds.content.dowjones.io/public/rss/RSSWorldNews", true],
   ["World", "NYT World",          "https://rss.nytimes.com/services/xml/rss/nyt/World.xml", true],
   ["World", "Washington Post World","https://feeds.washingtonpost.com/rss/world", true],
+  ["World", "Globe and Mail World","https://www.theglobeandmail.com/arc/outboundfeeds/rss/category/world/", true],
 
   ["Business", "BBC Business",    "https://feeds.bbci.co.uk/news/business/rss.xml"],
   ["Business", "NPR Business",    "https://feeds.npr.org/1006/rss.xml"],
@@ -2036,11 +2042,29 @@ let query = "";
 
 const hiddenSet = () => new Set(cfg.hidden || []);
 
-// Stories carry their feed's name, not its URL, so the switched-off URLs are
-// turned into names once per render rather than per story.
+// One switch per source, not per feed. A story carries its feed's *name* -
+// that is what the categories have always been resolved by - so two feeds
+// sharing a name are one source to everything downstream of here, and showing
+// two switches for them means one of them appears to do nothing. They are
+// grouped here and switched together.
+function sourcesIn(cat) {
+  const by = new Map();
+  cfg.feeds.filter(f => (f.cat || "Other") === cat).forEach(f => {
+    if (!by.has(f.name)) by.set(f.name, []);
+    by.get(f.name).push(f.url);
+  });
+  return [...by].map(([name, urls]) => ({ name, urls }));
+}
+
+// The switched-off URLs, turned into source names once per render rather than
+// once per story. A name is off only when every feed carrying it is off: a
+// half-off name would take stories out of the list that a switch still showing
+// as on had put there.
 function hiddenNames() {
-  const off = hiddenSet(), names = new Set();
-  cfg.feeds.forEach(f => { if (off.has(f.url)) names.add(f.name); });
+  const off = hiddenSet(), all = new Map();
+  cfg.feeds.forEach(f => all.set(f.name, (all.get(f.name) !== false) && off.has(f.url)));
+  const names = new Set();
+  all.forEach((every, name) => { if (every) names.add(name); });
   return names;
 }
 
@@ -2055,8 +2079,8 @@ const matchesWords = (i, words) => {
 // Is anything filtering this category right now?
 function filtersOn(cat) {
   if (cat === active && query) return true;
-  const off = hiddenSet();
-  return cfg.feeds.some(f => (f.cat || "Other") === cat && off.has(f.url));
+  const off = hiddenNames();
+  return sourcesIn(cat).some(src => off.has(src.name));
 }
 
 function setQuery(q) {
@@ -2076,9 +2100,12 @@ function leaveTab() {
   if (box) box.value = "";
 }
 
-function toggleSource(url) {
+// `on` is what the switch is showing right now, so the tap is always the
+// opposite of it - and every feed behind the name moves together, which is
+// also what settles a name left half-off by an earlier build.
+function toggleSource(urls, on) {
   const off = hiddenSet();
-  if (off.has(url)) off.delete(url); else off.add(url);
+  urls.forEach(u => { if (on) off.add(u); else off.delete(u); });
   cfg.hidden = [...off];
   save();
   render();
@@ -2109,14 +2136,15 @@ function renderFilters() {
   input.placeholder = active ? "Keyword in " + active : "Keyword";
   if (document.activeElement !== input) input.value = query;
 
-  const off = hiddenSet();
+  const off = hiddenNames();
   box.replaceChildren();
-  cfg.feeds.filter(f => (f.cat || "Other") === active).forEach(f => {
+  sourcesIn(active).forEach(src => {
     const b = el("button");
+    const on = !off.has(src.name);
     b.type = "button";
-    b.textContent = f.name;                  // feed names are user-supplied: text only
-    b.setAttribute("aria-pressed", String(!off.has(f.url)));
-    b.onclick = () => toggleSource(f.url);
+    b.textContent = src.name;                // feed names are user-supplied: text only
+    b.setAttribute("aria-pressed", String(on));
+    b.onclick = () => toggleSource(src.urls, on);
     box.appendChild(b);
   });
 }
@@ -2394,7 +2422,29 @@ function renderFeeds() {
       const g = el("div", "g");
       const n = el("div", "n");
       n.style.display = "flex"; n.style.alignItems = "center"; n.style.gap = "7px";
+      // Three badges is more than one line holds on a phone.
+      n.style.flexWrap = "wrap";
       const nm = el("span"); nm.textContent = f.name; n.appendChild(nm);
+      // A feed can answer, pass every test and still be handing back the same
+      // stories it handed back yesterday - a relay serving its own cache, or a
+      // publisher whose feed has quietly stopped being written to. The health
+      // dot says the fetch worked; this says whether anything came of it.
+      // Recorded on every read since build .69 and, until now, never shown.
+      if (hs && hs.ok) {
+        const ag = el("span", "route age");
+        if (!hs.newest) {
+          ag.textContent = "undated";
+          ag.title = "This feed's stories carry no usable date";
+        } else {
+          const old_ = Date.now() - hs.newest > 24 * 60 * 60 * 1000;
+          if (old_) ag.className += " old";
+          ag.textContent = "newest " + timeAgo(hs.newest);
+          ag.title = "The newest story this feed was carrying when it was last read"
+            + (old_ ? "\nNothing in a day: either the publisher has gone quiet, or what "
+                    + "is being fetched is a cached copy. Try Direct only in Settings." : "");
+        }
+        n.appendChild(ag);
+      }
       if (hs && hs.ok) {
         const rt = el("span", "route " + (hs.direct ? "direct" : "relay"));
         const winner = hs.attempts && hs.attempts.find(a => a.ok);
@@ -3507,7 +3557,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-09-04.86";
+const BUILD = "2026-09-04.87";
 // Full stamp stays in Settings (the only place it was ever findable before);
 // this is just enough to tell two builds apart at a glance without opening
 // a sheet - the trailing counter, not the date, since the date rarely

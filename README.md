@@ -118,9 +118,15 @@ sent in the last 72 hours is there again. The choice is kept in the config, by
 feed URL rather than by the id minted on this device, so it survives a reload
 and means the same thing to a feed restored from a setup link or an OPML file.
 A feed that is deleted takes its entry out with it, so it doesn't come back
-switched off if you ever add it again. Two feeds sharing a name share a switch:
-stories carry their feed's name, not its URL, which is what the categories have
-always been resolved by.
+switched off if you ever add it again.
+
+There is one switch per *source name*, not per feed. A story carries its feed's
+name — that is what the categories have always been resolved by — so two feeds
+under one name (the same publisher added twice under two addresses, say) are a
+single source to everything downstream, and two switches for them would mean
+one of them appeared to do nothing. They are grouped into one switch and go off
+and on together. If you'd rather not have the duplicate at all, the Feeds page
+lists both rows with their addresses under them; delete either.
 
 **The keyword** belongs to the category you're reading and nothing else. Leave
 the tab — by chip or by swipe — and it's gone. A keyword that survived a page
@@ -366,11 +372,19 @@ entries included.
 
 WSJ, NYT and Washington Post are spread across World, Business and Tech (NYT
 also reaches Science, Sport and Entertainment, where each has a dedicated
-section); Globe and Mail is in Canada and Business; Vancouver Sun is in
+section); Globe and Mail is in World, Canada and Business; Vancouver Sun is in
 Canada. None of them were pushed into an existing feed list on upgrade —
 every one is paywalled, and paywalled feeds are opt-in, not migrated in.
 They are additions to the library only, switched on from Feeds like any
 other paywalled entry.
+
+Globe and Mail World
+(`arc/outboundfeeds/rss/category/world/`) joined them later, on a request —
+it was the one Globe section the library had missed, and adding it by hand
+first is what turned it up. Paywalled and opt-in like the rest, and like the
+rest it is a library entry, so anyone who already added that URL by hand keeps
+the feed they have and simply gains the paywall marking that comes with being
+in the library.
 
 Toronto Star was in this list too, briefly. Its RSS never came through on
 the phone — a site redesign broke it, confirmed by outside reports of the
@@ -448,6 +462,25 @@ outside reports describe the same failure after a thestar.com redesign, with
 no replacement anywhere. Unlike WSJ, there was nowhere to move it to, so it
 came out of `CATALOG` entirely and its URL went into `DEAD_FEEDS` behind
 migration 18, on the chance it had already been added.
+
+**On a feed that answers but says nothing.** A health dot only reports on the
+fetch: a feed that hands back the same stories it handed back yesterday passes
+every test there is. Each feed therefore also carries the age of the newest
+story it was holding the last time it was read — `newest 20m ago` next to the
+route badge, and amber once nothing has arrived in a day. Green dot, amber age
+is the signature of a feed that is being fetched but is not moving: either the
+publisher has gone quiet, or what's coming back is a cached copy — a public
+relay serving its own cache is the usual culprit, and **Direct only** in
+Settings is the way to tell those apart. (The app has recorded this on every
+read since the relays were raced; until now it had nowhere to show it.)
+
+Worth knowing before you go looking for a bug: **the order stories appear in
+an RSS file is not date order**, and a publisher's `lastBuildDate` at the top
+of the file is when the file was regenerated, not when its newest story was
+written — a feed rebuilt hourly says so all day whether or not anything was
+added to it. The app sorts every story by its own `pubDate`, so what you see at
+the top of the app and what you see at the top of the raw feed are answering
+different questions.
 
 **On feeds that fail:** whether a feed works depends on your network and on
 which relay can reach it, so the only place the answer is true is your phone.
