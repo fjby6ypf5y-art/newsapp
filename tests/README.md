@@ -28,6 +28,7 @@ If Chromium is somewhere else, set `CHROMIUM_PATH`.
 | `testtension` | How far must a drag travel before the page turns, and what springs back? |
 | `teststuck` | A second finger, a refresh, backgrounding, `touchcancel`, a lost touchend — do the panels always come home? |
 | `testrotate` | After repeated swipes, do the three panels still hold the right categories? |
+| `testfilter` | Source switches and the keyword: do they filter, does one persist and the other not, and does the keyword wait for a submit? |
 | `testchips` | Does the chip row stay still unless the category is off screen? |
 | `testlock` | Is the list's scroll frozen during a sideways drag and restored afterwards? |
 | `testslide` `testspringback` `testmidbuild` | The page turn, the spring back, and a swipe taken while a panel is still filling |

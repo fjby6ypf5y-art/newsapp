@@ -96,6 +96,35 @@ h1{margin:0;font-size:1.375rem;font-weight:800;letter-spacing:-.4px}
 }
 .chip[aria-pressed="true"]{background:var(--text);border-color:var(--text);color:#111;font-weight:600}
 
+/* ---------- filters ---------- */
+/* Two filters live here: which sources in this category are switched on, and
+   a keyword. The bar is folded away by default - it is a second row of
+   controls above the reading surface, and most of the time there is nothing
+   to filter - but it unfolds itself whenever a filter is actually on, so a
+   category that looks short is never short for an invisible reason. */
+.filters{margin-top:9px}
+.kwrow{display:flex;gap:7px;align-items:center}
+.kwrow input{
+  flex:1;min-width:0;margin:0;-webkit-appearance:none;appearance:none;
+  background:var(--panel);border:1px solid var(--line);border-radius:999px;
+  padding:7px 12px;font-size:0.8125rem;color:var(--text)}
+.kwrow .btn{flex:none;width:auto;padding:7px 13px;font-size:0.8125rem}
+/* Source switches. Same trick as the library chips: the tick is always in the
+   box and merely invisible, so a chip is exactly as wide off as on. Anything
+   that changes a chip's width re-wraps the row, which on a phone means the
+   next tap lands on a source you did not choose. */
+.srcs{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.srcs button{padding:4px 10px;border-radius:999px;border:1px solid var(--line);
+  background:transparent;color:var(--faint);font-size:0.75rem;font-weight:600;text-align:left}
+.srcs button::before{content:"\2713 ";color:#4bd76d;visibility:hidden}
+.srcs button[aria-pressed="true"]{background:var(--panel2);border-color:var(--dim);color:var(--text)}
+.srcs button[aria-pressed="true"]::before{visibility:visible}
+.iconbtn svg{width:15px;height:15px;fill:currentColor}
+/* A filter left on is the sort of thing that gets forgotten and then read as
+   missing stories, so the button itself says so from the header. */
+.iconbtn.on{background:var(--text);color:#111}
+.empty .btn{max-width:220px;margin:0 auto}
+
 /* ---------- list ---------- */
 /* The list is absolutely positioned inside a clipping pane so it can be
    translated downward during a pull without disturbing anything else. */
@@ -252,9 +281,9 @@ select.sel{width:100%;background:var(--panel);border:1px solid var(--line);
 /* While feeds are still arriving the stories are half built, so the whole
    reading surface is held back: dimmed, and deaf to taps and swipes. The
    status line stays at full strength - it is the part worth reading. */
-body.busy .chips,body.busy .pane{opacity:.4;pointer-events:none}
+body.busy .chips,body.busy .pane,body.busy .filters{opacity:.4;pointer-events:none}
 body.busy .chips{filter:saturate(.3)}
-.chips,.pane{transition:opacity .18s linear}
+.chips,.pane,.filters{transition:opacity .18s linear}
 </style>
 </head>
 <body>
@@ -263,11 +292,24 @@ body.busy .chips{filter:saturate(.3)}
   <div class="bar">
     <div class="brand"><span class="dot live"></span><h1>News</h1><span class="verchip" id="ver-short"></span></div>
     <button class="iconbtn" id="refresh" aria-label="Refresh">&#8635;</button>
+    <button class="iconbtn" id="open-filter" aria-label="Filter" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.2 2.1h13.6L9.5 8.4v5.1L6.5 15V8.4z"/></svg></button>
     <button class="iconbtn" id="open-feeds" aria-label="Feeds">&#9776;</button>
     <button class="iconbtn" id="open-settings" aria-label="Settings">&#9881;</button>
   </div>
   <div class="status" id="status">Loading&hellip;</div>
   <div class="chips" id="chips"></div>
+  <!-- Folded away until asked for, or until a filter is on. The keyword waits
+       for the form to be submitted: filtering as you type re-renders a
+       hundred-row list on every keystroke, under a keyboard that is covering
+       half of it. -->
+  <div class="filters" id="filters" hidden>
+    <form class="kwrow" id="kw-form">
+      <input type="search" id="kw" enterkeyhint="search" autocomplete="off"
+             autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Keyword">
+      <button class="btn" type="submit">Filter</button>
+    </form>
+    <div class="srcs" id="srcs"></div>
+  </div>
   <div class="legend" aria-hidden="true"><span>Now</span><span class="grad"></span><span>24h+</span></div>
 </header>
 
@@ -599,7 +641,11 @@ const DEFAULTS = {
   ],
   autoRefresh: true,
   idleResetMin: 30,          // 0 = never reset the category
-  directOnly: false
+  directOnly: false,
+  // Sources switched off, by feed URL. URL rather than id because ids are
+  // minted per device, and a feed that comes back through a setup link or an
+  // OPML import is the same feed to the reader.
+  hidden: []
 };
 
 // Every relay in the list is another party that gets to see a feed request, so
@@ -898,6 +944,7 @@ function normalise(c) {
     id:  f.id  || newId(),
     cat: f.cat || "Other"
   }));
+  if (!Array.isArray(c.hidden)) c.hidden = [];
   return c;
 }
 
@@ -963,6 +1010,12 @@ function pruneOrphans() {
   const before = items.length;
   items = items.filter(i => live.has(i.source));
   if (items.length !== before) storeItems();
+  // A source switched off, then removed, would otherwise leave its URL in the
+  // hidden list for good - and switch the feed straight back off if it were
+  // ever added again.
+  const have = new Set(cfg.feeds.map(f => f.url));
+  const keep = (cfg.hidden || []).filter(u => have.has(u));
+  if (keep.length !== (cfg.hidden || []).length) { cfg.hidden = keep; save(); }
   return before - items.length;
 }
 let seen     = new Set(JSON.parse(localStorage.getItem(KEY + ".seen")  || "[]"));
@@ -1965,6 +2018,128 @@ const safeRelay = raw => {
   return t;
 };
 
+/* ------------------------------------------------------------- filtering */
+// Two filters, and they deliberately last different lengths of time.
+//
+// Sources are switched off per feed and kept in the config: "this one posts
+// twice a week and clutters the category" is a standing preference, not
+// something to redo every launch. It applies wherever that feed's stories
+// would show up.
+//
+// The keyword is the opposite - it belongs to the category you are reading
+// right now and is dropped the moment you leave it, by chip or by swipe.
+// A keyword that survived a page turn would silently empty a category you had
+// not typed it into. It is applied on submit rather than on every keystroke:
+// a category is up to a couple of hundred rows, and rebuilding that list under
+// a keyboard on every letter is the one thing this app cannot afford.
+let query = "";
+
+const hiddenSet = () => new Set(cfg.hidden || []);
+
+// Stories carry their feed's name, not its URL, so the switched-off URLs are
+// turned into names once per render rather than per story.
+function hiddenNames() {
+  const off = hiddenSet(), names = new Set();
+  cfg.feeds.forEach(f => { if (off.has(f.url)) names.add(f.name); });
+  return names;
+}
+
+// Every word has to appear somewhere in the story: two words narrow the list
+// rather than widen it, which is what typing a second word is for.
+const queryWords = () => query.toLowerCase().split(/\s+/).filter(Boolean);
+const matchesWords = (i, words) => {
+  const hay = ((i.title || "") + " " + (i.snip || "") + " " + (i.source || "")).toLowerCase();
+  return words.every(w => hay.includes(w));
+};
+
+// Is anything filtering this category right now?
+function filtersOn(cat) {
+  if (cat === active && query) return true;
+  const off = hiddenSet();
+  return cfg.feeds.some(f => (f.cat || "Other") === cat && off.has(f.url));
+}
+
+function setQuery(q) {
+  const next = String(q || "").trim().slice(0, 80);
+  if (next === query) return;
+  query = next;
+  render();
+  $("#list").scrollTop = 0;      // a filtered list is a new list, from the top
+}
+
+// Leaving the category takes the keyword with it. The parked panels were built
+// unfiltered, so clearing it here is also what keeps the panel arriving on
+// screen and the list it is about to become the same list.
+function leaveTab() {
+  query = "";
+  const box = $("#kw");
+  if (box) box.value = "";
+}
+
+function toggleSource(url) {
+  const off = hiddenSet();
+  if (off.has(url)) off.delete(url); else off.add(url);
+  cfg.hidden = [...off];
+  save();
+  render();
+  // The categories either side may show this feed too.
+  if (window.primeSides) window.primeSides();
+}
+
+function clearFilters() {
+  query = "";
+  const off = hiddenSet();
+  cfg.feeds.forEach(f => { if ((f.cat || "Other") === active) off.delete(f.url); });
+  cfg.hidden = [...off];
+  save();
+  render();
+  if (window.primeSides) window.primeSides();
+}
+
+// Rebuilt with the chips, because the sources on offer are the sources in the
+// category you are on. The input is only written to when it is not the thing
+// being typed into - a render lands every minute, on the clock tick.
+function renderFilters() {
+  const bar = $("#filters"), box = $("#srcs"), input = $("#kw");
+  const on = filtersOn(active);
+  const btn = $("#open-filter");
+  btn.classList.toggle("on", on);
+  btn.setAttribute("aria-pressed", String(on));
+  if (on) bar.hidden = false;
+  input.placeholder = active ? "Keyword in " + active : "Keyword";
+  if (document.activeElement !== input) input.value = query;
+
+  const off = hiddenSet();
+  box.replaceChildren();
+  cfg.feeds.filter(f => (f.cat || "Other") === active).forEach(f => {
+    const b = el("button");
+    b.type = "button";
+    b.textContent = f.name;                  // feed names are user-supplied: text only
+    b.setAttribute("aria-pressed", String(!off.has(f.url)));
+    b.onclick = () => toggleSource(f.url);
+    box.appendChild(b);
+  });
+}
+
+$("#open-filter").onclick = () => {
+  const bar = $("#filters");
+  bar.hidden = !bar.hidden;
+  // No autofocus: the source switches are half of what this bar is for, and a
+  // keyboard covering them the instant it opens is in the way of both.
+  if (!bar.hidden) renderFilters();
+};
+$("#kw-form").addEventListener("submit", e => {
+  e.preventDefault();
+  setQuery($("#kw").value);
+  $("#kw").blur();                           // you filtered in order to read
+});
+// The clear button inside a search field never submits anything, so emptying
+// the box has to be enough on its own - otherwise the filter stays on with
+// nothing on screen to say why.
+$("#kw").addEventListener("input", () => {
+  if (!$("#kw").value.trim() && query) setQuery("");
+});
+
 function render() { renderChips(); renderList(); }
 
 function renderChips() {
@@ -1993,6 +2168,7 @@ function renderChips() {
       if (holding) return;
       if (active === c) { $("#list").scrollTop = 0; return; }
       active = c;
+      leaveTab();
       store(KEY + ".tab", active);
       render();
       $("#list").scrollTop = 0;     // direct assignment, not a scroll request
@@ -2002,6 +2178,7 @@ function renderChips() {
     chips.appendChild(b);
   });
   chips.scrollLeft = wasAt;
+  renderFilters();
 }
 
 // The row only moves when it has to: if the chip you have landed on is
@@ -2035,6 +2212,16 @@ function renderList() {
     if (!cats.length) {
       line("No feeds yet.");
       line("Add some in Settings → Add from library.");
+    } else if (filtersOn(active) && storiesIn(active, true).length) {
+      // Nothing here is missing - it is filtered out. Say which filter did it,
+      // and put the way back on screen rather than in the header.
+      line(query ? "Nothing in " + active + " matches \u201c" + query + "\u201d."
+                 : "Every " + active + " story is from a source you have switched off.");
+      line("\u00a0");
+      const b = el("button", "btn");
+      b.textContent = "Clear filters";
+      b.onclick = clearFilters;
+      e.appendChild(b);
     } else {
       const mine = cfg.feeds.filter(f => (f.cat || "Other") === active);
       const bad  = mine.filter(f => health[f.url] && !health[f.url].ok);
@@ -2058,12 +2245,23 @@ function renderList() {
 }
 
 // Strictly newest first, so the reddest story is always the first one.
-function storiesIn(cat) {
+// Everything on screen comes through here - the live panel and the two parked
+// ones - so the filters are applied in one place and the category either side
+// of you is already filtered by the time you swipe onto it.
+// `all` asks for the category as it would be with no filters at all, which is
+// what tells "nothing arrived" apart from "you filtered it away".
+function storiesIn(cat, all) {
   const catOf = {};
   cfg.feeds.forEach(f => { catOf[f.name] = f.cat || "Other"; });
-  return items
-    .filter(i => (i.source in catOf) && (catOf[i.source] || "Other") === cat)
-    .sort((a, b) => b.ts - a.ts);
+  let view = items.filter(i => (i.source in catOf) && (catOf[i.source] || "Other") === cat);
+  if (!all) {
+    const off = hiddenNames();
+    if (off.size) view = view.filter(i => !off.has(i.source));
+    // The keyword belongs to the tab it was typed in, and only that one.
+    const words = cat === active ? queryWords() : [];
+    if (words.length) view = view.filter(i => matchesWords(i, words));
+  }
+  return view.sort((a, b) => b.ts - a.ts);
 }
 
 // Rows for one category, into any container. The panels either side need
@@ -3169,6 +3367,9 @@ setInterval(() => { if (!document.hidden) { markSeen(); render(); } }, 60000);
     if (!next || next === active) return false;
     const leaving = active;
     active = next;
+    // Before the promotion: the panel coming in was built unfiltered, and
+    // clearing the keyword here is what makes that the right list.
+    leaveTab();
     store(KEY + ".tab", active);
     promote(delta, leaving);
     renderChips();
@@ -3306,7 +3507,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-09-01.85";
+const BUILD = "2026-09-04.86";
 // Full stamp stays in Settings (the only place it was ever findable before);
 // this is just enough to tell two builds apart at a glance without opening
 // a sheet - the trailing counter, not the date, since the date rarely

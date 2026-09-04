@@ -50,7 +50,8 @@ and shows your last stories even with no bars.
 
 ### Set up your feeds
 
-The header has three buttons: **↻** refresh, **☰** feeds, **⚙** settings. Feeds
+The header has four buttons: **↻** refresh, a funnel for filters, **☰** feeds,
+**⚙** settings. Feeds
 live on their own page because they are the part you actually maintain;
 Settings holds behaviour, privacy, the relay list and backup. Next to the
 title is a small `b<n>` chip — the build number, so two builds can be told
@@ -103,6 +104,45 @@ around: past the last category you land on the first, so the row behaves like a
 loop rather than a strip with dead ends. A gesture commits to being a swipe, a pull or a scroll as soon
 as its direction is clear and stays that way — switching mid-drag is what makes
 gesture handling feel unreliable.
+
+### Filtering what you're looking at
+
+The funnel button in the header unfolds a second row under the chips: a switch
+per source in the category you're on, and a keyword box.
+
+**Source switches** are a standing preference. A feed that posts twice a week
+sits in the same list as one that posts hourly, and switching it off takes its
+stories out of the category without unsubscribing, without stopping it being
+fetched, and without losing anything — switch it back on and everything it has
+sent in the last 72 hours is there again. The choice is kept in the config, by
+feed URL rather than by the id minted on this device, so it survives a reload
+and means the same thing to a feed restored from a setup link or an OPML file.
+A feed that is deleted takes its entry out with it, so it doesn't come back
+switched off if you ever add it again. Two feeds sharing a name share a switch:
+stories carry their feed's name, not its URL, which is what the categories have
+always been resolved by.
+
+**The keyword** belongs to the category you're reading and nothing else. Leave
+the tab — by chip or by swipe — and it's gone. A keyword that survived a page
+turn would quietly empty a category you never typed it into, and the parked
+panels either side are built unfiltered, so dropping it on the way out is also
+what makes the panel that arrives the list it's supposed to be. Every word you
+type has to appear somewhere in the story — title, snippet or source — so a
+second word narrows rather than widens.
+
+It filters when you submit it, not as you type. A category runs to a couple of
+hundred rows; rebuilding that list on every keystroke, under a keyboard
+covering half of it, is the one thing the reading surface can't afford. Press
+return (or **Filter**); emptying the box clears it on the spot, since the clear
+button inside a search field never submits anything and a filter left on with
+nothing on screen to explain it is just missing news.
+
+Both filters are applied in the one place every panel's rows come from, so the
+category a swipe away arrives already filtered rather than being rebuilt when
+you land on it. A filter that is on lights the funnel button and unfolds the
+bar by itself on launch, and a category emptied by one says which filter did it
+with a **Clear filters** button underneath — a short list is never short for a
+reason you can't see.
 
 **Two passes, and only the first one waits.** Opening the app refreshes the
 category you are on and the two a swipe away — everything within reach — and
@@ -421,7 +461,7 @@ in the same category — that's why the library is deliberately over-stocked.
 
 Every story carries its age as colour — a rainbow spectrum running from *just
 now* to *over a day old*, shown as a rail down the left edge plus a matching
-wash across the row. The scale sits under the filter chips.
+wash across the row. The scale sits under the category chips.
 
 The ramp is the full spectrum in seven bands, newest to oldest:
 
