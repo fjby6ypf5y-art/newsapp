@@ -539,6 +539,25 @@ the whole time is not part of this bug: it means "a filter is on here," not
 "the bar is open," and is meant to stay lit exactly so a hidden source is
 never forgotten.
 
+**Hiding every source in a category at once.** Switching a source off was
+always one at a time, in `#srcs`. The only way to end up with everything
+off was the slow way — tap every switch — and the only quick way back was
+`clearFilters` (the "Clear filters" button), which only ever appears once
+the category's already empty. There was no quick way to go the other
+direction: hide everything first, then add sources back in one at a time,
+which is a real way to use the switches (start from nothing, decide what's
+worth reading) and not just a recovery path. `#srcs-all` is a `Hide all` /
+`Show all` button, always present above the source switches - same
+uppercase-text-button convention as "Add all"/"Remove all" in the Feeds
+library - that does the opposite of whatever the category is showing right
+now: `Hide all` when anything is on, `Show all` once everything is off.
+Implemented as a call to the same `toggleSource` every individual switch
+uses, just handed every URL in the category at once, so it needed no new
+state of its own. Left `clearFilters`/"Clear filters" in place rather than
+replacing it: that one also clears an active keyword, and is reachable
+from the empty state even when the bar itself is folded shut - a case
+`#srcs-all` doesn't cover, since it lives inside the bar.
+
 **On a feed that answers but says nothing.** A health dot only reports on the
 fetch: a feed that hands back the same stories it handed back yesterday passes
 every test there is. Each feed therefore also carries the age of the newest

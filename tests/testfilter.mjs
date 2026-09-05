@@ -107,6 +107,18 @@ await page.evaluate(()=>[...document.querySelectorAll('#srcs button')].find(b=>b
 await page.waitForTimeout(400);
 want('switched back on', (await shown()).filter(t=>t.startsWith('Alpha')).length>0, true);
 
+console.log('\n--- one button hides or shows every source in the category ---');
+say('label with everything on', await page.evaluate(()=>document.querySelector('#srcs-all').textContent));
+await page.click('#srcs-all'); await page.waitForTimeout(400);
+want('every World story gone', (await shown()).length, 0);
+want('every switch off', await page.evaluate(()=>[...document.querySelectorAll('#srcs button')]
+  .every(b=>b.getAttribute('aria-pressed')==='false')), true);
+say('label flips to Show all', await page.evaluate(()=>document.querySelector('#srcs-all').textContent));
+await page.click('#srcs-all'); await page.waitForTimeout(400);
+want('every World story back', (await shown()).length, 7);
+want('every switch back on', await page.evaluate(()=>[...document.querySelectorAll('#srcs button')]
+  .every(b=>b.getAttribute('aria-pressed')==='true')), true);
+
 console.log('\n--- the keyword waits for the submit ---');
 await page.fill('#kw','budget'); await page.waitForTimeout(400);
 say('typed, not submitted', (await shown()).length);

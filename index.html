@@ -113,6 +113,13 @@ h1{margin:0;font-size:1.375rem;font-weight:800;letter-spacing:-.4px}
    box and merely invisible, so a chip is exactly as wide off as on. Anything
    that changes a chip's width re-wraps the row, which on a phone means the
    next tap lands on a source you did not choose. */
+/* Same convention as "Add all"/"Remove all" in the Feeds library: a small
+   uppercase text button, not a pill like the switches below it, so it never
+   reads as one more source to toggle. */
+.srcs-head{display:flex;align-items:center;justify-content:space-between;margin-top:10px}
+.srcs-head span{font-size:0.6875rem;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--faint)}
+.srcs-head button{background:transparent;border:0;color:var(--dim);font-size:0.6875rem;
+  font-weight:700;letter-spacing:.6px;text-transform:uppercase;padding:0}
 .srcs{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .srcs button{padding:4px 10px;border-radius:999px;border:1px solid var(--line);
   background:transparent;color:var(--faint);font-size:0.75rem;font-weight:600;text-align:left}
@@ -318,6 +325,7 @@ body.busy .chips{filter:saturate(.3)}
              autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Keyword">
       <button class="btn" type="submit">Filter</button>
     </form>
+    <div class="srcs-head"><span>Sources</span><button type="button" id="srcs-all"></button></div>
     <div class="srcs" id="srcs"></div>
   </div>
   <div class="legend" aria-hidden="true"><span>Now</span><span class="grad"></span><span>24h+</span></div>
@@ -2271,7 +2279,8 @@ function renderFilters() {
 
   const off = hiddenNames();
   box.replaceChildren();
-  sourcesIn(active).forEach(src => {
+  const srcs = sourcesIn(active);
+  srcs.forEach(src => {
     const b = el("button");
     const on = !off.has(src.name);
     b.type = "button";
@@ -2280,6 +2289,17 @@ function renderFilters() {
     b.onclick = () => toggleSource(src.urls, on);
     box.appendChild(b);
   });
+
+  // One switch for the whole category, the opposite of whatever it is
+  // showing right now - same idea as "Add all"/"Remove all" in the Feeds
+  // library. Always here rather than only appearing once every source is
+  // already off (which is all the empty state's "Clear filters" button ever
+  // covered): this is what makes "hide everything, then add sources back one
+  // at a time" possible without switching each one off by hand first.
+  const allBtn = $("#srcs-all");
+  const allOff = srcs.length > 0 && srcs.every(src => off.has(src.name));
+  allBtn.textContent = allOff ? "Show all" : "Hide all";
+  allBtn.onclick = () => toggleSource(srcs.flatMap(src => src.urls), !allOff);
 }
 
 $("#open-filter").onclick = () => {
@@ -3724,7 +3744,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-09-05.96";
+const BUILD = "2026-09-05.97";
 // Full stamp stays in Settings (the only place it was ever findable before);
 // this is just enough to tell two builds apart at a glance without opening
 // a sheet - the trailing counter, not the date, since the date rarely
