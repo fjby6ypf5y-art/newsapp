@@ -81,6 +81,23 @@ await page.evaluate(()=>[...document.querySelectorAll('#srcs button')].find(b=>b
 await page.waitForTimeout(400);
 want('and both back on', (await shown()).filter(t=>t.startsWith('Bravo')).length, 3);
 
+console.log('\n--- closing the bar by hand keeps it closed, even after leaving and returning ---');
+// Alpha is still off from above, so World's filter is on and the bar - opened
+// at the very top of this test - is still showing. Fold it by hand, leave
+// for Tech, come back: it must still be folded. The button itself staying
+// lit is not the bug (see "header button lit" above; a filter left on is
+// meant to keep saying so) - only the bar reopening on its own is.
+await page.click('#open-filter'); await page.waitForTimeout(200);
+say('closed by hand', await page.evaluate(()=>document.querySelector('#filters').hidden));
+await page.evaluate(()=>[...document.querySelectorAll('.chip')].find(c=>c.textContent==='Tech').click());
+await page.waitForTimeout(300);
+await page.evaluate(()=>[...document.querySelectorAll('.chip')].find(c=>c.textContent==='World').click());
+await page.waitForTimeout(300);
+want('still closed back on World', await page.evaluate(()=>document.querySelector('#filters').hidden), true);
+say('button still lit (Alpha still off)', await page.evaluate(()=>document.querySelector('#open-filter').classList.contains('on')));
+await page.click('#open-filter'); await page.waitForTimeout(200);
+want('reopens by hand', await page.evaluate(()=>document.querySelector('#filters').hidden), false);
+
 console.log('\n--- and it survives a reload ---');
 await page.reload(); await page.waitForTimeout(2500);
 const back=await shown();

@@ -521,10 +521,23 @@ the CSS comment above `.filters`). But `renderFilters()` ran on every
 `render()` — a refresh landing, the once-a-minute clock tick, coming back
 from the background — and forced the bar open again each time, because the
 filter itself doesn't change: closing it by hand only ever lasted until the
-next one of those, sometimes under a minute. Fixed with a `filterFolded` flag
-that remembers an explicit close and holds it until the category is actually
-left (chip tap or swipe), at which point a filter left on in whatever
-category you land in still unfolds honestly.
+next one of those, sometimes under a minute.
+
+First fix used a single `filterFolded` flag, cleared on `leaveTab()` so
+arriving somewhere new still unfolded honestly - which missed the actual
+complaint entirely: close the bar in Business, switch to another category,
+come back to Business later, and the leave/return itself cleared the flag,
+reopening the exact bar that had just been closed by hand. Replaced with
+`foldedCats`, a set of category names rather than one flag, so closing
+Business's bar and looking at World does not touch Business's fold at all.
+It is cleared only by opening that category's bar again by hand - the one
+place a filter can actually change, since toggling a source or typing a
+keyword both require the bar already open - so a genuinely new filter still
+gets the honest unfold, and an old one you closed on purpose stays closed no
+matter how many other tabs you visit in between. The filter icon staying lit
+the whole time is not part of this bug: it means "a filter is on here," not
+"the bar is open," and is meant to stay lit exactly so a hidden source is
+never forgotten.
 
 **On a feed that answers but says nothing.** A health dot only reports on the
 fetch: a feed that hands back the same stories it handed back yesterday passes
