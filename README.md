@@ -472,7 +472,23 @@ which on Hacker News is usually the point of the story. The feed is now
 the front page, and `link=comments` points each item's link at the HN
 comments page rather than the outbound one. Went into `SWAPPED` and behind
 migration 20, same as any other feed replaced for a better fit rather than
-found dead.
+found dead. hnrss.org is a small third-party service, not HN itself, and it
+answers slowly and occasionally 502s under load — the health dot and route
+badge on the Feeds page (and the Log sheet's attempt-by-attempt breakdown)
+say whether a given refresh actually reached it, direct or through a relay,
+rather than assuming the swap fixed it.
+
+**A closed filter bar that reopened itself.** The filter bar unfolds itself
+whenever a filter is on for the category you're looking at — the point being
+that a category that looks short is never short for an invisible reason (see
+the CSS comment above `.filters`). But `renderFilters()` ran on every
+`render()` — a refresh landing, the once-a-minute clock tick, coming back
+from the background — and forced the bar open again each time, because the
+filter itself doesn't change: closing it by hand only ever lasted until the
+next one of those, sometimes under a minute. Fixed with a `filterFolded` flag
+that remembers an explicit close and holds it until the category is actually
+left (chip tap or swipe), at which point a filter left on in whatever
+category you land in still unfolds honestly.
 
 **On a feed that answers but says nothing.** A health dot only reports on the
 fetch: a feed that hands back the same stories it handed back yesterday passes

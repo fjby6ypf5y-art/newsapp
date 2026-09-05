@@ -2106,6 +2106,14 @@ const safeRelay = raw => {
 // a keyboard on every letter is the one thing this app cannot afford.
 let query = "";
 
+// The bar unfolds itself on arrival whenever a filter is on for the category
+// (see the CSS comment above .filters) - but that has to stop the moment the
+// reader folds it back by hand, or every render since (a refresh landing, the
+// once-a-minute clock tick, pulling to refresh) reopens it again, because the
+// filter is still on. Set on an explicit fold, cleared on an explicit unfold
+// and on leaving the tab, so arriving somewhere new still unfolds honestly.
+let filterFolded = false;
+
 const hiddenSet = () => new Set(cfg.hidden || []);
 
 // One switch per source, not per feed. A story carries its feed's *name* -
@@ -2164,6 +2172,7 @@ function leaveTab() {
   query = "";
   const box = $("#kw");
   if (box) box.value = "";
+  filterFolded = false;
 }
 
 // `on` is what the switch is showing right now, so the tap is always the
@@ -2198,7 +2207,7 @@ function renderFilters() {
   const btn = $("#open-filter");
   btn.classList.toggle("on", on);
   btn.setAttribute("aria-pressed", String(on));
-  if (on) bar.hidden = false;
+  if (on && !filterFolded) bar.hidden = false;
   input.placeholder = active ? "Keyword in " + active : "Keyword";
   if (document.activeElement !== input) input.value = query;
 
@@ -2218,6 +2227,7 @@ function renderFilters() {
 $("#open-filter").onclick = () => {
   const bar = $("#filters");
   bar.hidden = !bar.hidden;
+  filterFolded = bar.hidden;
   // No autofocus: the source switches are half of what this bar is for, and a
   // keyboard covering them the instant it opens is in the way of both.
   if (!bar.hidden) renderFilters();
@@ -3631,7 +3641,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-09-05.91";
+const BUILD = "2026-09-05.92";
 // Full stamp stays in Settings (the only place it was ever findable before);
 // this is just enough to tell two builds apart at a glance without opening
 // a sheet - the trailing counter, not the date, since the date rarely
