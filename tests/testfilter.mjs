@@ -109,17 +109,15 @@ want('switched back on', (await shown()).filter(t=>t.startsWith('Alpha')).length
 
 console.log('\n--- one button hides or shows every source in the category ---');
 const allBtnLabel = () => page.evaluate(()=>document.querySelector('#srcs-all').getAttribute('aria-label'));
-const eyeShown = () => page.evaluate(()=>({
-  eye: !document.querySelector('#srcs-all-eye').hidden,
-  eyeoff: !document.querySelector('#srcs-all-eyeoff').hidden}));
+const allBtnLit = () => page.evaluate(()=>document.querySelector('#srcs-all').classList.contains('on'));
 say('label with everything on', await allBtnLabel());
-want('eye icon showing, not eye-off', await eyeShown(), {eye:true, eyeoff:false});
+want('button not lit (nothing hidden yet)', await allBtnLit(), false);
 await page.click('#srcs-all'); await page.waitForTimeout(400);
 want('every World story gone', (await shown()).length, 0);
 want('every switch off', await page.evaluate(()=>[...document.querySelectorAll('#srcs button')]
   .every(b=>b.getAttribute('aria-pressed')==='false')), true);
 say('label flips to Show all', await allBtnLabel());
-want('eye-off icon showing, not eye', await eyeShown(), {eye:false, eyeoff:true});
+want('button lit (everything hidden)', await allBtnLit(), true);
 await page.click('#srcs-all'); await page.waitForTimeout(400);
 want('every World story back', (await shown()).length, 7);
 want('every switch back on', await page.evaluate(()=>[...document.querySelectorAll('#srcs button')]

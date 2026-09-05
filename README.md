@@ -559,17 +559,24 @@ it lives inside the bar.
 
 First version was a bare uppercase text button, matching "Add all"/"Remove
 all" in the Feeds library - fine on desktop, a poor target on a phone: all
-type, no padding, nothing near a comfortable tap size. Replaced with an
-eye / eye-slash icon on `.iconbtn`'s usual 36px square (shrunk slightly to
-30px to fit the header row it sits in), the same tap-target class the
-header's own icon row uses, rather than inventing a smaller one just for
-this spot. Both icons are static markup, one `<svg>` per state, toggled with
-the `hidden` attribute instead of rewriting the button's content - this
-codebase never assigns HTML strings into a live element (feed content is
-untrusted; see Security below), so even a hand-authored, constant icon
-follows the same rule as everything else. The accessible name is the same
-verb it always was ("Hide all"/"Show all"), kept as the button's
-`aria-label` since the icon alone says nothing to a screen reader.
+type, no padding, nothing near a comfortable tap size. Moved onto
+`.iconbtn`'s usual 36px square (shrunk slightly to 30px to fit the header
+row it sits in), the same tap-target class the header's own icon row uses,
+rather than inventing a smaller one just for this spot.
+
+That version drew an eye icon for "on" and an eye-slash for "off", the two
+swapped with the `hidden` attribute. At 15px the two read as near-identical -
+not a rendering bug, just too fine a distinction to carry at that size - so
+the actual state was hard to read off the icon at a glance. Dropped to one
+eye icon, full stop, and moved the state onto the button itself: the same
+`.on` highlight `#open-filter` already uses (background inverts to
+`var(--text)`) lights up once every source in the category is hidden, the
+same bold, unmissable signal the header's own filter icon gives for "a
+filter is on here" - color and contrast carrying the state instead of asking
+a tiny glyph to. The accessible name is still the same verb it always was
+("Hide all"/"Show all"), kept as the button's `aria-label` and mirrored in
+`aria-pressed`, since neither the icon nor the highlight says anything to a
+screen reader on their own.
 
 **On a feed that answers but says nothing.** A health dot only reports on the
 fetch: a feed that hands back the same stories it handed back yesterday passes
