@@ -1642,14 +1642,19 @@ function parseXmlFeed(xml, source, feedUrl) {
     }
 
     // Hacker News's own RSS links every item at whatever the story points to -
-    // the article, a GitHub repo, a PDF - never at the discussion, which is
-    // the reason to read Hacker News in the first place. The standard RSS
-    // <comments> element carries the discussion URL there, so prefer it, but
-    // only for this one feed: a blog's <comments> tag points at its own
-    // comment thread, which is not more useful than the post it belongs to.
+    // the article, a GitHub repo, a PDF - and carries the discussion URL
+    // separately, in the standard RSS <comments> element. Readers want both:
+    // the headline itself should still open the article, but everywhere else
+    // on the row - source, time, snippet, a press anywhere off the headline -
+    // is what opens the discussion, same as every other feed's row does for
+    // its one link. So the row's own link becomes <comments> here, and the
+    // article goes on titleLink for renderItem to give the headline alone.
+    // Only for this one feed: a blog's <comments> tag points at its own
+    // comment thread, which is not a second link worth surfacing.
+    let titleLink = "";
     if (/^https?:\/\/news\.ycombinator\.com\//i.test(feedUrl)) {
       const comments = txt(n, "comments");
-      if (comments) link = comments;
+      if (comments) { titleLink = link; link = comments; }
     }
 
     const title = (txt(n, "title") || "(untitled)").slice(0, 300);
@@ -1673,7 +1678,10 @@ function parseXmlFeed(xml, source, feedUrl) {
     // Relative hrefs resolve against the feed's own address. Resolving them
     // against this app produced links back into the app itself.
     link = safeLink(link, feedUrl);
-    return { id: shortId(link || title), title, link, snip, ts, source };
+    titleLink = titleLink ? safeLink(titleLink, feedUrl) : "";
+    const out = { id: shortId(link || title), title, link, snip, ts, source };
+    if (titleLink) out.titleLink = titleLink;
+    return out;
   }).filter(i => i.title !== "(untitled)" || i.link);
 }
 
@@ -2438,6 +2446,18 @@ function renderItem(i, list) {
     a.style.setProperty("--heat", heat(i.ts));
 
     const h = el("h2", "ttl"); h.textContent = i.title; a.appendChild(h);
+    // Hacker News carries the article separately from the discussion (see
+    // parseXmlFeed): the row's own link opens the discussion, same as every
+    // other feed's row, but the headline itself is the one place that should
+    // still open the article. preventDefault stops the row's own navigation
+    // for this one click; the row's click listener below still runs (it's
+    // still the same click, still bubbling), so the story is marked read
+    // either way.
+    const titleHref = i.titleLink ? safeLink(i.titleLink) : "";
+    if (titleHref) h.addEventListener("click", e => {
+      e.preventDefault();
+      window.open(titleHref, "_blank", "noopener,noreferrer");
+    });
 
     const m = el("div", "meta");
     const s = el("span", "src"); s.textContent = i.source; m.appendChild(s);
@@ -3683,7 +3703,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-09-05.93";
+const BUILD = "2026-09-05.94";
 // Full stamp stays in Settings (the only place it was ever findable before);
 // this is just enough to tell two builds apart at a glance without opening
 // a sheet - the trailing counter, not the date, since the date rarely

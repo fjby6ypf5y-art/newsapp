@@ -475,11 +475,18 @@ of them a straight 502 — because hnrss.org is a small, single-maintainer
 service that answers slowly and buckles under load. Reversed by migration 21
 back to the official feed, and for good reason to stay there: the official
 RSS already carries the discussion link, in the standard RSS `<comments>`
-element, alongside `<link>` for the article. `parseXmlFeed` now reads
-`<comments>` instead of `<link>` for this one feed (checked by feed URL, not
+element, alongside `<link>` for the article — both, not a choice between
+them. `parseXmlFeed` reads both for this one feed (checked by feed URL, not
 applied to any other feed's `<comments>` — a blog's comments page isn't more
-useful than its post). Same outcome as the hnrss.org swap, no third party
-involved, so nothing here depends on hnrss.org staying up.
+useful than its post) and keeps the article on a separate `titleLink` field.
+The row itself opens `<comments>`, same as tapping anywhere on any other
+feed's row opens its one link; the headline is the one part of the card
+`renderItem` gives a click handler of its own, `preventDefault`-ing the
+row's navigation and opening `titleLink` instead. No nested `<a>` — the row
+stays one real anchor, so long-press and "open in new tab" still work on it
+as they do everywhere else — the headline is just a `<h2>` with its own
+listener sitting inside it. Same story either way, no third party involved,
+so nothing here depends on hnrss.org staying up.
 
 The two migrations, 20 and then 21, exist rather than one feed URL edit
 because 20 had already reached real devices before hnrss.org's unreliability

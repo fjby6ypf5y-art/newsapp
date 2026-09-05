@@ -52,6 +52,7 @@ If Chromium is somewhere else, set `CHROMIUM_PATH`.
 | `testquota` | A feed big enough to fill the storage quota; a config that will not parse |
 | `testupdate` | Is a new build picked up rather than served from cache? |
 | `testpaywall` | Do the supplementary Business feeds reach a saved feed list without removing anything, is a fresh install left alone, and are paywalled feeds marked and skipped by "Add all"? |
+| `testhn` | Hacker News: does the row link to the discussion and the headline to the article, and does an ordinary feed's own `<comments>` tag stay out of it? |
 
 ## Writing another
 
