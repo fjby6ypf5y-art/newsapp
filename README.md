@@ -50,7 +50,8 @@ and shows your last stories even with no bars.
 
 ### Set up your feeds
 
-The header has three buttons: **↻** refresh, **☰** feeds, **⚙** settings. Feeds
+The header has four buttons: **↻** refresh, a funnel for filters, **☰** feeds,
+**⚙** settings. Feeds
 live on their own page because they are the part you actually maintain;
 Settings holds behaviour, privacy, the relay list and backup. Next to the
 title is a small `b<n>` chip — the build number, so two builds can be told
@@ -103,6 +104,51 @@ around: past the last category you land on the first, so the row behaves like a
 loop rather than a strip with dead ends. A gesture commits to being a swipe, a pull or a scroll as soon
 as its direction is clear and stays that way — switching mid-drag is what makes
 gesture handling feel unreliable.
+
+### Filtering what you're looking at
+
+The funnel button in the header unfolds a second row under the chips: a switch
+per source in the category you're on, and a keyword box.
+
+**Source switches** are a standing preference. A feed that posts twice a week
+sits in the same list as one that posts hourly, and switching it off takes its
+stories out of the category without unsubscribing, without stopping it being
+fetched, and without losing anything — switch it back on and everything it has
+sent in the last 72 hours is there again. The choice is kept in the config, by
+feed URL rather than by the id minted on this device, so it survives a reload
+and means the same thing to a feed restored from a setup link or an OPML file.
+A feed that is deleted takes its entry out with it, so it doesn't come back
+switched off if you ever add it again.
+
+There is one switch per *source name*, not per feed. A story carries its feed's
+name — that is what the categories have always been resolved by — so two feeds
+under one name (the same publisher added twice under two addresses, say) are a
+single source to everything downstream, and two switches for them would mean
+one of them appeared to do nothing. They are grouped into one switch and go off
+and on together. If you'd rather not have the duplicate at all, the Feeds page
+lists both rows with their addresses under them; delete either.
+
+**The keyword** belongs to the category you're reading and nothing else. Leave
+the tab — by chip or by swipe — and it's gone. A keyword that survived a page
+turn would quietly empty a category you never typed it into, and the parked
+panels either side are built unfiltered, so dropping it on the way out is also
+what makes the panel that arrives the list it's supposed to be. Every word you
+type has to appear somewhere in the story — title, snippet or source — so a
+second word narrows rather than widens.
+
+It filters when you submit it, not as you type. A category runs to a couple of
+hundred rows; rebuilding that list on every keystroke, under a keyboard
+covering half of it, is the one thing the reading surface can't afford. Press
+return (or **Filter**); emptying the box clears it on the spot, since the clear
+button inside a search field never submits anything and a filter left on with
+nothing on screen to explain it is just missing news.
+
+Both filters are applied in the one place every panel's rows come from, so the
+category a swipe away arrives already filtered rather than being rebuilt when
+you land on it. A filter that is on lights the funnel button and unfolds the
+bar by itself on launch, and a category emptied by one says which filter did it
+with a **Clear filters** button underneath — a short list is never short for a
+reason you can't see.
 
 **Two passes, and only the first one waits.** Opening the app refreshes the
 category you are on and the two a swipe away — everything within reach — and
@@ -326,11 +372,19 @@ entries included.
 
 WSJ, NYT and Washington Post are spread across World, Business and Tech (NYT
 also reaches Science, Sport and Entertainment, where each has a dedicated
-section); Globe and Mail is in Canada and Business; Vancouver Sun is in
+section); Globe and Mail is in World, Canada and Business; Vancouver Sun is in
 Canada. None of them were pushed into an existing feed list on upgrade —
 every one is paywalled, and paywalled feeds are opt-in, not migrated in.
 They are additions to the library only, switched on from Feeds like any
 other paywalled entry.
+
+Globe and Mail World
+(`arc/outboundfeeds/rss/category/world/`) joined them later, on a request —
+it was the one Globe section the library had missed, and adding it by hand
+first is what turned it up. Paywalled and opt-in like the rest, and like the
+rest it is a library entry, so anyone who already added that URL by hand keeps
+the feed they have and simply gains the paywall marking that comes with being
+in the library.
 
 Toronto Star was in this list too, briefly. Its RSS never came through on
 the phone — a site redesign broke it, confirmed by outside reports of the
@@ -409,6 +463,51 @@ no replacement anywhere. Unlike WSJ, there was nowhere to move it to, so it
 came out of `CATALOG` entirely and its URL went into `DEAD_FEEDS` behind
 migration 18, on the chance it had already been added.
 
+**On a feed that answers but says nothing.** A health dot only reports on the
+fetch: a feed that hands back the same stories it handed back yesterday passes
+every test there is. Each feed therefore also carries the age of the newest
+story it was holding the last time it was read — `newest 20m ago` next to the
+route badge, and amber once nothing has arrived in a day. A feed that answers
+and parses but carries no items at all reads `no stories`, in amber — NYT
+Sports turned out to be exactly that in a sweep: valid RSS, a `lastBuildDate`
+stamped the same minute it was fetched, a channel `pubDate` frozen sixteen
+months earlier, and not one item in the document. Green dot, amber age
+is the signature of a feed that is being fetched but is not moving: either the
+publisher has gone quiet, or what's coming back is a cached copy — a public
+relay serving its own cache is the usual culprit, and **Direct only** in
+Settings is the way to tell those apart. (The app has recorded this on every
+read since the relays were raced; until now it had nowhere to show it.)
+
+Worth knowing before you go looking for a bug: **the order stories appear in
+an RSS file is not date order**, and a publisher's `lastBuildDate` at the top
+of the file is when the file was regenerated, not when its newest story was
+written — a feed rebuilt hourly says so all day whether or not anything was
+added to it. The app sorts every story by its own `pubDate`, so what you see at
+the top of the app and what you see at the top of the raw feed are answering
+different questions.
+
+**Where a story's text comes from.** The snippet is read from `<description>`,
+then `<summary>`, then `<content>`, then `<content:encoded>` — first one with
+anything in it wins, so a publisher's short teaser beats their full article,
+which is right for two lines of snippet. `content:encoded` has to be spelled
+out because in an XML document `getElementsByTagName` matches the qualified
+name: asking for `content` never finds a `<content:encoded>`. Without it, the
+WordPress shape — an empty `<description><![CDATA[]]>` with the whole body in
+`content:encoded` — produced a row with no snippet at all. Abnormal Returns
+ships exactly that on 8 of its 14 items. It is also where publishers park
+embedded widgets, which is what makes `stripMarkup` dropping `<script>` and
+`<style>` contents load-bearing rather than precautionary: the app now reads
+the field those widgets live in.
+
+**Statistics Canada moved.** The whole `/n1/dai-quo/rss/` tree is a hard 404 —
+the one failure that means the same thing from any address — and The Daily is
+now Atom at `/n1/rss/dai-quo/`, one feed per subject with `0-eng.atom` as all
+of them. Migration 19 rewrites a saved copy rather than removing it. Be warned
+that the replacement runs about two days behind StatCan's own published Daily,
+so on a 72-hour window it contributes one or two stories at the cold end; the
+`newest` badge says `3d ago` in amber, which is the honest answer rather than a
+hidden one.
+
 **On feeds that fail:** whether a feed works depends on your network and on
 which relay can reach it, so the only place the answer is true is your phone.
 That's what the health dots are for. If one goes red, drop it and try another
@@ -421,7 +520,7 @@ in the same category — that's why the library is deliberately over-stocked.
 
 Every story carries its age as colour — a rainbow spectrum running from *just
 now* to *over a day old*, shown as a rail down the left edge plus a matching
-wash across the row. The scale sits under the filter chips.
+wash across the row. The scale sits under the category chips.
 
 The ramp is the full spectrum in seven bands, newest to oldest:
 
@@ -606,6 +705,27 @@ the story cache needs. It is the one screen whose whole purpose is to display
 untrusted strings, so every value in it goes in through `textContent` —
 `testlog` serves an error page containing a `<script>` tag and checks that what
 lands on screen is characters rather than markup.
+
+Story snippets are hardened against a milder version of the same thing.
+Publishers put whole embedded widgets in a story's body — carousels, players,
+their own loader scripts — and stripping the tags out of one keeps whatever
+sat *between* them, so a `<script>` there would arrive as the story's snippet.
+`stripMarkup` drops what `<script>` and `<style>` carry rather than just their
+tags, terminated or not, and keeps the prose either side; `testsec` covers both
+shapes.
+
+This one is precautionary, and the honest version of its history is worth
+keeping. It went in believing a Globe and Mail row about Gloria Steinem's death
+was showing `function loadGIResources(jsUrls) {` on screen. It was not. That
+item does carry a carousel and its loader — but in `<content:encoded>`, and
+`txt()` asks for `description`, `summary`, `content`, none of which match a
+namespaced `content:encoded` in an XML document. The Globe's `<description>`
+holds the plain prose, which is what the app was showing all along. A sweep of
+all 109 library feeds, fetched from the publishers, found no item anywhere with
+a script in the field the app actually reads. The change stays because it costs
+one pass over a string already being rewritten and what a publisher puts in a
+`<description>` is not this app's decision — but it fixed nothing that was
+broken, which is a different claim from the one first made for it.
 
 ### Not fetching things that can't have changed
 

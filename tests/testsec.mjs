@@ -20,6 +20,10 @@ const HOSTILE=`<?xml version="1.0"?><rss version="2.0"><channel><title>evil</tit
 <item><title>HTML in title &lt;img src=x onerror="window.PWNED=4"&gt;</title><link>https://ok.test/a</link><pubDate>${new Date().toUTCString()}</pubDate></item>
 <item><title>HTML in body</title><link>https://ok.test/b</link><pubDate>${new Date().toUTCString()}</pubDate>
 <description>&lt;img src=x onerror="window.PWNED=5"&gt;</description></item>
+<item><title>Script in the body</title><link>https://ok.test/c</link><pubDate>${new Date().toUTCString()}</pubDate>
+<description>&lt;p&gt;Real summary here.&lt;/p&gt;&lt;script&gt;window.PWNED=6; var giveaway="LOADGIRESOURCES";&lt;/script&gt;</description></item>
+<item><title>Unterminated script</title><link>https://ok.test/d</link><pubDate>${new Date().toUTCString()}</pubDate>
+<description>&lt;p&gt;Also a real summary.&lt;/p&gt;&lt;script&gt;window.PWNED=7; var giveaway2="TRAILINGSCRIPT";</description></item>
 <item><title>Legit link</title><link>https://good.example/story</link><pubDate>${new Date().toUTCString()}</pubDate></item>
 </channel></rss>`;
 const b=await chromium.launch(CHROME);
@@ -51,5 +55,17 @@ await page.waitForTimeout(700);
 console.log('window.PWNED after clicking every story:',await page.evaluate(()=>window.PWNED));
 console.log('stray <img> injected into the list      :',await page.evaluate(()=>document.querySelectorAll('#list img').length));
 console.log('titles kept as literal text             :',await page.evaluate(()=>!!document.body.innerText.includes('<img src=x')));
+// A script inside a description is never a danger here - it reaches the page
+// through textContent - but its source used to end up as the story's snippet,
+// which is how a real Globe and Mail story came out reading as JavaScript.
+const snips=await page.evaluate(()=>[...document.querySelectorAll('.item')].map(a=>({
+  title:a.querySelector('.ttl').textContent.slice(0,24),
+  snip:(a.querySelector('.snip')||{}).textContent||''})));
+console.table(snips);
+const leaked=snips.filter(r=>/LOADGIRESOURCES|TRAILINGSCRIPT|window\.PWNED/.test(r.snip));
+console.log('script source showing up as a snippet   :',
+  leaked.length?'*** '+JSON.stringify(leaked):'none');
+console.log('the prose either side of it survives    :',
+  snips.filter(r=>/Real summary here|Also a real summary/.test(r.snip)).length+'/2');
 console.log(errs.length?'ERRORS '+errs.join(';'):'no JS errors');
 await b.close();srv.close();
