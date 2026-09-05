@@ -95,6 +95,35 @@ await page.reload();await page.waitForTimeout(2500);
 console.log('  '+CALM[0]+' back:',(await names()).includes(CALM[0]),'(must be false)');
 if((await names()).includes(CALM[0])) console.log('*** a removed feed was pushed back');
 
+console.log('\n=== StatCan moved to Atom: migration 19 repairs a saved feed ===');
+// Statistics Canada retired /n1/dai-quo/rss/ - a hard 404 - and moved The
+// Daily to /n1/rss/dai-quo/0-eng.atom. A reader who already has the old URL
+// gets it rewritten, not removed, and a reader who somehow has both keeps one.
+const SC_OLD='https://www150.statcan.gc.ca/n1/dai-quo/rss/new-nouveau-eng.xml';
+const SC_NEW='https://www150.statcan.gc.ca/n1/rss/dai-quo/0-eng.atom';
+for (const [label, seed] of [
+  ['only the old URL',  [{id:'a',cat:'Canada',name:'StatCan The Daily',url:SC_OLD}]],
+  ['both URLs at once', [{id:'a',cat:'Canada',name:'StatCan The Daily',url:SC_OLD},
+                         {id:'b',cat:'Canada',name:'StatCan The Daily',url:SC_NEW}]]]) {
+  const cx=await b.newContext({...devices['iPhone 14 Pro']});const pg=await cx.newPage();
+  await cx.route('**/*',route=>{const u=route.request().url();
+   if(u.startsWith('http://localhost:8083'))return route.continue();
+   if(!u.includes('allorigins'))return route.abort('failed');
+   return route.fulfill({status:200,contentType:'application/xml',
+    body:`<?xml version="1.0"?><rss version="2.0"><channel><title>t</title></channel></rss>`});});
+  pg.on('pageerror',e=>errs.push(e.message));
+  await pg.addInitScript(f=>localStorage.setItem('breaking.v1',JSON.stringify({migrated:18,idleResetMin:0,
+    proxies:['https://api.allorigins.win/raw?url='],feeds:JSON.parse(f)})), JSON.stringify(seed));
+  await pg.goto('http://localhost:8083/index.html');await pg.waitForTimeout(2500);
+  const c=await pg.evaluate(()=>JSON.parse(localStorage.getItem('breaking.v1')));
+  const urls=c.feeds.filter(f=>/statcan/.test(f.url)).map(f=>f.url);
+  console.log('  '+label.padEnd(20)+'migrated '+c.migrated+'  ->  '+JSON.stringify(urls));
+  if(c.migrated!==19) console.log('*** migration 19 did not run');
+  if(urls.includes(SC_OLD)) console.log('*** the dead StatCan URL survived');
+  if(urls.length!==1) console.log('*** StatCan ended up with '+urls.length+' entries, expected 1');
+  await cx.close();
+}
+
 console.log('\n=== a fresh install skips every migration ===');
 const ctx2=await b.newContext({...devices['iPhone 14 Pro']});const p2=await ctx2.newPage();
 await ctx2.route('**/*',route=>{const u=route.request().url();

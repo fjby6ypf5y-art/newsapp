@@ -42,6 +42,37 @@ const FEEDS = {
  'nodate': `<?xml version="1.0"?><rss version="2.0"><channel><title>c</title>
    <item><title>No date at all</title><link>https://e.test/6</link></item></channel></rss>`,
 
+ // WordPress's usual shape, and Abnormal Returns' in particular: the
+ // <description> is present but an EMPTY CDATA, and the whole body is in
+ // content:encoded. textContent sees the empty description correctly and falls
+ // through - and used to fall through to nothing, so the row had no snippet.
+ 'encoded': `<?xml version="1.0"?><rss version="2.0"
+   xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>c</title>
+   <item><title>Body only in content encoded</title><link>https://e.test/12</link><pubDate>${NOW}</pubDate>
+   <description><![CDATA[]]></description>
+   <content:encoded><![CDATA[<div class="links"><h4>Bonds</h4><p>The body that was missing.</p></div>]]></content:encoded>
+   </item></channel></rss>`,
+
+ // A teaser in <description> still wins: content:encoded is the fallback, not
+ // the preference. Two lines of snippet want the teaser, not the article.
+ 'bothbodies': `<?xml version="1.0"?><rss version="2.0"
+   xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>c</title>
+   <item><title>Both bodies present</title><link>https://e.test/13</link><pubDate>${NOW}</pubDate>
+   <description>The teaser.</description>
+   <content:encoded><![CDATA[<p>The whole article, much longer.</p>]]></content:encoded>
+   </item></channel></rss>`,
+
+ // content:encoded is where publishers park embedded widgets - the Globe ships
+ // a media carousel and its loader there - so reading the field at all is what
+ // makes stripMarkup's script handling load-bearing rather than precautionary.
+ 'encodedwidget': `<?xml version="1.0"?><rss version="2.0"
+   xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>c</title>
+   <item><title>Widget in the body</title><link>https://e.test/14</link><pubDate>${NOW}</pubDate>
+   <description><![CDATA[]]></description>
+   <content:encoded><![CDATA[<p>Real prose first.</p><div class="carousel"></div>
+     <script>function loadGIResources(u){document.head.appendChild(u);}</script>]]></content:encoded>
+   </item></channel></rss>`,
+
  'jsonfeed': JSON.stringify({version:"https://jsonfeed.org/version/1.1",title:"c",
    items:[{id:"7",url:"https://e.test/7",title:"JSON Feed story",date_published:ISO,
            content_html:"<p>Body <b>with</b> markup</p>"}]}),
@@ -105,6 +136,21 @@ for (const k of Object.keys(FEEDS)) {
     (h&&h.ok ? 'OK  ' : 'FAIL') + '  ' +
     (h&&h.ok ? `${mine.length} story, ${dated} with a usable date` : h ? h.err : 'no result'));
   if (mine.length) console.log(' '.repeat(17)+'title: '+JSON.stringify(mine[0].title)+'  link: '+JSON.stringify(mine[0].link));
+  if (mine.length && mine[0].snip) console.log(' '.repeat(17)+'snip : '+JSON.stringify(mine[0].snip));
 }
+
+// Where the body is allowed to come from, and in what order.
+const snipOf=k=>((items.find(i=>i.source===k)||{}).snip)||'';
+const say=(label,got,want)=>console.log('  '+label.padEnd(46)+JSON.stringify(got)
+  +(got===want?'  ok':'  *** expected '+JSON.stringify(want)));
+console.log('\n--- the story body, and which field it comes from ---');
+say('empty CDATA description -> content:encoded', snipOf('encoded'),
+    'Bonds The body that was missing.');
+say('a real description still wins', snipOf('bothbodies'), 'The teaser.');
+console.log('  '+'an embedded widget keeps its prose'.padEnd(46)+JSON.stringify(snipOf('encodedwidget'))
+  +(snipOf('encodedwidget')==='Real prose first.'?'  ok':'  *** expected "Real prose first."'));
+console.log('  '+'and leaks no script source'.padEnd(46)
+  +(/loadGIResources|appendChild/.test(snipOf('encodedwidget'))?'*** LEAKED':'none  ok'));
+
 console.log('\n'+(errs.length?'ERRORS '+errs.join(';'):'no JS errors'));
 await b.close();srv.close();

@@ -570,7 +570,7 @@ const CATALOG = [
   ["Canada","Le Devoir",          "https://www.ledevoir.com/rss/manchettes.xml"],
   ["Canada","National Post",      "https://nationalpost.com/feed/"],
   ["Canada","Bank of Canada",     "https://www.bankofcanada.ca/content_type/press-releases/feed/"],
-  ["Canada","StatCan The Daily",  "https://www150.statcan.gc.ca/n1/dai-quo/rss/new-nouveau-eng.xml"],
+  ["Canada","StatCan The Daily",  "https://www150.statcan.gc.ca/n1/rss/dai-quo/0-eng.atom"],
   ["Canada","Globe and Mail",     "https://www.theglobeandmail.com/arc/outboundfeeds/rss/category/canada/", true],
   ["Canada","Vancouver Sun",      "https://vancouversun.com/feed/atom", true],
   // Toronto Star dropped here: confirmed dead on the phone, see DEAD_FEEDS
@@ -932,11 +932,30 @@ function migrate(c) {
     c.migrated = 17;
   }
 
+  // Statistics Canada retired the whole /n1/dai-quo/rss/ tree - the old URL is
+  // a hard 404, which is the one failure that means the same thing from any
+  // address - and moved The Daily to Atom under /n1/rss/dai-quo/, one feed per
+  // subject with 0-eng.atom as all of them. Swapped rather than removed: the
+  // replacement was read from StatCan's own feeds page and does answer. It
+  // runs about two days behind their published Daily, so on a 72-hour window
+  // expect one or two stories at the cold end - the newest badge on the Feeds
+  // page reports that honestly, which is the point of it.
+  const STATCAN_OLD = "https://www150.statcan.gc.ca/n1/dai-quo/rss/new-nouveau-eng.xml";
+  const STATCAN_NEW = "https://www150.statcan.gc.ca/n1/rss/dai-quo/0-eng.atom";
+
   // Toronto Star confirmed dead on the phone (see DEAD_FEEDS above).
   if (c.migrated < 18) {
     const dead = new Set(DEAD_FEEDS);
     c.feeds = c.feeds.filter(f => !dead.has(f.url));
     c.migrated = 18;
+  }
+
+  if (c.migrated < 19) {
+    const have = new Set(c.feeds.map(f => f.url));
+    c.feeds = c.feeds.flatMap(f => f.url !== STATCAN_OLD ? [f]
+      : have.has(STATCAN_NEW) ? []                 // already on the new one
+      : [{ ...f, url: STATCAN_NEW }]);
+    c.migrated = 19;
   }
   return c;
 }
@@ -1574,7 +1593,15 @@ function parseXmlFeed(xml, source, feedUrl) {
     // Core instead of pubDate. Without it those stories arrive undated, which
     // paints them coldest and sinks them to the bottom of the list.
     const when  = txt(n, "pubDate", "published", "updated", "dc:date", "date");
-    const snip  = stripMarkup(txt(n, "description", "summary", "content")).slice(0, 220);
+    // content:encoded last, and it has to be spelled out: in an XML document
+    // getElementsByTagName matches the qualified name, so "content" does not
+    // find a <content:encoded>. Publishers that put a teaser in <description>
+    // still win on it; the ones that ship an empty <description><![CDATA[]]>
+    // and the whole body in content:encoded - Abnormal Returns does it on 8
+    // items in 14 - used to get no snippet at all. This is also where the
+    // embedded widgets live, which is what stripMarkup's script handling is
+    // for now that the app reads the field they are in.
+    const snip  = stripMarkup(txt(n, "description", "summary", "content", "content:encoded")).slice(0, 220);
 
     let ts = Date.parse(when);
     if (isNaN(ts)) ts = 0;
@@ -3582,7 +3609,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-09-04.89";
+const BUILD = "2026-09-05.90";
 // Full stamp stays in Settings (the only place it was ever findable before);
 // this is just enough to tell two builds apart at a glance without opening
 // a sheet - the trailing counter, not the date, since the date rarely

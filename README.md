@@ -486,6 +486,28 @@ added to it. The app sorts every story by its own `pubDate`, so what you see at
 the top of the app and what you see at the top of the raw feed are answering
 different questions.
 
+**Where a story's text comes from.** The snippet is read from `<description>`,
+then `<summary>`, then `<content>`, then `<content:encoded>` — first one with
+anything in it wins, so a publisher's short teaser beats their full article,
+which is right for two lines of snippet. `content:encoded` has to be spelled
+out because in an XML document `getElementsByTagName` matches the qualified
+name: asking for `content` never finds a `<content:encoded>`. Without it, the
+WordPress shape — an empty `<description><![CDATA[]]>` with the whole body in
+`content:encoded` — produced a row with no snippet at all. Abnormal Returns
+ships exactly that on 8 of its 14 items. It is also where publishers park
+embedded widgets, which is what makes `stripMarkup` dropping `<script>` and
+`<style>` contents load-bearing rather than precautionary: the app now reads
+the field those widgets live in.
+
+**Statistics Canada moved.** The whole `/n1/dai-quo/rss/` tree is a hard 404 —
+the one failure that means the same thing from any address — and The Daily is
+now Atom at `/n1/rss/dai-quo/`, one feed per subject with `0-eng.atom` as all
+of them. Migration 19 rewrites a saved copy rather than removing it. Be warned
+that the replacement runs about two days behind StatCan's own published Daily,
+so on a 72-hour window it contributes one or two stories at the cold end; the
+`newest` badge says `3d ago` in amber, which is the honest answer rather than a
+hidden one.
+
 **On feeds that fail:** whether a feed works depends on your network and on
 which relay can reach it, so the only place the answer is true is your phone.
 That's what the health dots are for. If one goes red, drop it and try another
