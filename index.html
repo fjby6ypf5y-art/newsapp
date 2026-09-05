@@ -169,8 +169,13 @@ h1{margin:0;font-size:1.375rem;font-weight:800;letter-spacing:-.4px}
   transition:border-color .3s,background .3s}
 .item:active{background:var(--panel)}
 .item.unseen::before{content:"";position:absolute;left:8px;top:21px;width:5px;height:5px;border-radius:50%;background:var(--accent)}
+/* The whole-card link, stretched under everything so tapping anywhere except
+   the headline still opens it - z-index 0 puts it beneath the headline's own
+   anchor, which is all that keeps the two from fighting over the same tap. */
+.cardlink{position:absolute;inset:0;z-index:0}
 .ttl{margin:0 0 5px;font-size:1rem;font-weight:600;line-height:1.32;letter-spacing:-.2px;
   color:var(--text)}
+.ttl a{color:inherit;text-decoration:none;position:relative;z-index:1}
 .item:not(.unseen) .ttl{color:var(--dim)}
 .meta{display:flex;gap:7px;align-items:center;font-size:0.75rem;color:var(--faint);flex-wrap:wrap}
 .clock{font-variant-numeric:tabular-nums;color:var(--dim)}
@@ -2435,29 +2440,40 @@ function fillList(box, cat, cap) {
 
 function renderItem(i, list) {
   {
-    const a = el("a", "item");
+    // Ordinarily the whole card is one link, and it still visually is - but
+    // Hacker News carries the article separately from the discussion (see
+    // parseXmlFeed), and the headline is the one part of the card that
+    // should open the article while everything else opens the discussion,
+    // same as every other feed's card. Two real anchors do that: a "cardlink"
+    // stretched under the whole card (position:relative + absolute inset, in
+    // the CSS), and the headline as its own anchor sitting above it. A click
+    // intercept on the headline could fake the click behaviour, but not a
+    // hover or a long-press preview - those read the actual href, which is
+    // why this is two anchors and not one anchor plus a JS trick. For every
+    // other feed titleLink is absent, so both anchors carry the same href
+    // and the card behaves exactly as it always has.
+    const a = el("div", "item");
     const href = safeLink(i.link);
-    a.href = href || "#";
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    // A story whose link did not survive safeLink opens nothing at all.
-    if (!href) { a.removeAttribute("target"); a.style.pointerEvents = "none"; }
+    const titleHref = safeLink(i.titleLink) || href;
     if (!seen.has(i.id)) a.classList.add("unseen");
     a.style.setProperty("--heat", heat(i.ts));
 
-    const h = el("h2", "ttl"); h.textContent = i.title; a.appendChild(h);
-    // Hacker News carries the article separately from the discussion (see
-    // parseXmlFeed): the row's own link opens the discussion, same as every
-    // other feed's row, but the headline itself is the one place that should
-    // still open the article. preventDefault stops the row's own navigation
-    // for this one click; the row's click listener below still runs (it's
-    // still the same click, still bubbling), so the story is marked read
-    // either way.
-    const titleHref = i.titleLink ? safeLink(i.titleLink) : "";
-    if (titleHref) h.addEventListener("click", e => {
-      e.preventDefault();
-      window.open(titleHref, "_blank", "noopener,noreferrer");
-    });
+    const bg = el("a", "cardlink");
+    bg.href = href || "#";
+    bg.target = "_blank";
+    bg.rel = "noopener noreferrer";
+    bg.setAttribute("aria-hidden", "true");   // the headline link already names the story
+    bg.tabIndex = -1;
+    // A story whose link did not survive safeLink opens nothing at all.
+    if (!href) { bg.removeAttribute("target"); bg.style.pointerEvents = "none"; }
+    a.appendChild(bg);
+
+    const h = el("h2", "ttl");
+    const t = el("a"); t.textContent = i.title; t.href = titleHref || "#";
+    t.target = "_blank"; t.rel = "noopener noreferrer";
+    if (!titleHref) t.removeAttribute("target");
+    h.appendChild(t);
+    a.appendChild(h);
 
     const m = el("div", "meta");
     const s = el("span", "src"); s.textContent = i.source; m.appendChild(s);
@@ -2471,6 +2487,8 @@ function renderItem(i, list) {
 
     if (i.snip) { const p = el("p", "snip"); p.textContent = i.snip; a.appendChild(p); }
 
+    // Bubbles from either anchor - the card is read the moment either one is
+    // tapped, not only the one that happened to be under the finger.
     a.addEventListener("click", () => {
       seen.add(i.id);
       store(KEY + ".seen", JSON.stringify([...seen].slice(-1200)));
@@ -3703,7 +3721,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-09-05.94";
+const BUILD = "2026-09-05.95";
 // Full stamp stays in Settings (the only place it was ever findable before);
 // this is just enough to tell two builds apart at a glance without opening
 // a sheet - the trailing counter, not the date, since the date rarely

@@ -480,13 +480,24 @@ them. `parseXmlFeed` reads both for this one feed (checked by feed URL, not
 applied to any other feed's `<comments>` — a blog's comments page isn't more
 useful than its post) and keeps the article on a separate `titleLink` field.
 The row itself opens `<comments>`, same as tapping anywhere on any other
-feed's row opens its one link; the headline is the one part of the card
-`renderItem` gives a click handler of its own, `preventDefault`-ing the
-row's navigation and opening `titleLink` instead. No nested `<a>` — the row
-stays one real anchor, so long-press and "open in new tab" still work on it
-as they do everywhere else — the headline is just a `<h2>` with its own
-listener sitting inside it. Same story either way, no third party involved,
-so nothing here depends on hnrss.org staying up.
+feed's row opens its one link; the headline opens `titleLink`.
+
+That split is two real anchors, not a click intercept on the headline — the
+first version was exactly that (a `preventDefault` inside a click handler on
+the `<h2>`, since a real `<a>` cannot nest inside the row's own `<a>`), and it
+faked the click convincingly but nothing else: hovering the headline with a
+mouse, or a long-press preview on the phone, still read the row's own href,
+because there was no second href to read. Fixed by making `.item` a plain
+`<div>` instead of the anchor itself, with two real anchors inside it: a
+`.cardlink` stretched under the whole card (`position:absolute;inset:0` over
+the div's `position:relative`, at `z-index:0`) carrying the row's link, and
+the headline as its own anchor at `z-index:1` sitting above it wherever the
+two overlap. `aria-hidden` and `tabindex="-1"` keep the stretched link out of
+the accessible name and tab order — the headline's real anchor is the one a
+screen reader or the keyboard reaches, same as it would with an ordinary
+single-link card. For every other feed `titleLink` is absent, so both
+anchors get the same href and the card is exactly as it always was — no
+special case at render time, just an optional field.
 
 The two migrations, 20 and then 21, exist rather than one feed URL edit
 because 20 had already reached real devices before hnrss.org's unreliability

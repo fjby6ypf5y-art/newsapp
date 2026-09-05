@@ -1,7 +1,7 @@
 /* Caches the app shell so the app opens instantly and works with no signal.
    Feed responses are never cached here - they go through localStorage instead,
    so stale headlines can't be served as if they were fresh. */
-const SHELL = "news-shell-v94";
+const SHELL = "news-shell-v95";
 const FILES = [
   "./",
   "./index.html",

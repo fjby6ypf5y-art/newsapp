@@ -59,19 +59,29 @@ say('HN titleLink -> the article', hn && hn.titleLink, 'https://elsewhere.test/a
 say('Blog link unaffected', bl && bl.link, 'https://blog.test/post');
 say('Blog has no titleLink', bl && bl.titleLink, undefined);
 
-await page.waitForSelector('a.item');
+await page.waitForSelector('.item');
 
-console.log('\n=== on screen: the row opens the discussion, the headline opens the article ===');
-const rows = await page.locator('a.item').all();
+console.log('\n=== on screen: two real anchors, not a click trick ===');
+// A click intercept can fake the click, but not what a hover or a long-press
+// preview reads - only a real href on each anchor gets those right too. So
+// this checks the actual href attributes, not just what clicking does.
+const rows = await page.locator('.item').all();
 let hnRow = null;
-for (const r of rows) { if ((await r.getAttribute('href')) === 'https://news.ycombinator.com/item?id=1') hnRow = r; }
+for (const r of rows) { if ((await r.locator('.cardlink').getAttribute('href')) === 'https://news.ycombinator.com/item?id=1') hnRow = r; }
 if (!hnRow) console.log('  *** Hacker News row not found on screen');
 else {
-  console.log('  row href                                  '+await hnRow.getAttribute('href'));
+  say('cardlink href (covers the row)', await hnRow.locator('.cardlink').getAttribute('href'),
+    'https://news.ycombinator.com/item?id=1');
+  say('headline\'s own href', await hnRow.locator('.ttl a').getAttribute('href'),
+    'https://elsewhere.test/article');
 
+  // .meta itself has no anchor of its own - a real tap there hits the
+  // cardlink stretched underneath it, which is exactly the point, but
+  // Playwright's actionability check refuses to click a covered element
+  // even when the cover is the intended target, hence force:true here.
   const [rowPopup] = await Promise.all([
     ctx.waitForEvent('page', { timeout: 3000 }).catch(() => null),
-    hnRow.locator('.meta').click(),
+    hnRow.locator('.meta').click({ force: true }),
   ]);
   console.log('  tap on the meta line opened               '+(rowPopup ? rowPopup.url() : '(nothing)')
     + (rowPopup && rowPopup.url() === 'https://news.ycombinator.com/item?id=1' ? '  ok' : '  *** expected the discussion'));
@@ -79,12 +89,18 @@ else {
 
   const [titlePopup] = await Promise.all([
     ctx.waitForEvent('page', { timeout: 3000 }).catch(() => null),
-    hnRow.locator('.ttl').click(),
+    hnRow.locator('.ttl a').click(),
   ]);
   console.log('  tap on the headline opened                '+(titlePopup ? titlePopup.url() : '(nothing)')
     + (titlePopup && titlePopup.url() === 'https://elsewhere.test/article' ? '  ok' : '  *** expected the article'));
   if (titlePopup) await titlePopup.close();
 }
+
+console.log('\n=== an ordinary feed still behaves as one link ===');
+let blRow = null;
+for (const r of rows) { if ((await r.locator('.cardlink').getAttribute('href')) === 'https://blog.test/post') blRow = r; }
+if (!blRow) console.log('  *** Blog row not found on screen');
+else say('headline href same as the row\'s', await blRow.locator('.ttl a').getAttribute('href'), 'https://blog.test/post');
 
 console.log('\n'+(errs.length?'ERRORS '+errs.join(';'):'no JS errors'));
 await b.close();srv.close();
