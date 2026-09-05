@@ -113,13 +113,13 @@ h1{margin:0;font-size:1.375rem;font-weight:800;letter-spacing:-.4px}
    box and merely invisible, so a chip is exactly as wide off as on. Anything
    that changes a chip's width re-wraps the row, which on a phone means the
    next tap lands on a source you did not choose. */
-/* Same convention as "Add all"/"Remove all" in the Feeds library: a small
-   uppercase text button, not a pill like the switches below it, so it never
-   reads as one more source to toggle. */
+/* An eye / eye-slash toggle for every source in the category at once. A text
+   link here ("Hide all") read fine but was a poor target on a phone - all
+   type, no padding. Reused .iconbtn instead: same 36px tap target as the
+   header's icon row, rather than inventing a smaller one just for this spot. */
 .srcs-head{display:flex;align-items:center;justify-content:space-between;margin-top:10px}
 .srcs-head span{font-size:0.6875rem;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--faint)}
-.srcs-head button{background:transparent;border:0;color:var(--dim);font-size:0.6875rem;
-  font-weight:700;letter-spacing:.6px;text-transform:uppercase;padding:0}
+#srcs-all{width:30px;height:30px;border-radius:8px}
 .srcs{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .srcs button{padding:4px 10px;border-radius:999px;border:1px solid var(--line);
   background:transparent;color:var(--faint);font-size:0.75rem;font-weight:600;text-align:left}
@@ -325,7 +325,17 @@ body.busy .chips{filter:saturate(.3)}
              autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Keyword">
       <button class="btn" type="submit">Filter</button>
     </form>
-    <div class="srcs-head"><span>Sources</span><button type="button" id="srcs-all"></button></div>
+    <div class="srcs-head"><span>Sources</span>
+      <button type="button" id="srcs-all" class="iconbtn" aria-label="Hide all">
+        <svg id="srcs-all-eye" viewBox="0 0 16 16" aria-hidden="true">
+          <path fill-rule="evenodd" d="M8 3C3.8 3 1 8 1 8s2.8 5 7 5 7-5 7-5-2.8-5-7-5zm0 8a3 3 0 110-6 3 3 0 010 6z"/>
+        </svg>
+        <svg id="srcs-all-eyeoff" viewBox="0 0 16 16" aria-hidden="true" hidden>
+          <path fill-rule="evenodd" d="M8 3C3.8 3 1 8 1 8s2.8 5 7 5 7-5 7-5-2.8-5-7-5zm0 8a3 3 0 110-6 3 3 0 010 6z"/>
+          <path d="M1.4 1.4l13.2 13.2-1 1L.4 2.4z"/>
+        </svg>
+      </button>
+    </div>
     <div class="srcs" id="srcs"></div>
   </div>
   <div class="legend" aria-hidden="true"><span>Now</span><span class="grad"></span><span>24h+</span></div>
@@ -2298,7 +2308,9 @@ function renderFilters() {
   // at a time" possible without switching each one off by hand first.
   const allBtn = $("#srcs-all");
   const allOff = srcs.length > 0 && srcs.every(src => off.has(src.name));
-  allBtn.textContent = allOff ? "Show all" : "Hide all";
+  allBtn.setAttribute("aria-label", allOff ? "Show all" : "Hide all");
+  $("#srcs-all-eye").hidden = allOff;
+  $("#srcs-all-eyeoff").hidden = !allOff;
   allBtn.onclick = () => toggleSource(srcs.flatMap(src => src.urls), !allOff);
 }
 
@@ -3744,7 +3756,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-09-05.97";
+const BUILD = "2026-09-05.98";
 // Full stamp stays in Settings (the only place it was ever findable before);
 // this is just enough to tell two builds apart at a glance without opening
 // a sheet - the trailing counter, not the date, since the date rarely

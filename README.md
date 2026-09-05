@@ -546,17 +546,30 @@ off was the slow way — tap every switch — and the only quick way back was
 the category's already empty. There was no quick way to go the other
 direction: hide everything first, then add sources back in one at a time,
 which is a real way to use the switches (start from nothing, decide what's
-worth reading) and not just a recovery path. `#srcs-all` is a `Hide all` /
-`Show all` button, always present above the source switches - same
-uppercase-text-button convention as "Add all"/"Remove all" in the Feeds
-library - that does the opposite of whatever the category is showing right
-now: `Hide all` when anything is on, `Show all` once everything is off.
-Implemented as a call to the same `toggleSource` every individual switch
-uses, just handed every URL in the category at once, so it needed no new
-state of its own. Left `clearFilters`/"Clear filters" in place rather than
-replacing it: that one also clears an active keyword, and is reachable
-from the empty state even when the bar itself is folded shut - a case
-`#srcs-all` doesn't cover, since it lives inside the bar.
+worth reading) and not just a recovery path. `#srcs-all` is a button, always
+present above the source switches, that does the opposite of whatever the
+category is showing right now: hides everything when anything is on, shows
+everything once it's all off. Implemented as a call to the same
+`toggleSource` every individual switch uses, just handed every URL in the
+category at once, so it needed no new state of its own. Left
+`clearFilters`/"Clear filters" in place rather than replacing it: that one
+also clears an active keyword, and is reachable from the empty state even
+when the bar itself is folded shut - a case `#srcs-all` doesn't cover, since
+it lives inside the bar.
+
+First version was a bare uppercase text button, matching "Add all"/"Remove
+all" in the Feeds library - fine on desktop, a poor target on a phone: all
+type, no padding, nothing near a comfortable tap size. Replaced with an
+eye / eye-slash icon on `.iconbtn`'s usual 36px square (shrunk slightly to
+30px to fit the header row it sits in), the same tap-target class the
+header's own icon row uses, rather than inventing a smaller one just for
+this spot. Both icons are static markup, one `<svg>` per state, toggled with
+the `hidden` attribute instead of rewriting the button's content - this
+codebase never assigns HTML strings into a live element (feed content is
+untrusted; see Security below), so even a hand-authored, constant icon
+follows the same rule as everything else. The accessible name is the same
+verb it always was ("Hide all"/"Show all"), kept as the button's
+`aria-label` since the icon alone says nothing to a screen reader.
 
 **On a feed that answers but says nothing.** A health dot only reports on the
 fetch: a feed that hands back the same stories it handed back yesterday passes
