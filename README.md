@@ -514,6 +514,20 @@ last. Migration 21 swaps by exact URL instead (same pattern as migration 19's
 StatCan fix below), which only ever runs once, at 21, regardless of when the
 feed became hnrss.org.
 
+hnrss.org's `/active` earned its removal as the *default*, not a ban: the HN
+front page and HN's Active Threads are genuinely different lists (ranked by
+votes and age vs. by live discussion), and a reader who wants the second one
+badly enough to accept an occasionally-flaky third party should get to ask
+for it. `HN Active Threads` is back in `CATALOG` as its own entry, opt-in
+from Feeds → Add from library, same URL as before
+(`hnrss.org/active?link=comments`) and same `<comments>`-reading treatment as
+the official feed - the check in `parseXmlFeed` now matches `hnrss.org` as
+well as `news.ycombinator.com`, since hnrss.org mirrors Hacker News rather
+than being its own publication and its `<comments>` is the same HN
+discussion. Not in `DEFAULTS`, the same way paywalled feeds aren't: nobody
+gets it without choosing it, and the health dot says on any given day
+whether hnrss.org is having a good one.
+
 **A closed filter bar that reopened itself.** The filter bar unfolds itself
 whenever a filter is on for the category you're looking at — the point being
 that a category that looks short is never short for an invisible reason (see

@@ -20,6 +20,14 @@ const HN = `<?xml version="1.0"?><rss version="2.0"><channel><title>Hacker News<
   <comments>https://news.ycombinator.com/item?id=1</comments><pubDate>${NOW}</pubDate></item>
   </channel></rss>`;
 
+// hnrss.org mirrors Hacker News rather than being its own publication, so its
+// <comments> gets the same treatment as the official feed's - a separate,
+// opt-in "HN Active Threads" catalogue entry, not a replacement for it.
+const HNRSS = `<?xml version="1.0"?><rss version="2.0"><channel><title>HN Active Threads</title>
+  <item><title>A Busy Thread</title><link>https://elsewhere.test/thread-article</link>
+  <comments>https://news.ycombinator.com/item?id=2</comments><pubDate>${NOW}</pubDate></item>
+  </channel></rss>`;
+
 // An ordinary feed's <comments> tag is its own comment thread, not a second
 // link worth surfacing - the row and the headline stay the one link.
 const BLOG = `<?xml version="1.0"?><rss version="2.0"><channel><title>Blog</title>
@@ -35,27 +43,34 @@ await ctx.route('**/*',route=>{const u=route.request().url();
    return route.fulfill({status:200,contentType:'application/xml',body:HN});
  if(u.startsWith('https://blog.test/feed'))
    return route.fulfill({status:200,contentType:'application/xml',body:BLOG});
- // The two destinations a tap can open - fulfilled so the popup actually
- // lands (and its final url can be checked) instead of erroring out.
- if(u==='https://news.ycombinator.com/item?id=1' || u==='https://elsewhere.test/article')
+ if(u.startsWith('https://hnrss.org/active'))
+   return route.fulfill({status:200,contentType:'application/xml',body:HNRSS});
+ // The destinations a tap can open - fulfilled so the popup actually lands
+ // (and its final url can be checked) instead of erroring out.
+ if(['https://news.ycombinator.com/item?id=1','https://news.ycombinator.com/item?id=2',
+     'https://elsewhere.test/article','https://elsewhere.test/thread-article'].includes(u))
    return route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><body>ok</body>'});
  return route.abort('failed');});
 const errs=[];page.on('pageerror',e=>errs.push(e.message));
 await page.addInitScript(()=>localStorage.setItem('breaking.v1',JSON.stringify({migrated:21,idleResetMin:0,
   proxies:[],
   feeds:[{id:'hn',cat:'Tech',name:'Hacker News',url:'https://news.ycombinator.com/rss'},
-          {id:'bl',cat:'Tech',name:'Blog',url:'https://blog.test/feed'}]})));
+          {id:'bl',cat:'Tech',name:'Blog',url:'https://blog.test/feed'},
+          {id:'hr',cat:'Tech',name:'HN Active Threads',url:'https://hnrss.org/active?link=comments'}]})));
 await page.goto('http://localhost:8093/index.html');await page.waitForTimeout(2500);
 
 const items=await page.evaluate(()=>JSON.parse(localStorage.getItem('breaking.v1.items')));
 const hn=items.find(i=>i.source==='Hacker News');
 const bl=items.find(i=>i.source==='Blog');
+const hr=items.find(i=>i.source==='HN Active Threads');
 const say=(label,got,want)=>console.log('  '+label.padEnd(42)+JSON.stringify(got)
   +(got===want?'  ok':'  *** expected '+JSON.stringify(want)));
 
-console.log('=== parseXmlFeed: HN gets a titleLink, an ordinary feed does not ===');
+console.log('=== parseXmlFeed: HN and hnrss.org both get a titleLink, an ordinary feed does not ===');
 say('HN row link -> the discussion', hn && hn.link, 'https://news.ycombinator.com/item?id=1');
 say('HN titleLink -> the article', hn && hn.titleLink, 'https://elsewhere.test/article');
+say('hnrss row link -> the discussion', hr && hr.link, 'https://news.ycombinator.com/item?id=2');
+say('hnrss titleLink -> the article', hr && hr.titleLink, 'https://elsewhere.test/thread-article');
 say('Blog link unaffected', bl && bl.link, 'https://blog.test/post');
 say('Blog has no titleLink', bl && bl.titleLink, undefined);
 

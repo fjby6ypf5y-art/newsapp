@@ -563,6 +563,15 @@ const CATALOG = [
   ["Tech",  "Ars Technica",       "https://feeds.arstechnica.com/arstechnica/index"],
   ["Tech",  "The Verge",          "https://www.theverge.com/rss/index.xml"],
   ["Tech",  "Hacker News",        "https://news.ycombinator.com/rss"],
+  // A separate catalogue entry, not a replacement: the official feed is the
+  // HN front page (ranked by votes and age), which is a different, and
+  // sometimes duller, list than the busiest live discussions. hnrss.org's
+  // /active mirrors HN's own Active Threads page instead - unreliable enough
+  // (see the SWAPPED comment below) that it isn't the default anymore, but
+  // worth having on hand as a second, opt-in option rather than gone
+  // entirely. Health dots and Test all feeds are the only way to know if
+  // it's having a good day.
+  ["Tech",  "HN Active Threads",   "https://hnrss.org/active?link=comments"],
   ["Tech",  "TechCrunch",         "https://techcrunch.com/feed/"],
   ["Tech",  "Engadget",           "https://www.engadget.com/rss.xml"],
   ["Tech",  "The Register",       "https://www.theregister.com/headlines.atom"],
@@ -1671,10 +1680,13 @@ function parseXmlFeed(xml, source, feedUrl) {
     // is what opens the discussion, same as every other feed's row does for
     // its one link. So the row's own link becomes <comments> here, and the
     // article goes on titleLink for renderItem to give the headline alone.
-    // Only for this one feed: a blog's <comments> tag points at its own
-    // comment thread, which is not a second link worth surfacing.
+    // hnrss.org mirrors Hacker News rather than being its own publication -
+    // its <comments> is the same HN discussion, not a third party's comment
+    // thread - so it gets the same treatment as the official feed. Nothing
+    // else does: a blog's <comments> tag points at its own comment thread,
+    // which is not a second link worth surfacing.
     let titleLink = "";
-    if (/^https?:\/\/news\.ycombinator\.com\//i.test(feedUrl)) {
+    if (/^https?:\/\/(news\.ycombinator\.com|hnrss\.org)\//i.test(feedUrl)) {
       const comments = txt(n, "comments");
       if (comments) { titleLink = link; link = comments; }
     }
@@ -3761,7 +3773,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-09-05.99";
+const BUILD = "2026-09-05.100";
 // Full stamp stays in Settings (the only place it was ever findable before);
 // this is just enough to tell two builds apart at a glance without opening
 // a sheet - the trailing counter, not the date, since the date rarely
