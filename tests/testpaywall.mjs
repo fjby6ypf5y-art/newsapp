@@ -118,7 +118,7 @@ for (const [label, seed] of [
   const c=await pg.evaluate(()=>JSON.parse(localStorage.getItem('breaking.v1')));
   const urls=c.feeds.filter(f=>/statcan/.test(f.url)).map(f=>f.url);
   console.log('  '+label.padEnd(20)+'migrated '+c.migrated+'  ->  '+JSON.stringify(urls));
-  if(c.migrated!==19) console.log('*** migration 19 did not run');
+  if(c.migrated<19) console.log('*** migration 19 did not run');
   if(urls.includes(SC_OLD)) console.log('*** the dead StatCan URL survived');
   if(urls.length!==1) console.log('*** StatCan ended up with '+urls.length+' entries, expected 1');
   await cx.close();

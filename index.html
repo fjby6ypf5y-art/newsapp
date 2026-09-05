@@ -540,7 +540,7 @@ const CATALOG = [
 
   ["Tech",  "Ars Technica",       "https://feeds.arstechnica.com/arstechnica/index"],
   ["Tech",  "The Verge",          "https://www.theverge.com/rss/index.xml"],
-  ["Tech",  "Hacker News",        "https://news.ycombinator.com/rss"],
+  ["Tech",  "Hacker News",        "https://hnrss.org/active?link=comments"],
   ["Tech",  "TechCrunch",         "https://techcrunch.com/feed/"],
   ["Tech",  "Engadget",           "https://www.engadget.com/rss.xml"],
   ["Tech",  "The Register",       "https://www.theregister.com/headlines.atom"],
@@ -638,7 +638,7 @@ const DEFAULTS = {
     { cat:"Entertainment",name:"CBC Arts",url:"https://www.cbc.ca/webfeed/rss/rss-arts" },
     { cat:"Entertainment",name:"BBC Entertainment",url:"https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml" },
     { cat:"Tech",  name:"Ars Technica",url:"https://feeds.arstechnica.com/arstechnica/index" },
-    { cat:"Tech",  name:"Hacker News", url:"https://news.ycombinator.com/rss" },
+    { cat:"Tech",  name:"Hacker News", url:"https://hnrss.org/active?link=comments" },
     { cat:"Science",name:"Phys.org",   url:"https://phys.org/rss-feed/" }
   ],
   proxies: [
@@ -706,7 +706,15 @@ const SWAPPED = {
   "https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml":
     { cat:"Business", name:"WSJ Business", url:"https://feeds.content.dowjones.io/public/rss/WSJcomUSBusiness", paywall:true },
   "https://feeds.a.dj.com/rss/RSSWSJD.xml":
-    { cat:"Tech", name:"WSJ Tech", url:"https://feeds.content.dowjones.io/public/rss/RSSWSJD", paywall:true }
+    { cat:"Tech", name:"WSJ Tech", url:"https://feeds.content.dowjones.io/public/rss/RSSWSJD", paywall:true },
+  // news.ycombinator.com/rss is the HN front page, and every item link goes
+  // straight to the article - not the discussion, which is the entire reason
+  // to read Hacker News. hnrss.org's /active feed mirrors the Active Threads
+  // page instead (busiest discussions, not just newest front-page ranking),
+  // and ?link=comments points the item link at the HN comments page so a tap
+  // opens the discussion; the article is one tap further in from there.
+  "https://news.ycombinator.com/rss":
+    { cat:"Tech", name:"Hacker News", url:"https://hnrss.org/active?link=comments" }
 };
 
 const DEAD_FEEDS = [
@@ -956,6 +964,20 @@ function migrate(c) {
       : have.has(STATCAN_NEW) ? []                 // already on the new one
       : [{ ...f, url: STATCAN_NEW }]);
     c.migrated = 19;
+  }
+
+  // Hacker News swapped from the front-page feed (article links only) to
+  // hnrss.org's Active Threads feed, linking each item at the HN discussion
+  // instead. Same swap logic as migration 9/15/16, for the entry added to
+  // SWAPPED since.
+  if (c.migrated < 20) {
+    const have = new Set(c.feeds.map(f => f.url));
+    c.feeds = c.feeds.flatMap(f => {
+      const swap = SWAPPED[f.url];
+      if (!swap) return [f];
+      return have.has(swap.url) ? [] : [{ ...swap }];
+    });
+    c.migrated = 20;
   }
   return c;
 }
@@ -3609,7 +3631,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-09-05.90";
+const BUILD = "2026-09-05.91";
 // Full stamp stays in Settings (the only place it was ever findable before);
 // this is just enough to tell two builds apart at a glance without opening
 // a sheet - the trailing counter, not the date, since the date rarely

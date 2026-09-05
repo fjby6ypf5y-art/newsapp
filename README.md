@@ -463,6 +463,17 @@ no replacement anywhere. Unlike WSJ, there was nowhere to move it to, so it
 came out of `CATALOG` entirely and its URL went into `DEAD_FEEDS` behind
 migration 18, on the chance it had already been added.
 
+**Hacker News linked to the wrong thing.** `news.ycombinator.com/rss` is the
+HN front page, but every item's link goes straight to whatever the story
+points at — the article, a GitHub repo, a PDF — never to the HN discussion,
+which on Hacker News is usually the point of the story. The feed is now
+`hnrss.org/active?link=comments`: `/active` mirrors HN's Active Threads page
+(the busiest discussions, not just the newest front-page ranking) instead of
+the front page, and `link=comments` points each item's link at the HN
+comments page rather than the outbound one. Went into `SWAPPED` and behind
+migration 20, same as any other feed replaced for a better fit rather than
+found dead.
+
 **On a feed that answers but says nothing.** A health dot only reports on the
 fetch: a feed that hands back the same stories it handed back yesterday passes
 every test there is. Each feed therefore also carries the age of the newest
