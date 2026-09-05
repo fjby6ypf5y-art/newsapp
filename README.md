@@ -466,17 +466,35 @@ migration 18, on the chance it had already been added.
 **Hacker News linked to the wrong thing.** `news.ycombinator.com/rss` is the
 HN front page, but every item's link goes straight to whatever the story
 points at — the article, a GitHub repo, a PDF — never to the HN discussion,
-which on Hacker News is usually the point of the story. The feed is now
-`hnrss.org/active?link=comments`: `/active` mirrors HN's Active Threads page
-(the busiest discussions, not just the newest front-page ranking) instead of
-the front page, and `link=comments` points each item's link at the HN
-comments page rather than the outbound one. Went into `SWAPPED` and behind
-migration 20, same as any other feed replaced for a better fit rather than
-found dead. hnrss.org is a small third-party service, not HN itself, and it
-answers slowly and occasionally 502s under load — the health dot and route
-badge on the Feeds page (and the Log sheet's attempt-by-attempt breakdown)
-say whether a given refresh actually reached it, direct or through a relay,
-rather than assuming the swap fixed it.
+which on Hacker News is usually the point of the story. First fix (migration
+20) swapped the feed for `hnrss.org/active?link=comments` — HN's Active
+Threads page from a third party that also rewrites each item's link to the
+comments page. Confirmed dead-end on a real device within a day: every
+route in one refresh failed — direct, and all three configured relays, one
+of them a straight 502 — because hnrss.org is a small, single-maintainer
+service that answers slowly and buckles under load. Reversed by migration 21
+back to the official feed, and for good reason to stay there: the official
+RSS already carries the discussion link, in the standard RSS `<comments>`
+element, alongside `<link>` for the article. `parseXmlFeed` now reads
+`<comments>` instead of `<link>` for this one feed (checked by feed URL, not
+applied to any other feed's `<comments>` — a blog's comments page isn't more
+useful than its post). Same outcome as the hnrss.org swap, no third party
+involved, so nothing here depends on hnrss.org staying up.
+
+The two migrations, 20 and then 21, exist rather than one feed URL edit
+because 20 had already reached real devices before hnrss.org's unreliability
+turned up — the same "already shipped, can't undo it by editing the
+library" reasoning as every other `SWAPPED` entry. The reversal itself is
+*not* in `SWAPPED`, though: migrations 9, 15 and 16 replay whatever is
+currently in that map against every feed, not just the entries that existed
+when each was written, so a second `SWAPPED` entry mapping hnrss.org straight
+back to the official URL would have been picked up by those earlier
+migrations too — on a very old install running 9 through 21 in one pass, the
+two entries would trade the feed back and forth an even or odd number of
+times depending on migration history, landing on whichever happened to go
+last. Migration 21 swaps by exact URL instead (same pattern as migration 19's
+StatCan fix below), which only ever runs once, at 21, regardless of when the
+feed became hnrss.org.
 
 **A closed filter bar that reopened itself.** The filter bar unfolds itself
 whenever a filter is on for the category you're looking at — the point being

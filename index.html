@@ -540,7 +540,7 @@ const CATALOG = [
 
   ["Tech",  "Ars Technica",       "https://feeds.arstechnica.com/arstechnica/index"],
   ["Tech",  "The Verge",          "https://www.theverge.com/rss/index.xml"],
-  ["Tech",  "Hacker News",        "https://hnrss.org/active?link=comments"],
+  ["Tech",  "Hacker News",        "https://news.ycombinator.com/rss"],
   ["Tech",  "TechCrunch",         "https://techcrunch.com/feed/"],
   ["Tech",  "Engadget",           "https://www.engadget.com/rss.xml"],
   ["Tech",  "The Register",       "https://www.theregister.com/headlines.atom"],
@@ -638,7 +638,7 @@ const DEFAULTS = {
     { cat:"Entertainment",name:"CBC Arts",url:"https://www.cbc.ca/webfeed/rss/rss-arts" },
     { cat:"Entertainment",name:"BBC Entertainment",url:"https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml" },
     { cat:"Tech",  name:"Ars Technica",url:"https://feeds.arstechnica.com/arstechnica/index" },
-    { cat:"Tech",  name:"Hacker News", url:"https://hnrss.org/active?link=comments" },
+    { cat:"Tech",  name:"Hacker News", url:"https://news.ycombinator.com/rss" },
     { cat:"Science",name:"Phys.org",   url:"https://phys.org/rss-feed/" }
   ],
   proxies: [
@@ -709,13 +709,28 @@ const SWAPPED = {
     { cat:"Tech", name:"WSJ Tech", url:"https://feeds.content.dowjones.io/public/rss/RSSWSJD", paywall:true },
   // news.ycombinator.com/rss is the HN front page, and every item link goes
   // straight to the article - not the discussion, which is the entire reason
-  // to read Hacker News. hnrss.org's /active feed mirrors the Active Threads
-  // page instead (busiest discussions, not just newest front-page ranking),
-  // and ?link=comments points the item link at the HN comments page so a tap
-  // opens the discussion; the article is one tap further in from there.
+  // to read Hacker News. Migration 20 swapped it for hnrss.org's /active feed
+  // with ?link=comments, which does point at the discussion - but hnrss.org
+  // is a small third-party service that answers slowly and 502s under load
+  // (confirmed on a real device: every route - direct and three relays -
+  // failed on one refresh, one of them a straight 502). Migration 21 swaps it
+  // back to the official feed - handled separately below, not through this
+  // map, because a second entry here mapping hnrss.org back to this same URL
+  // would also be picked up by migrations 9/15/16 (they match anything in
+  // SWAPPED, not just what existed when each was written) and could bounce a
+  // very old install back and forth depending on migration order. The
+  // official feed now has parseXmlFeed read the standard RSS <comments>
+  // element (see there) to get the same discussion link, no hnrss.org
+  // involved.
   "https://news.ycombinator.com/rss":
     { cat:"Tech", name:"Hacker News", url:"https://hnrss.org/active?link=comments" }
 };
+
+// The one-migration-only reversal of the swap above. Kept out of SWAPPED
+// itself (see the comment there) and applied by exact URL, the same pattern
+// STATCAN_OLD/STATCAN_NEW use below for the same reason.
+const HNRSS_URL = "https://hnrss.org/active?link=comments";
+const HN_OFFICIAL = "https://news.ycombinator.com/rss";
 
 const DEAD_FEEDS = [
   // CTV retired this Bell Media endpoint; no working replacement found.
@@ -978,6 +993,22 @@ function migrate(c) {
       return have.has(swap.url) ? [] : [{ ...swap }];
     });
     c.migrated = 20;
+  }
+
+  // hnrss.org turned out to be too unreliable to depend on (see the SWAPPED
+  // comment above): confirmed on a real device failing direct and through
+  // every configured relay in the same refresh. Swap back to the official
+  // feed, which parseXmlFeed now reads the discussion link out of directly.
+  // By exact URL rather than through SWAPPED, so this can never be replayed
+  // by migration 9/15/16 for an old install passing through migration 20
+  // earlier in the same run (see the SWAPPED comment for why that would
+  // matter).
+  if (c.migrated < 21) {
+    const have = new Set(c.feeds.map(f => f.url));
+    c.feeds = c.feeds.flatMap(f => f.url !== HNRSS_URL ? [f]
+      : have.has(HN_OFFICIAL) ? []                  // already on the official feed
+      : [{ ...f, url: HN_OFFICIAL }]);
+    c.migrated = 21;
   }
   return c;
 }
@@ -1608,6 +1639,17 @@ function parseXmlFeed(xml, source, feedUrl) {
     if (!link) {
       const alt = [...n.getElementsByTagName("link")].find(l => l.getAttribute("href"));
       if (alt) link = alt.getAttribute("href");
+    }
+
+    // Hacker News's own RSS links every item at whatever the story points to -
+    // the article, a GitHub repo, a PDF - never at the discussion, which is
+    // the reason to read Hacker News in the first place. The standard RSS
+    // <comments> element carries the discussion URL there, so prefer it, but
+    // only for this one feed: a blog's <comments> tag points at its own
+    // comment thread, which is not more useful than the post it belongs to.
+    if (/^https?:\/\/news\.ycombinator\.com\//i.test(feedUrl)) {
+      const comments = txt(n, "comments");
+      if (comments) link = comments;
     }
 
     const title = (txt(n, "title") || "(untitled)").slice(0, 300);
@@ -3641,7 +3683,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-09-05.92";
+const BUILD = "2026-09-05.93";
 // Full stamp stays in Settings (the only place it was ever findable before);
 // this is just enough to tell two builds apart at a glance without opening
 // a sheet - the trailing counter, not the date, since the date rarely
