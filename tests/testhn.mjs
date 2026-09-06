@@ -56,7 +56,7 @@ await page.addInitScript(()=>localStorage.setItem('breaking.v1',JSON.stringify({
   proxies:[],
   feeds:[{id:'hn',cat:'Tech',name:'Hacker News',url:'https://news.ycombinator.com/rss'},
           {id:'bl',cat:'Tech',name:'Blog',url:'https://blog.test/feed'},
-          {id:'hr',cat:'Tech',name:'HN Active Threads',url:'https://hnrss.org/active?link=comments'}]})));
+          {id:'hr',cat:'Tech',name:'HN Active Threads',url:'https://hnrss.org/active'}]})));
 await page.goto('http://localhost:8093/index.html');await page.waitForTimeout(2500);
 
 const items=await page.evaluate(()=>JSON.parse(localStorage.getItem('breaking.v1.items')));

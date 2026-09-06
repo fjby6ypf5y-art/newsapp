@@ -571,7 +571,13 @@ const CATALOG = [
   // worth having on hand as a second, opt-in option rather than gone
   // entirely. Health dots and Test all feeds are the only way to know if
   // it's having a good day.
-  ["Tech",  "HN Active Threads",   "https://hnrss.org/active?link=comments"],
+  // No ?link=comments here, unlike the old default below: fetched directly
+  // and compared, that param doesn't just repoint <link> at the discussion -
+  // it makes <link> and <comments> identical, so the article is gone from
+  // the feed entirely and the headline would open the discussion too. The
+  // plain URL keeps <link> (article) and <comments> (discussion) distinct,
+  // which is what the split in parseXmlFeed actually needs both of.
+  ["Tech",  "HN Active Threads",   "https://hnrss.org/active"],
   ["Tech",  "TechCrunch",         "https://techcrunch.com/feed/"],
   ["Tech",  "Engadget",           "https://www.engadget.com/rss.xml"],
   ["Tech",  "The Register",       "https://www.theregister.com/headlines.atom"],
@@ -3773,7 +3779,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-09-05.100";
+const BUILD = "2026-09-06.101";
 // Full stamp stays in Settings (the only place it was ever findable before);
 // this is just enough to tell two builds apart at a glance without opening
 // a sheet - the trailing counter, not the date, since the date rarely

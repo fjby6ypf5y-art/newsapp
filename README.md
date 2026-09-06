@@ -519,14 +519,26 @@ front page and HN's Active Threads are genuinely different lists (ranked by
 votes and age vs. by live discussion), and a reader who wants the second one
 badly enough to accept an occasionally-flaky third party should get to ask
 for it. `HN Active Threads` is back in `CATALOG` as its own entry, opt-in
-from Feeds → Add from library, same URL as before
-(`hnrss.org/active?link=comments`) and same `<comments>`-reading treatment as
-the official feed - the check in `parseXmlFeed` now matches `hnrss.org` as
-well as `news.ycombinator.com`, since hnrss.org mirrors Hacker News rather
-than being its own publication and its `<comments>` is the same HN
-discussion. Not in `DEFAULTS`, the same way paywalled feeds aren't: nobody
-gets it without choosing it, and the health dot says on any given day
-whether hnrss.org is having a good one.
+from Feeds → Add from library, and same `<comments>`-reading treatment as
+the official feed - the check in `parseXmlFeed` matches `hnrss.org` as well
+as `news.ycombinator.com`, since hnrss.org mirrors Hacker News rather than
+being its own publication and its `<comments>` is the same HN discussion.
+Not in `DEFAULTS`, the same way paywalled feeds aren't: nobody gets it
+without choosing it, and the health dot says on any given day whether
+hnrss.org is having a good one.
+
+Not the same URL as the old default, though: `?link=comments` was fetched
+and compared, side by side with the plain URL, and it does not just repoint
+`<link>` at the discussion the way it's documented to - it makes `<link>`
+and `<comments>` identical, which erases the article from the feed
+entirely. With that param, `titleLink` (read from the original `<link>`)
+ends up the discussion URL too, so the headline would open the same place
+as the rest of the row - the whole point of the split, gone. The plain URL
+(`hnrss.org/active`, no query string) keeps them distinct exactly the way
+the official feed does, which is what the split actually needs. The old
+default in `SWAPPED`/`HNRSS_URL` above keeps its `?link=comments` suffix
+unchanged - that URL only matters for matching what a real device already
+has stored, from before this was known, not for how a fresh add behaves.
 
 **A closed filter bar that reopened itself.** The filter bar unfolds itself
 whenever a filter is on for the category you're looking at — the point being
