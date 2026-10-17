@@ -160,6 +160,14 @@ knows ASCII — it would never find `été`, and would let `expos` mute "exposé
 The source name isn't searched; switching a source off is how you mute a
 publisher.
 
+Every line is matched as a phrase, so quotes around one are dropped. Build 102
+kept them, and on the phone that was the whole list failing: quoting
+`"elizabeth holmes"` out of search-engine habit made the quote marks part of
+the phrase, which then matched only a headline that happened to quote her name.
+A list saved that way is cleaned the next time the app loads. A straight and a
+curly apostrophe also count as the same character, since iOS curls the one
+typed into the box and publishers use whichever their CMS does.
+
 A muted story is still fetched and still cached, so taking a word out brings
 its stories straight back, the same way a source switched back on does. It is
 left out of the status line's "N new" count, though: "3 new" with nothing new

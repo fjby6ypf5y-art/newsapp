@@ -410,7 +410,8 @@ body.busy .chips{filter:saturate(.3)}
             placeholder="One word or phrase per line" aria-label="Muted words"></textarea>
   <p class="hint" id="mute-msg"></p>
   <p class="hint">A story whose headline or summary contains any of these is
-  never shown, in any category. Whole words in any case: <code>ai</code> mutes
+  never shown, in any category. Each line is matched as a phrase, so there's no
+  need for quotes. Whole words in any case: <code>ai</code> mutes
   &ldquo;AI&rdquo; but not &ldquo;said&rdquo;. End one with <code>*</code> to
   match the start of a word: <code>crypto*</code> also mutes
   &ldquo;cryptocurrency&rdquo;. Take a word out and its stories come back.</p>
@@ -1084,11 +1085,17 @@ function normalise(c) {
 // would match nothing and look like the feature not working. Written back one
 // per line, so the box always shows how it was read. A declaration rather than
 // a const because load() needs it long before the filtering section runs.
+//
+// Quotes around a line are dropped. Every line is already matched as a phrase,
+// and quoting one out of search-engine habit made the quote marks part of it -
+// "elizabeth holmes" then matched only a headline that quoted her name, which
+// on the phone was none of them. A list saved before this is cleaned on load.
 const MAX_MUTED = 100;
 function parseMuted(raw) {
   const seen = new Set(), out = [];
   String(raw || "").split(/[\n,]/).forEach(t => {
-    const w = t.trim().replace(/\s+/g, " ").slice(0, 60).trim();
+    const w = t.trim().replace(/^["'‘’“”]+|["'‘’“”]+$/g, "")
+      .trim().replace(/\s+/g, " ").slice(0, 60).trim();
     // A bare "*" is a prefix of every word, and would mute everything.
     if (!w.replace(/\*+$/, "").trim() || seen.has(w.toLowerCase())) return;
     seen.add(w.toLowerCase());
@@ -2297,6 +2304,10 @@ const matchesWords = (i, words) => {
 // "expos" mute "exposé". Headline and snippet only; the source switches
 // already cover muting a publisher.
 //
+// A straight and a curly apostrophe are the same character here. iOS curls
+// the one typed into the box, and publishers use whichever their CMS does, so
+// "don't" has to find "Don’t" and the other way about.
+//
 // One expression for the whole list, rebuilt only when the list changes: it
 // runs over every story each time a panel is built.
 const WORDCH = "\\p{L}\\p{N}_";
@@ -2307,7 +2318,8 @@ function mutedRe() {
   muteKey = key;
   const alts = cfg.muted.map(w => {
     const core = w.replace(/\*+$/, "").trim();
-    const body = core.split(" ").map(s => s.replace(/[.*+?^${}()|[\]\\\/]/g, "\\$&")).join("\\s+");
+    const body = core.split(" ").map(s => s.replace(/[.*+?^${}()|[\]\\\/]/g, "\\$&")
+      .replace(/['‘’]/g, "['‘’]")).join("\\s+");
     return core === w ? body + "(?![" + WORDCH + "])" : body;
   });
   muteRe = alts.length
@@ -3913,7 +3925,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-10-17.102";
+const BUILD = "2026-10-17.103";
 // Full stamp stays in Settings (the only place it was ever findable before);
 // this is just enough to tell two builds apart at a glance without opening
 // a sheet - the trailing counter, not the date, since the date rarely

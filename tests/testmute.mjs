@@ -119,9 +119,24 @@ await page.evaluate(()=>[...document.querySelectorAll('.chip')].find(c=>c.textCo
 await page.waitForTimeout(500);
 want('World back', (await shown()).length, 10);
 
-console.log('\n--- a JSON import with the sheet open is not overwritten on the way out ---');
+console.log('\n--- quotes around a phrase are dropped, and either apostrophe matches ---');
+// What was typed on the phone: phrases in quotes, straight and curly, which
+// used to become part of the phrase and match nothing. The last one is typed
+// with a straight apostrophe against a headline that curls it.
 await page.click('#open-settings'); await page.waitForTimeout(300);
-await page.evaluate(()=>{const c=JSON.parse(localStorage.getItem('breaking.v1'));c.muted=['phone'];
+await page.fill('#mute','"minister said"\n“Taiwan strait”\nfestival d\'été');
+await closeSettings(); await page.waitForTimeout(400);
+want('stored without quotes', (await cfg()).muted, ['minister said','Taiwan strait','festival d\'été']);
+want('all three muted', (await shown()).filter(t=>/Minister|Taiwan|Festival/.test(t)), []);
+await page.click('#open-settings'); await page.waitForTimeout(300);
+await page.fill('#mute','');
+await closeSettings(); await page.waitForTimeout(400);
+
+console.log('\n--- a JSON import with the sheet open is not overwritten on the way out ---');
+// Quoted, the way a list saved by build 102 can be: the same normalise that
+// runs on every launch has to clean it.
+await page.click('#open-settings'); await page.waitForTimeout(300);
+await page.evaluate(()=>{const c=JSON.parse(localStorage.getItem('breaking.v1'));c.muted=['"phone"'];
   document.querySelector('#io').value=JSON.stringify(c);document.querySelector('#io-import').click();});
 await page.waitForTimeout(300);
 await closeSettings(); await page.waitForTimeout(300);
