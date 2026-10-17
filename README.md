@@ -143,7 +143,32 @@ return (or **Filter**); emptying the box clears it on the spot, since the clear
 button inside a search field never submits anything and a filter left on with
 nothing on screen to explain it is just missing news.
 
-Both filters are applied in the one place every panel's rows come from, so the
+**Muted words** are the third thing, and they live in Settings rather than in
+the bar: a list, one word or phrase per line (commas split too), and a story
+whose headline or summary contains any of them is never shown, in any
+category. They are a standing choice like the source switches, but for every
+category at once, which is why they don't light the funnel or unfold the bar —
+a list that is on all the time would leave the funnel lit everywhere and its
+signal meaning nothing. Settings says how many stories the list is hiding right
+now, and a category emptied by it says so in place of "Nothing in … yet".
+
+Matching is by whole word in any case, because substrings are useless here:
+muting `ai` by substring takes out "said", "Taiwan" and "paid". A trailing `*`
+matches the start of a word instead, so `crypto*` catches "cryptocurrency".
+Word edges are letters and digits in any script, not the regex `\b`, which only
+knows ASCII — it would never find `été`, and would let `expos` mute "exposé".
+The source name isn't searched; switching a source off is how you mute a
+publisher.
+
+A muted story is still fetched and still cached, so taking a word out brings
+its stories straight back, the same way a source switched back on does. It is
+left out of the status line's "N new" count, though: "3 new" with nothing new
+on screen would be a lie. The list goes into the JSON export and the setup link;
+a setup link names the words it carries before you restore it, because muting
+hides stories without leaving a trace on the reading surface. Muting is the
+app's alone — the Shortcut in Part 2 knows nothing about it.
+
+All of them are applied in the one place every panel's rows come from, so the
 category a swipe away arrives already filtered rather than being rebuilt when
 you land on it. A filter that is on lights the funnel button and unfolds the
 bar by itself on launch, and a category emptied by one says which filter did it
@@ -1010,8 +1035,10 @@ Opening it offers to restore, and adding *that* link to the Home Screen brings
 everything back on first launch.
 
 A setup link is treated as untrusted — it could come from anyone — so it never
-applies itself. The offer bar names the publishers it would install and waits to
-be accepted, and a malformed one is ignored rather than breaking the app.
+applies itself. The offer bar names the publishers it would install, and any
+words it would mute, and waits to be accepted; a malformed one is ignored rather
+than breaking the app. A link made before muting existed leaves the muted list
+on the device alone.
 
 The relay list in a link is a separate question, because a relay is the one
 thing in here with real reach (see below). A link carrying one shows it as an

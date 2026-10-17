@@ -29,6 +29,7 @@ If Chromium is somewhere else, set `CHROMIUM_PATH`.
 | `teststuck` | A second finger, a refresh, backgrounding, `touchcancel`, a lost touchend — do the panels always come home? |
 | `testrotate` | After repeated swipes, do the three panels still hold the right categories? |
 | `testfilter` | Source switches and the keyword: do they filter, does one persist and the other not, and does the keyword wait for a submit? |
+| `testmute` | Muted words: whole words in any case and any script, every category and the parked panels, kept out of "N new", saved however Settings is left, and carried by the setup link only with notice |
 | `testchips` | Does the chip row stay still unless the category is off screen? |
 | `testlock` | Is the list's scroll frozen during a sideways drag and restored afterwards? |
 | `testslide` `testspringback` `testmidbuild` | The page turn, the spring back, and a swipe taken while a panel is still filling |

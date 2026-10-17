@@ -222,6 +222,7 @@ input[type=text],input[type=url],textarea{
   padding:11px 12px;font-size:0.9375rem;margin-bottom:8px}
 textarea{min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.7812rem;line-height:1.5}
 #proxy{min-height:74px}          /* a relay list is two or three lines, not a config dump */
+#mute{min-height:74px}
 .btn{width:100%;border:0;border-radius:11px;padding:12px;font-size:0.9375rem;font-weight:600;background:var(--panel2)}
 /* Red is reserved for destructive actions. A red Save sitting above a red
    Delete made the two read as the same kind of thing. */
@@ -403,6 +404,16 @@ body.busy .chips{filter:saturate(.3)}
   <p class="hint">Reopening the app after this long goes back to the first
   category instead of wherever you were. Pull down on the list to refresh just
   the category you're reading; the &#8635; button refreshes every category.</p>
+
+  <h3>Muted words</h3>
+  <textarea id="mute" spellcheck="false" rows="3" autocapitalize="off" autocorrect="off"
+            placeholder="One word or phrase per line" aria-label="Muted words"></textarea>
+  <p class="hint" id="mute-msg"></p>
+  <p class="hint">A story whose headline or summary contains any of these is
+  never shown, in any category. Whole words in any case: <code>ai</code> mutes
+  &ldquo;AI&rdquo; but not &ldquo;said&rdquo;. End one with <code>*</code> to
+  match the start of a word: <code>crypto*</code> also mutes
+  &ldquo;cryptocurrency&rdquo;. Take a word out and its stories come back.</p>
 
   <h3>Privacy</h3>
   <div class="sw"><label for="s-direct">Direct only &mdash; never use a relay</label><input type="checkbox" id="s-direct"></div>
@@ -688,7 +699,10 @@ const DEFAULTS = {
   // Sources switched off, by feed URL. URL rather than id because ids are
   // minted per device, and a feed that comes back through a setup link or an
   // OPML import is the same feed to the reader.
-  hidden: []
+  hidden: [],
+  // Words and phrases whose stories are never shown, in any category. See
+  // parseMuted for what goes in and mutedRe for what it matches.
+  muted: []
 };
 
 // Every relay in the list is another party that gets to see a feed request, so
@@ -1060,7 +1074,30 @@ function normalise(c) {
     cat: f.cat || "Other"
   }));
   if (!Array.isArray(c.hidden)) c.hidden = [];
+  c.muted = mutedList(c.muted);
   return c;
+}
+
+// The muted list arrives from the Settings box, a JSON import and a setup
+// link, and all three go through here. Commas split as well as new lines:
+// "crypto, bitcoin" typed on one line is two words, and kept as one phrase it
+// would match nothing and look like the feature not working. Written back one
+// per line, so the box always shows how it was read. A declaration rather than
+// a const because load() needs it long before the filtering section runs.
+const MAX_MUTED = 100;
+function parseMuted(raw) {
+  const seen = new Set(), out = [];
+  String(raw || "").split(/[\n,]/).forEach(t => {
+    const w = t.trim().replace(/\s+/g, " ").slice(0, 60).trim();
+    // A bare "*" is a prefix of every word, and would mute everything.
+    if (!w.replace(/\*+$/, "").trim() || seen.has(w.toLowerCase())) return;
+    seen.add(w.toLowerCase());
+    out.push(w);
+  });
+  return out.slice(0, MAX_MUTED);
+}
+function mutedList(v) {
+  return parseMuted(Array.isArray(v) ? v.filter(w => typeof w === "string").join("\n") : "");
 }
 
 // localStorage throws once the quota is gone, and one feed serving huge titles
@@ -1852,12 +1889,15 @@ async function refresh(scope, opts) {
     // that drops a frame in the middle of a swipe.
     const absorb = list => {
       let changed = false;
+      // A muted story is kept, so unmuting brings it straight back, but it is
+      // not news to announce: "3 new" with nothing new on screen is a lie.
+      const mute = mutedRe();
       list.forEach(it => {
         // Two feeds often carry the same story under one link. Keep whichever
         // copy is newer, so a fresher (possibly re-headlined) version wins
         // instead of whichever feed simply resolved last.
         const prev = merged.get(it.id);
-        if (!prev) { added++; changed = true; }
+        if (!prev) { if (!mute || !isMuted(it, mute)) added++; changed = true; }
         else if (it.ts > prev.ts || it.title !== prev.title) changed = true;
         if (!prev || it.ts >= prev.ts) merged.set(it.id, it);
       });
@@ -2181,7 +2221,8 @@ const safeRelay = raw => {
 };
 
 /* ------------------------------------------------------------- filtering */
-// Two filters, and they deliberately last different lengths of time.
+// Two filters in the bar, and they deliberately last different lengths of time.
+// (Muted words, set in Settings, are a third thing again - see mutedRe.)
 //
 // Sources are switched off per feed and kept in the config: "this one posts
 // twice a week and clutters the category" is a standing preference, not
@@ -2243,6 +2284,38 @@ const matchesWords = (i, words) => {
   const hay = ((i.title || "") + " " + (i.snip || "") + " " + (i.source || "")).toLowerCase();
   return words.every(w => hay.includes(w));
 };
+
+// Muted words take a story out of every category, for good, until the word is
+// taken out of Settings. They are not one of the bar's filters: they don't
+// light the funnel or unfold the bar, since a list that is on all the time
+// would leave the funnel lit on every category and its signal meaning nothing.
+//
+// Whole words, not substrings - "ai" would otherwise mute "said", "Taiwan"
+// and "paid". A trailing * matches the start of a word instead, so "crypto*"
+// catches "cryptocurrency". Boundaries are letters and digits in any script:
+// \b only knows ASCII, so it would never find "été" at all, and would let
+// "expos" mute "exposé". Headline and snippet only; the source switches
+// already cover muting a publisher.
+//
+// One expression for the whole list, rebuilt only when the list changes: it
+// runs over every story each time a panel is built.
+const WORDCH = "\\p{L}\\p{N}_";
+let muteKey = null, muteRe = null;
+function mutedRe() {
+  const key = cfg.muted.join("\n");
+  if (key === muteKey) return muteRe;
+  muteKey = key;
+  const alts = cfg.muted.map(w => {
+    const core = w.replace(/\*+$/, "").trim();
+    const body = core.split(" ").map(s => s.replace(/[.*+?^${}()|[\]\\\/]/g, "\\$&")).join("\\s+");
+    return core === w ? body + "(?![" + WORDCH + "])" : body;
+  });
+  muteRe = alts.length
+    ? new RegExp("(?:^|[^" + WORDCH + "])(?:" + alts.join("|") + ")", "iu")
+    : null;
+  return muteRe;
+}
+const isMuted = (i, re) => re.test((i.title || "") + "\n" + (i.snip || ""));
 
 // Is anything filtering this category right now?
 function filtersOn(cat) {
@@ -2439,6 +2512,11 @@ function renderList() {
       b.textContent = "Clear filters";
       b.onclick = clearFilters;
       e.appendChild(b);
+    } else if (cfg.muted.length && inCat(active).length) {
+      // No button: the list lives in Settings, and clearing it from here
+      // would throw away every category's mutes to fix this one.
+      line("Every " + active + " story matches a muted word.");
+      line("Muted words are in Settings.");
     } else {
       const mine = cfg.feeds.filter(f => (f.cat || "Other") === active);
       const bad  = mine.filter(f => health[f.url] && !health[f.url].ok);
@@ -2465,12 +2543,13 @@ function renderList() {
 // Everything on screen comes through here - the live panel and the two parked
 // ones - so the filters are applied in one place and the category either side
 // of you is already filtered by the time you swipe onto it.
-// `all` asks for the category as it would be with no filters at all, which is
-// what tells "nothing arrived" apart from "you filtered it away".
+// `all` asks for the category as it would be with none of the bar's filters,
+// which is what tells "nothing arrived" apart from "you filtered it away".
+// Muted words stay out even then: they are not the bar's to clear.
 function storiesIn(cat, all) {
-  const catOf = {};
-  cfg.feeds.forEach(f => { catOf[f.name] = f.cat || "Other"; });
-  let view = items.filter(i => (i.source in catOf) && (catOf[i.source] || "Other") === cat);
+  let view = inCat(cat);
+  const mute = mutedRe();
+  if (mute) view = view.filter(i => !isMuted(i, mute));
   if (!all) {
     const off = hiddenNames();
     if (off.size) view = view.filter(i => !off.has(i.source));
@@ -2479,6 +2558,13 @@ function storiesIn(cat, all) {
     if (words.length) view = view.filter(i => matchesWords(i, words));
   }
   return view.sort((a, b) => b.ts - a.ts);
+}
+
+// Every story in the category, nothing filtered or muted.
+function inCat(cat) {
+  const catOf = {};
+  cfg.feeds.forEach(f => { catOf[f.name] = f.cat || "Other"; });
+  return items.filter(i => (i.source in catOf) && (catOf[i.source] || "Other") === cat);
 }
 
 // Rows for one category, into any container. The panels either side need
@@ -2914,6 +3000,10 @@ function refreshChanged() {
 }
 
 function showSheet(id, open) {
+  // A change event only fires once the box loses focus, and leaving Settings
+  // with the keyboard still up - by its close button, or for Feeds or the log -
+  // need not take it away first.
+  if (id === "#settings" && !open) commitMuted();
   const el_ = $(id);
   el_.classList.toggle("open", open);
   el_.setAttribute("aria-hidden", String(!open));
@@ -2953,6 +3043,9 @@ function openSettings(open) {
     $("#s-auto").checked   = cfg.autoRefresh;
     $("#s-direct").checked = cfg.directOnly;
     $("#s-idle").value     = String(cfg.idleResetMin);
+    $("#mute").value       = cfg.muted.join("\n");
+    muteTyped = false;
+    showMuteCount();
     const checked = cfg.feeds.filter(f => health[f.url] && health[f.url].ok);
     const viaRelay = checked.filter(f => !health[f.url].direct);
     $("#relay-count").textContent = checked.length
@@ -3093,6 +3186,36 @@ const showRelayCount = (extra) => {
   }).join(" · ");
 };
 
+// Counted over every stored story, not just the category behind the sheet:
+// the list applies everywhere, so that is what the number has to describe.
+const showMuteCount = (extra) => {
+  const re = mutedRe(), n = re ? items.filter(i => isMuted(i, re)).length : 0;
+  $("#mute-msg").textContent = (!cfg.muted.length ? "Nothing muted."
+    : n ? "Hiding " + n + " stor" + (n === 1 ? "y" : "ies") + " right now."
+    : "No stories match right now.") + (extra || "");
+};
+
+// No refetch: muting changes what is shown, not what is fetched, and every
+// muted story is still in the cache for when the word comes out again.
+// Only what was typed is committed. Leaving Settings commits too, and without
+// this it would write the box back over a list that changed underneath it -
+// a JSON import made while the sheet was open, say.
+let muteTyped = false;
+$("#mute").addEventListener("input", () => { muteTyped = true; });
+function commitMuted() {
+  if (!muteTyped) return;
+  muteTyped = false;
+  const next = parseMuted($("#mute").value);
+  $("#mute").value = next.join("\n");
+  if (next.join("\n") === cfg.muted.join("\n")) return;
+  cfg.muted = next;
+  save();
+  render();
+  if (window.primeSides) window.primeSides();   // the parked panels too
+  showMuteCount(" · saved");
+}
+$("#mute").onchange = commitMuted;
+
 $("#s-auto").onchange   = e => { cfg.autoRefresh = e.target.checked; save(); };
 $("#s-idle").onchange   = e => { cfg.idleResetMin = +e.target.value || 0; save(); markSeen(); };
 $("#s-direct").onchange = e => {
@@ -3151,7 +3274,8 @@ function setupPayload() {
       a: cfg.autoRefresh ? 1 : 0,
       d: cfg.directOnly ? 1 : 0,
       i: cfg.idleResetMin,
-      p: cfg.proxies
+      p: cfg.proxies,
+      m: cfg.muted
     }
   };
 }
@@ -3182,6 +3306,9 @@ function applySetup(payload, opts) {
   // Privacy switch rather than by a URL somebody sent you.
   if (st.d) cfg.directOnly = true;
   if ("i" in st) cfg.idleResetMin = +st.i || 0;
+  // A link made before muting existed says nothing about it, so the list on
+  // this device is left as it is rather than cleared.
+  if ("m" in st) cfg.muted = mutedList(st.m);
   if (opts && opts.relays) {
     const p = setupRelays(payload);
     if (p.length) cfg.proxies = p;
@@ -3256,7 +3383,8 @@ $("#opml-import").onclick = () => {
 };
 $("#io-import").onclick = () => {
   try {
-    cfg = migrate({ ...DEFAULTS, ...JSON.parse($("#io").value) });
+    cfg = normalise(migrate({ ...DEFAULTS, ...JSON.parse($("#io").value) }));
+    $("#mute").value = cfg.muted.join("\n");
     save(); pruneOrphans(); render();
     setStatus("Config imported");
   } catch { alert("That isn't valid JSON."); }
@@ -3286,6 +3414,12 @@ function offerSetupFromHash() {
   line("Restoring replaces the feeds on this device with: " + (hosts.length > 6
     ? hosts.slice(0, 6).join(", ") + " +" + (hosts.length - 6) + " more"
     : hosts.join(", ")));
+  // Muting hides stories without a trace on the reading surface, which is not
+  // something a link should do without saying so.
+  const mutes = mutedList(payload.s && payload.s.m);
+  if (mutes.length) line("And mutes: " + (mutes.length > 8
+    ? mutes.slice(0, 8).join(", ") + " +" + (mutes.length - 8) + " more"
+    : mutes.join(", ")));
 
   // A link used to be able to repoint every fetch through a relay of its own
   // choosing - and turn the direct-only switch off on the way past - while
@@ -3779,7 +3913,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-09-06.101";
+const BUILD = "2026-10-17.102";
 // Full stamp stays in Settings (the only place it was ever findable before);
 // this is just enough to tell two builds apart at a glance without opening
 // a sheet - the trailing counter, not the date, since the date rarely
