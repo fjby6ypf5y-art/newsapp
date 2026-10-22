@@ -502,6 +502,7 @@ const CATS = ["World","Business","Tech","Canada",
               "Science","Sport","Entertainment"];
 const CAT_ORDER = [...CATS, "Other"];
 const catRank = c => { const i = CAT_ORDER.indexOf(c); return i < 0 ? CAT_ORDER.length : i; };
+const YAHOO_MARKETS_URL = "https://feeds.finance.yahoo.com/rss/2.0/headline?s=%5EGSPC%2C%5EDJI%2C%5EIXIC&region=US&lang=en-US";
 const CATALOG = [
   // Everything here is free to read with no metering. Digital-native outlets
   // are included on the same footing as legacy ones - they tend to publish
@@ -537,6 +538,15 @@ const CATALOG = [
   ["Business", "Marketplace",     "https://www.marketplace.org/feed/"],
   ["Business", "CNBC",            "https://www.cnbc.com/id/100003114/device/rss/rss.html"],
   ["Business", "Yahoo Finance",   "https://finance.yahoo.com/news/rssindex"],
+  // A second Yahoo entry, not a replacement. The rssindex feed above went to a
+  // hard 404 in October 2026 (checked from the sandbox and on the phone) along
+  // with every other general Yahoo Finance feed tried; the per-ticker headline
+  // feed is what still answers. It is a different list - news on the S&P 500,
+  // Dow and Nasdaq, about half of it Yahoo's own and half syndicated (Motley
+  // Fool, Trefis and the like) - hence the different name. It also returns 403
+  // to any request carrying an Origin header, which a browser fetch always
+  // does, so it only ever comes through a relay: with direct-only on, it fails.
+  ["Business", "Yahoo Finance Markets", YAHOO_MARKETS_URL],
   ["Business", "Investing.com",   "https://www.investing.com/rss/news.rss"],
   ["Business", "ProPublica",      "https://www.propublica.org/feeds/propublica/main"],
   ["Business", "Conversation Biz","https://theconversation.com/us/business/articles.atom"],
@@ -825,6 +835,13 @@ const RESTORE_66 = [
   { cat:"Business", name:"Yahoo Finance", url:"https://finance.yahoo.com/news/rssindex" }
 ];
 
+// Added next to Yahoo Finance on any install that has it (see the CATALOG
+// comment for why it is a second feed rather than a swap). Only where Yahoo
+// Finance is subscribed: a reader who removed it did not ask for more Yahoo.
+const YAHOO_MARKETS = [
+  { cat:"Business", name:"Yahoo Finance Markets", url:YAHOO_MARKETS_URL }
+];
+
 // Feeds added to an existing install when a category is requested but empty.
 // Only the publishers already proven reachable in the field.
 const SEED_BUSINESS = [
@@ -1061,6 +1078,13 @@ function migrate(c) {
       : have.has(HN_OFFICIAL) ? []                  // already on the official feed
       : [{ ...f, url: HN_OFFICIAL }]);
     c.migrated = 21;
+  }
+
+  // Yahoo Finance's rssindex is a 404; add the ticker headline feed beside it.
+  if (c.migrated < 22) {
+    if (c.feeds.some(f => f.url === "https://finance.yahoo.com/news/rssindex"))
+      addFeeds(c, YAHOO_MARKETS);
+    c.migrated = 22;
   }
   return c;
 }
@@ -3925,7 +3949,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-10-17.103";
+const BUILD = "2026-10-22.104";
 // Full stamp stays in Settings (the only place it was ever findable before);
 // this is just enough to tell two builds apart at a glance without opening
 // a sheet - the trailing counter, not the date, since the date rarely

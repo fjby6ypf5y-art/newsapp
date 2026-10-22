@@ -4,6 +4,8 @@
 //   - nothing already in that list is removed - Yahoo Finance in particular,
 //     which build .66 dropped by mistake and .67 puts back
 //   - a feed removed by hand afterwards stays removed
+//   - Yahoo Finance Markets is added beside Yahoo Finance (whose rssindex went
+//     404), only where Yahoo Finance is subscribed, and never on a fresh install
 //   - paywalled library entries are marked, and "Add all" leaves them alone
 //
 // Run with:  node tests/testpaywall.mjs
@@ -34,6 +36,7 @@ const names=async()=>(await cfg()).feeds.map(f=>f.name);
 
 const YAHOO='https://finance.yahoo.com/news/rssindex';
 const CALM=['The Big Picture','A Wealth of Common Sense','Abnormal Returns'];
+const YMKT='Yahoo Finance Markets';
 
 console.log('=== a reader who has Yahoo Finance ===');
 await page.addInitScript(y=>{
@@ -63,6 +66,10 @@ if(!c1.feeds.some(f=>f.url===YAHOO)) console.log('*** Yahoo Finance was removed'
 if(c1.feeds.filter(f=>f.url===YAHOO).length!==1) console.log('*** Yahoo Finance was duplicated');
 if(CALM.some(n=>!c1.feeds.some(f=>f.name===n))) console.log('*** the supplementary feeds were not added');
 if(!left.includes('Yahoo Finance')) console.log('*** Yahoo headlines were pruned from a feed that is still subscribed');
+console.log('  Yahoo Markets    :',c1.feeds.filter(f=>f.name===YMKT).length,'(must be 1 - added beside Yahoo Finance)');
+if(c1.feeds.filter(f=>f.name===YMKT).length!==1) console.log('*** Yahoo Finance Markets was not added exactly once');
+const ym=c1.feeds.find(f=>f.name===YMKT);
+if(ym&&!/^https:\/\/feeds\.finance\.yahoo\.com\/rss\/2\.0\/headline\?/.test(ym.url)) console.log('*** Yahoo Finance Markets has the wrong URL:',ym.url);
 
 console.log('\n=== a phone that already ran build .66 gets Yahoo back ===');
 const ctx3=await b.newContext({...devices['iPhone 14 Pro']});const p3=await ctx3.newPage();
@@ -83,9 +90,11 @@ await p3.goto('http://localhost:8083/index.html');await p3.waitForTimeout(2500);
 const c3=await p3.evaluate(()=>JSON.parse(localStorage.getItem('breaking.v1')));
 console.log('  migrated to      :',c3.migrated);
 console.log('  Yahoo restored   :',c3.feeds.some(f=>f.url===YAHOO),'(must be true)');
-console.log('  no duplicates    :',c3.feeds.length===5,'-',c3.feeds.map(f=>f.name));
+// 6, not 5: Yahoo comes back at 13, and 22 then adds Yahoo Finance Markets.
+console.log('  no duplicates    :',c3.feeds.length===6,'-',c3.feeds.map(f=>f.name));
 if(!c3.feeds.some(f=>f.url===YAHOO)) console.log('*** build .66 removal was never repaired');
-if(c3.feeds.length!==5) console.log('*** the repair duplicated the feeds .66 had already added');
+if(!c3.feeds.some(f=>f.name===YMKT)) console.log('*** Yahoo Finance Markets did not follow the restored Yahoo Finance');
+if(c3.feeds.length!==6) console.log('*** the repair duplicated the feeds .66 had already added');
 
 console.log('\n=== the migration is not repeated ===');
 // Remove one of the replacements by hand, reload: it must stay removed.
@@ -121,6 +130,8 @@ for (const [label, seed] of [
   if(c.migrated<19) console.log('*** migration 19 did not run');
   if(urls.includes(SC_OLD)) console.log('*** the dead StatCan URL survived');
   if(urls.length!==1) console.log('*** StatCan ended up with '+urls.length+' entries, expected 1');
+  // No Yahoo Finance in this list, so migration 22 must not add its sibling.
+  if(c.feeds.some(f=>f.name===YMKT)) console.log('*** Yahoo Finance Markets added to a list without Yahoo Finance');
   await cx.close();
 }
 
@@ -141,6 +152,7 @@ console.log('  migrated         :',c2f.migrated,'(undefined - migrations never r
 console.log('  Yahoo present    :',n2.includes('Yahoo Finance'),'(must be false - not a default)');
 console.log('  supplements       :',CALM.filter(n=>n2.includes(n)),'(must be empty - library only)');
 if(n2.includes('Yahoo Finance')) console.log('*** a fresh install was given Yahoo Finance');
+if(n2.includes(YMKT)) console.log('*** a fresh install was given Yahoo Finance Markets');
 if(CALM.some(n=>n2.includes(n))) console.log('*** a fresh install was given the supplementary feeds');
 
 console.log('\n=== the library marks what costs money ===');

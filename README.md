@@ -368,7 +368,7 @@ for each mostly added routine domestic politics.
 
 **Business** is deliberately the deepest category. Most of it is free to read
 with no metering: BBC, NPR and CBC business desks, Marketplace, CNBC, Yahoo
-Finance, Investing.com, ProPublica and The Conversation for news; The Big Picture, A
+Finance (and Yahoo Finance Markets), Investing.com, ProPublica and The Conversation for news; The Big Picture, A
 Wealth of Common Sense, Abnormal Returns, Musings on Markets, Klement on
 Investing and Calculated Risk for investing and markets specifically; Federal
 Reserve, SEC and BLS releases as primary sources, ahead of anyone's write-up
@@ -390,6 +390,18 @@ than reusing it — a phone that ran `.66` is already sitting at 12, and reusing
 the number would leave that phone the one device the repair never runs on.
 Fresh installs are unaffected either way: `DEFAULTS` carries no `migrated`, so
 `undefined < n` is false and every migration is skipped.
+
+**Yahoo Finance's general feed is gone; a second Yahoo feed sits beside it.**
+In October 2026 `finance.yahoo.com/news/rssindex` started returning a hard 404,
+as did every other general Yahoo Finance feed address tried. What still
+answers is the per-ticker headline feed, used here for the S&P 500, Dow and
+Nasdaq. That is a different list (market news, about half of it syndicated
+from Motley Fool, Trefis and the like), so it is not a swap: it is a separate
+library entry, *Yahoo Finance Markets*, and migration 22 adds it next to Yahoo
+Finance on any install that already has Yahoo Finance. The old entry stays
+until the reader removes it or it comes back. The new feed returns 403 to any
+request carrying an `Origin` header, which every browser fetch does, so it
+only comes through a relay; with direct-only on, it fails.
 
 **Paywalled feeds are offered, and marked.** The FT, WSJ, Bloomberg, Financial
 Post, Economist, NYT, Washington Post, Globe and Mail and Vancouver Sun used
