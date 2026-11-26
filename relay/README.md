@@ -50,9 +50,10 @@ off. What you're after is a Worker, its code, and one secret.
    step.
 4. **Replace its code.** Open the Worker → *Edit code*, delete everything,
    paste in the whole of `worker.js` from this folder, and *Deploy*.
-5. **Give it the key.** Go to the Worker → *Settings* → *Variables and Secrets*
-   → *Add*. Set the type to **Secret**, the name to `RELAY_KEY` and the value to
-   your key. Save and deploy.
+5. **Give it the key.** Go to the Worker → *Settings* → **Runtime variables
+   and secrets** (if it asks which environment, **Production** is the right
+   one) → *Add*. Set the type to **Secret**, not Text, the name to
+   `RELAY_KEY` and the value to your key. Save and deploy.
    *Optional:* add a plain variable `ALLOW_ORIGIN` set to
    `https://fjby6ypf5y-art.github.io`, so only the app's page can read the
    answers. The key already keeps strangers out, so this is belt and braces.
