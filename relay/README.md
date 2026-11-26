@@ -42,8 +42,12 @@ off. What you're after is a Worker, its code, and one secret.
    asks for a **workers.dev subdomain**, pick something bland and unconnected
    to you, such as a random word pair, not your name or handle. That name can
    reach every publisher (see below), so it shouldn't point back at you.
-3. **Create a Worker.** Go to *Workers & Pages* → *Create* → *Create Worker*
-   (the "Hello World" starter). Name it `news-relay` and deploy it as it is.
+3. **Create a Worker.** Go to *Workers & Pages* → **Create application**.
+   You'll be offered a few ways to start: a template, importing a Git
+   repository, or starting from scratch. Choose the **Hello World** one
+   (it may read *Start with Hello World!*), not a repository or Pages. Name it
+   `news-relay` and deploy it as it is. Its code gets replaced in the next
+   step.
 4. **Replace its code.** Open the Worker → *Edit code*, delete everything,
    paste in the whole of `worker.js` from this folder, and *Deploy*.
 5. **Give it the key.** Go to the Worker → *Settings* → *Variables and Secrets*
