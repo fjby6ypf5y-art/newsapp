@@ -24,8 +24,23 @@ logs you would have to switch on yourself.
 It only works with its **key**. Without the key it answers 401 to everyone, so
 the address being seen or guessed doesn't let anyone else use it. The key sits
 in two places: the Worker's settings on Cloudflare, and your phone. It isn't in
-this repository. The app keeps it out of setup links, the fetch log and the
-status lines, which show only the host. **Export** in Settings does include it,
+this repository. Once saved, the address box in Settings shows it masked
+(`key=••••`), and the app keeps it out of setup links, the fetch log and the
+status lines, which show only the host.
+
+Why a **Secret** on Cloudflare when the key travels in plain text anyway? The
+key has to be readable at both ends, because the phone sends it and the Worker
+compares it, so the job is to keep each copy out of sight. A Secret is
+encrypted at rest and can't be read back from the dashboard, even by you. It
+also isn't in `worker.js`, which is public in this repository. A *Text*
+variable would sit in the dashboard in plain view. In transit it is inside
+HTTPS, so your network sees only the relay's hostname.
+
+Don't check the relay by pasting its full address into Safari: that puts the
+key in your browsing history, and possibly in iCloud. Use **Test my relay**.
+If you don't keep a copy of the key anywhere else and lose it (an app
+reinstall, a new phone), make a new one and replace `RELAY_KEY` with it. The
+old one stops working at once. **Export** in Settings does include it,
 because that is your complete backup.
 
 ## Setting it up

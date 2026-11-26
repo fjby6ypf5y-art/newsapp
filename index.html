@@ -450,8 +450,10 @@ body.busy .chips{filter:saturate(.3)}
   fallback; switch it off and the app works exactly as it did without it.
   It sees the same things any relay does &mdash; your IP address and which
   feeds you fetch &mdash; but it's yours, so that is you and Cloudflare. The
-  address holds your relay's key, so it's kept on this phone and in Export but
-  left out of setup links. Direct only switches it off too.</p>
+  address holds your relay's key, so once saved the box shows it masked
+  (<code>key=••••</code>); to change it, paste a whole new address. It's kept
+  on this phone and in Export but left out of setup links. Direct only
+  switches it off too.</p>
 
   <h3>Backup</h3>
   <textarea id="io" spellcheck="false" placeholder="Your config as JSON"></textarea>
@@ -3118,7 +3120,7 @@ function openSettings(open) {
     showSheet("#feeds-sheet", false);
     showSheet("#log-sheet", false);
     $("#proxy").value      = cfg.proxies.join("\n");
-    $("#own-relay").value  = cfg.ownRelay;
+    $("#own-relay").value  = maskRelay(cfg.ownRelay);
     $("#s-own").checked    = ownRelayOn();
     showRelayCount();
     showOwnRelay();
@@ -3337,6 +3339,25 @@ const showOwnRelay = (extra) => {
     + (extra || "");
 };
 
+// The box shows the saved address with every query value blanked out, so the
+// key is not sitting on screen for anyone holding the phone or reading a
+// screenshot: "…/?key=abc123&url=" shows as "…/?key=••••&url=". The empty
+// url= at the end has nothing to hide and stays as it is. To change the
+// address you paste a whole new one; the masked text itself is never saved.
+const MASK = "••••";
+const maskRelay = pfx => String(pfx || "").replace(/([?&][^=&#]+=)[^&#]+/g, "$1" + MASK);
+
+// What the box holds, as a relay prefix: the saved address if it still shows
+// the masked form of it, a new address if one was pasted, and "" with a
+// reason for anything else - an edited masked address cannot be un-masked.
+function ownRelayInput() {
+  const raw = $("#own-relay").value.trim();
+  if (cfg.ownRelay && raw === maskRelay(cfg.ownRelay)) return { pfx: cfg.ownRelay, raw };
+  if (raw.includes(MASK)) return { pfx: "", raw, why: "To change it, paste the whole new address, key included." };
+  const pfx = safeRelay(raw);
+  return { pfx, raw, why: raw && !pfx ? "The address must start with https://" : "" };
+}
+
 // Turning it on or off, or changing where it points, is a fresh start for it
 // and for the routes: a feed remembered as "went through allorigins" should
 // try your relay first now, and one remembered as "went through yours" should
@@ -3350,11 +3371,13 @@ function ownRelayChanged() {
 }
 
 $("#own-relay").onchange = () => {
-  const raw = $("#own-relay").value.trim(), good = safeRelay(raw);
+  const { pfx: good, raw, why } = ownRelayInput();
   if (raw && !good) {
-    showOwnRelay(" · Not saved: the address must start with https://");
+    $("#own-relay").value = maskRelay(cfg.ownRelay);
+    showOwnRelay(" · Not saved. " + why);
     return;
   }
+  $("#own-relay").value = maskRelay(good);
   if (good === cfg.ownRelay) return showOwnRelay();
   cfg.ownRelay = good;
   if (!good) cfg.ownRelayOn = false;
@@ -3378,8 +3401,8 @@ $("#s-own").onchange = e => {
 // it. Works whether the switch is on or off, so it can be checked in advance.
 $("#own-test").onclick = async () => {
   const b = $("#own-test");
-  const raw = $("#own-relay").value.trim(), pfx = safeRelay(raw);
-  if (!pfx) return showOwnRelay(raw ? " · The address must start with https://" : "");
+  const { pfx, raw, why } = ownRelayInput();
+  if (!pfx) return showOwnRelay(raw ? " · " + why : "");
   const feed = cfg.feeds[0];
   if (!feed) return showOwnRelay(" · Add a feed first: the test fetches one.");
   b.disabled = true; b.textContent = "Testing…";
@@ -4070,7 +4093,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-11-26.105";
+const BUILD = "2026-11-26.106";
 // Full stamp stays in Settings (the only place it was ever findable before);
 // this is just enough to tell two builds apart at a glance without opening
 // a sheet - the trailing counter, not the date, since the date rarely

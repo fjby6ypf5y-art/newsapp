@@ -863,7 +863,12 @@ public list, so it can be left set up and switched on only when it's needed:
   (401), `RELAY_KEY` not set (500), or no answer at that address.
 - The Worker refuses anyone without its key, so the address leaking costs
   nothing. The key is part of the prefix, so the app shows only the host
-  anywhere it reports on the relay. It's in **Export** (your full backup) but
+  anywhere it reports on the relay, and the address box itself shows the
+  saved address masked (`?key=••••&url=`) from build 106, so the key isn't on
+  screen for anyone holding the phone. The masked text stands for the saved
+  address: Test uses the real one, and an edited masked address is refused
+  rather than saved, since the key can't be recovered from the dots. To change
+  it, paste a whole new address. It's in **Export** (your full backup) but
   left out of **setup links**, which are made to be mailed and pasted. After a
   reinstall from a setup link, paste the relay address in again.
 - **Direct only** overrides it, just as it overrides the public list.

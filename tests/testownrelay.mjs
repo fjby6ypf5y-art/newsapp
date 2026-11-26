@@ -123,7 +123,9 @@ let msg=await page.textContent('#own-msg');
 console.log('settings says        :',msg);
 mark(/news-relay\.me\.workers\.dev — off/.test(msg),'Settings names the relay and says it is off');
 mark(!msg.includes(KEY),'without showing the key');
-mark(await page.inputValue('#own-relay')===OWN,'the address is there to edit');
+const MASKED='https://news-relay.me.workers.dev/?key=••••&url=';
+console.log('box shows            :',await page.inputValue('#own-relay'));
+mark(await page.inputValue('#own-relay')===MASKED,'the box shows the address with the key masked');
 
 // Test works with the switch off, so the relay can be checked before an outage.
 await page.click('#own-test');await page.waitForFunction(()=>!document.querySelector('#own-test').disabled);
@@ -143,6 +145,18 @@ mark(/wrong key/.test(msg),'a wrong key says so');
 mark((await cfgNow()).ownRelay===OWN.replace(KEY,'nope'),'leaving the box saves what was typed in it');
 await page.fill('#own-relay',OWN);await page.dispatchEvent('#own-relay','change');
 mark((await cfgNow()).ownRelay===OWN,'and the right address goes back in the same way');
+mark(await page.inputValue('#own-relay')===MASKED,'and once saved, the box masks it again');
+
+// The masked text stands for the saved address: testing it tests the real one.
+await page.click('#own-test');await page.waitForFunction(()=>!document.querySelector('#own-test').disabled);
+mark(/came back/.test(await page.textContent('#own-msg')),'Test on the masked box uses the saved key');
+// Editing the host but keeping the dots cannot be un-masked, so it is refused.
+await page.fill('#own-relay',MASKED.replace('news-relay.me','other.me'));
+await page.dispatchEvent('#own-relay','change');
+console.log('edited masked text   :',await page.textContent('#own-msg'));
+mark((await cfgNow()).ownRelay===OWN,'an edited masked address is not saved');
+mark(!JSON.stringify(await cfgNow()).includes('••••'),'the mask itself never reaches the config');
+mark(await page.inputValue('#own-relay')===MASKED,'and the box goes back to the saved one');
 
 // A non-https address is not saved.
 await page.fill('#own-relay','http://news-relay.me.workers.dev/?key=x&url=');
