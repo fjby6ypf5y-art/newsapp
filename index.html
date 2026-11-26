@@ -436,6 +436,23 @@ body.busy .chips{filter:saturate(.3)}
   full <code>https://</code> prefixes are kept, five at most; leave the box
   empty to use no relay at all.</p>
 
+  <h3>Your own relay</h3>
+  <div class="sw"><label for="s-own">Use my own relay</label><input type="checkbox" id="s-own"></div>
+  <input type="url" id="own-relay" spellcheck="false" autocapitalize="off" autocorrect="off"
+         inputmode="url" aria-label="Your relay's address"
+         placeholder="https://news-relay.you.workers.dev/?key=…&amp;url=">
+  <button class="btn" id="own-test">Test my relay</button>
+  <p class="hint" id="own-msg"></p>
+  <p class="hint">A backup for when the public relays are down: a small relay
+  you run yourself on Cloudflare's free plan, from <code>relay/worker.js</code>
+  in this app's repository (<code>relay/README.md</code> has the steps). While
+  it's on, it's tried before the public relays, which stay behind it as the
+  fallback; switch it off and the app works exactly as it did without it.
+  It sees the same things any relay does &mdash; your IP address and which
+  feeds you fetch &mdash; but it's yours, so that is you and Cloudflare. The
+  address holds your relay's key, so it's kept on this phone and in Export but
+  left out of setup links. Direct only switches it off too.</p>
+
   <h3>Backup</h3>
   <textarea id="io" spellcheck="false" placeholder="Your config as JSON"></textarea>
   <div class="btns">
@@ -713,7 +730,12 @@ const DEFAULTS = {
   hidden: [],
   // Words and phrases whose stories are never shown, in any category. See
   // parseMuted for what goes in and mutedRe for what it matches.
-  muted: []
+  muted: [],
+  // A relay of your own (relay/worker.js on your Cloudflare account), kept
+  // apart from the public list so it can be switched on for an outage and off
+  // again without retyping it. The prefix carries the relay's key.
+  ownRelay: "",
+  ownRelayOn: false
 };
 
 // Every relay in the list is another party that gets to see a feed request, so
@@ -1089,6 +1111,17 @@ function migrate(c) {
   return c;
 }
 
+// A relay prefix is not a link: it is a string every feed URL gets appended to,
+// so whatever it points at sees the phone's IP and everything it reads. Only an
+// absolute https prefix is accepted, which also stops a stored value becoming a
+// path on this origin.
+const safeRelay = raw => {
+  const t = String(raw || "").trim();
+  if (!/^https:\/\//i.test(t) || t.length > 300) return "";
+  try { new URL(t); } catch { return ""; }
+  return t;
+};
+
 // Ids are load-bearing: the feed editor keys off them, and a feed without one
 // compares equal to every other feed without one. Migrations can be skipped by
 // a stored version number, so this runs unconditionally.
@@ -1100,6 +1133,10 @@ function normalise(c) {
   }));
   if (!Array.isArray(c.hidden)) c.hidden = [];
   c.muted = mutedList(c.muted);
+  // Arrives from storage and from a pasted JSON import, so it goes through
+  // the same gate as a relay typed into Settings. On means nothing without it.
+  c.ownRelay = safeRelay(c.ownRelay);
+  c.ownRelayOn = !!(c.ownRelayOn && c.ownRelay);
   return c;
 }
 
@@ -1480,6 +1517,12 @@ const hostLabel = prefix => {
   try { return new URL(prefix).host; } catch { return prefix; }
 };
 
+// Every relay prefix in play: the public list, then your own when it is on.
+// Your own goes last so that switching it on or off leaves the public relays'
+// positions alone - the route memo records a winner by position.
+const ownRelayOn = () => !!(cfg.ownRelayOn && cfg.ownRelay);
+const relayPrefixes = () => ownRelayOn() ? [...cfg.proxies, cfg.ownRelay] : cfg.proxies;
+
 // The order to try for one feed: the publisher itself and every relay not
 // currently sitting out, best-first, with whatever worked last time in front.
 function candidatesFor(url) {
@@ -1488,7 +1531,8 @@ function candidatesFor(url) {
   // publisher, at the cost of every feed that needs a relay to be reachable.
   if (cfg.directOnly) return [direct];
 
-  const all = cfg.proxies.map((p, n) => ({ target: p + encodeURIComponent(url), label: hostLabel(p), i: n + 1 }));
+  const all = relayPrefixes().map((p, n) => ({ target: p + encodeURIComponent(url), label: hostLabel(p), i: n + 1 }));
+  const own = ownRelayOn() ? all[all.length - 1] : null;
   const now = Date.now();
   let usable = all.filter(r => !(relays[r.label] && relays[r.label].until > now));
   // Every relay is in cooldown. Fetching nothing at all is worse than one more
@@ -1512,6 +1556,16 @@ function candidatesFor(url) {
     // and when it does work the relay stops seeing that feed.
     order = stale ? [direct, won, ...usable] : [won, ...usable, direct];
   } else order = [direct, ...usable];
+
+  // Your own relay, while it is switched on and not sitting out, leads the
+  // relays whatever the scores say: it is the one that sees nothing new, and
+  // the public relays behind it are only asked if it goes quiet. Direct still
+  // goes first wherever it would have.
+  if (own && usable.includes(own)) {
+    order = order.filter(c => c !== own);
+    const k = order.findIndex(c => c && c.i);
+    order.splice(k < 0 ? order.length : k, 0, own);
+  }
 
   const seen = new Set();
   return order.filter(c => c && !seen.has(c.target) && seen.add(c.target));
@@ -2240,16 +2294,6 @@ const absFeed = raw => {
   return /^https?:\/\//i.test(t) ? safeLink(t) : "";
 };
 
-// A relay prefix is not a link: it is a string every feed URL gets appended to,
-// so whatever it points at sees the phone's IP and everything it reads. Only an
-// absolute https prefix is accepted, which also stops a stored value becoming a
-// path on this origin.
-const safeRelay = raw => {
-  const t = String(raw || "").trim();
-  if (!/^https:\/\//i.test(t) || t.length > 300) return "";
-  try { new URL(t); } catch { return ""; }
-  return t;
-};
 
 /* ------------------------------------------------------------- filtering */
 // Two filters in the bar, and they deliberately last different lengths of time.
@@ -3074,7 +3118,10 @@ function openSettings(open) {
     showSheet("#feeds-sheet", false);
     showSheet("#log-sheet", false);
     $("#proxy").value      = cfg.proxies.join("\n");
+    $("#own-relay").value  = cfg.ownRelay;
+    $("#s-own").checked    = ownRelayOn();
     showRelayCount();
+    showOwnRelay();
     showLogCount();
     $("#s-auto").checked   = cfg.autoRefresh;
     $("#s-direct").checked = cfg.directOnly;
@@ -3213,7 +3260,7 @@ const showRelayCount = (extra) => {
   // What each one has actually done on this phone. The order they get tried
   // in is derived from exactly this, so it is worth being able to see it.
   const now = Date.now();
-  $("#relay-health").textContent = cfg.proxies.map(pfx => {
+  $("#relay-health").textContent = relayPrefixes().map(pfx => {
     const h = hostLabel(pfx), st = relays[h];
     if (!st || !(st.ok + st.fail)) return h + ": not tried yet";
     return h + ": " + st.ok + " ok / " + st.fail + " failed"
@@ -3257,6 +3304,7 @@ $("#s-idle").onchange   = e => { cfg.idleResetMin = +e.target.value || 0; save()
 $("#s-direct").onchange = e => {
   cfg.directOnly = e.target.checked; save();
   routes = {}; store(KEY + ".routes", "{}");   // re-probe from scratch
+  showOwnRelay();
 };
 $("#proxy").onchange = () => {
   const lines = $("#proxy").value.split("\n").map(x => x.trim()).filter(Boolean);
@@ -3276,6 +3324,79 @@ $("#proxy").onchange = () => {
   showRelayCount(drop
     ? " · " + drop + " ignored: a relay must be a full https:// prefix"
     : " · saved");
+};
+
+// Your own relay. Only the host is ever shown: the rest of the address is the
+// key, and the status line is the kind of thing that ends up in a screenshot.
+const showOwnRelay = (extra) => {
+  $("#own-msg").textContent = (!cfg.ownRelay
+    ? "Not set up. Paste your relay's address to have it ready."
+    : hostLabel(cfg.ownRelay) + (ownRelayOn()
+      ? (cfg.directOnly ? " — on, but Direct only is keeping it out." : " — on, tried before the public relays.")
+      : " — off. The public relays are used as usual."))
+    + (extra || "");
+};
+
+// Turning it on or off, or changing where it points, is a fresh start for it
+// and for the routes: a feed remembered as "went through allorigins" should
+// try your relay first now, and one remembered as "went through yours" should
+// not go looking for a relay that is switched off.
+function ownRelayChanged() {
+  save();
+  routes = {}; store(KEY + ".routes", "{}");
+  const st = cfg.ownRelay && relays[hostLabel(cfg.ownRelay)];
+  if (st) { st.until = 0; st.run = 0; saveRelays(); }
+  showRelayCount();
+}
+
+$("#own-relay").onchange = () => {
+  const raw = $("#own-relay").value.trim(), good = safeRelay(raw);
+  if (raw && !good) {
+    showOwnRelay(" · Not saved: the address must start with https://");
+    return;
+  }
+  if (good === cfg.ownRelay) return showOwnRelay();
+  cfg.ownRelay = good;
+  if (!good) cfg.ownRelayOn = false;
+  $("#s-own").checked = ownRelayOn();
+  ownRelayChanged();
+  showOwnRelay(good ? " · saved" : " · removed");
+};
+
+$("#s-own").onchange = e => {
+  if (e.target.checked && !cfg.ownRelay) {
+    e.target.checked = false;
+    return showOwnRelay(" · Paste your relay's address first.");
+  }
+  cfg.ownRelayOn = e.target.checked;
+  ownRelayChanged();
+  showOwnRelay(cfg.ownRelayOn ? " · Tap ↻ to fetch everything through it now." : "");
+};
+
+// One real feed through your relay, start to finish, with nothing else in the
+// race - the only way to know the address and key are right before you need
+// it. Works whether the switch is on or off, so it can be checked in advance.
+$("#own-test").onclick = async () => {
+  const b = $("#own-test");
+  const raw = $("#own-relay").value.trim(), pfx = safeRelay(raw);
+  if (!pfx) return showOwnRelay(raw ? " · The address must start with https://" : "");
+  const feed = cfg.feeds[0];
+  if (!feed) return showOwnRelay(" · Add a feed first: the test fetches one.");
+  b.disabled = true; b.textContent = "Testing…";
+  const t0 = Date.now();
+  try {
+    const text = await tryOnce(pfx + encodeURIComponent(feed.url), new AbortController(), TIMEOUT);
+    const n = parseFeed(text, "probe", feed.url).length;
+    showOwnRelay(" · Test: " + feed.name + " came back in " + (Date.now() - t0) + "ms"
+      + (n ? " with " + n + " stor" + (n === 1 ? "y" : "ies") + "." : ", but not as a feed."));
+  } catch (e) {
+    const m = String(e && e.message || e);
+    showOwnRelay(" · Test failed: " + (
+      /HTTP 401/.test(m) ? "wrong key (HTTP 401). Check the key= part against the Worker's RELAY_KEY."
+      : /HTTP 500/.test(m) ? "the Worker answered 500. Is RELAY_KEY set on it?"
+      : m === "blocked or unreachable" ? "no answer from that address. Check it, and that the Worker is deployed."
+      : m));
+  } finally { b.disabled = false; b.textContent = "Test my relay"; }
 };
 
 $("#f-test").onclick = async () => {
@@ -3949,7 +4070,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-10-22.104";
+const BUILD = "2026-11-26.105";
 // Full stamp stays in Settings (the only place it was ever findable before);
 // this is just enough to tell two builds apart at a glance without opening
 // a sheet - the trailing counter, not the date, since the date rarely

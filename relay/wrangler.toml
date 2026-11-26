@@ -1,0 +1,5 @@
+# Only needed if you deploy from a computer with `npx wrangler deploy`.
+# The dashboard route in README.md does not use this file.
+name = "news-relay"
+main = "worker.js"
+compatibility_date = "2025-01-01"

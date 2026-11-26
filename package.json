@@ -1,6 +1,7 @@
 {
   "name": "newsapp",
   "private": true,
+  "type": "module",
   "description": "A news reader that lives on the phone. The app itself is index.html and has no dependencies; this file exists only so the tests can be installed.",
   "scripts": {
     "test": "node tests/run.mjs"

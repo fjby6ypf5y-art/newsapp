@@ -48,6 +48,7 @@ If Chromium is somewhere else, set `CHROMIUM_PATH`.
 | `testcsp` `testsec` | The policy blocks what it should; a hostile feed gets nothing through |
 | `testsetup` | The setup link restores feeds and refuses a corrupt one |
 | `testresume` | Backgrounding releases the parked panels; a launch on a hanging network serves the cache rather than a blank page |
+| `testownrelay` | Your own relay: does the Worker refuse a missing key and anything but http(s), and pass the feed back with CORS? In the app, does the switch put it ahead of the public relays when on, take it out entirely when off, and keep its key out of the screen, the log and setup links? |
 | `testrelaytrust` | Can a setup link install a relay behind your back, and can you remove one? |
 | `testlog` | Does a failure get written down with enough detail to act on, does a recovery show up, and does a hostile error string stay text? |
 | `testquota` | A feed big enough to fill the storage quota; a config that will not parse |

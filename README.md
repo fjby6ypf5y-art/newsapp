@@ -53,7 +53,7 @@ and shows your last stories even with no bars.
 The header has four buttons: **↻** refresh, a funnel for filters, **☰** feeds,
 **⚙** settings. Feeds
 live on their own page because they are the part you actually maintain;
-Settings holds behaviour, privacy, the relay list and backup. Next to the
+Settings holds behaviour, privacy, the relay list, your own relay and backup. Next to the
 title is a small `b<n>` chip — the build number, so two builds can be told
 apart without opening Settings for the full stamp.
 
@@ -834,6 +834,40 @@ relay on it is another party who gets to see a feed request. Speed stopped
 being the constraint; privacy still is. Five is enough redundancy that the odds
 of all of them being down at once are not worth planning for.
 
+That last sentence turned out to be wrong. In November 2026 both default relays
+went down together (Cloudflare 522s from allorigins, silence from codetabs),
+and every feed that needs a relay failed in every category, with a message
+suggesting you swap the feeds, which would not have helped. The publishers
+were fine. Nothing else free was standing in for the relays: corsproxy.io
+wanted a key, cors.lol was rate-limiting and whateverorigin.org was returning
+500s.
+
+**Your own relay** is the answer to that. `relay/worker.js` is a small
+Cloudflare Worker you deploy on your own free account (`relay/README.md` has the
+steps), and Settings has a separate box and switch for it, apart from the
+public list, so it can be left set up and switched on only when it's needed:
+
+- **Off** (the default, and with no address) changes nothing. It isn't in the
+  race and isn't contacted.
+- **On**, it leads the relays for every feed, ahead of the scores and ahead of
+  whichever public relay answered last time. Direct still goes first wherever
+  it would have. The public relays stay behind it and are only started if it
+  goes quiet for 1.8s, so while it's healthy they see nothing. It is benched
+  like any other relay if it fails twice, and the public ones carry on.
+- It sits *after* the public relays in the internal list, so switching it on
+  or off leaves their positions, which the route memo is keyed on, alone. The
+  memo is cleared anyway on any change to it, so a feed remembered as "went
+  through allorigins" tries yours first next time.
+- **Test my relay** sends one real feed through it with nothing else in the
+  race, switch on or off, and names the usual misconfigurations: a wrong key
+  (401), `RELAY_KEY` not set (500), or no answer at that address.
+- The Worker refuses anyone without its key, so the address leaking costs
+  nothing. The key is part of the prefix, so the app shows only the host
+  anywhere it reports on the relay. It's in **Export** (your full backup) but
+  left out of **setup links**, which are made to be mailed and pasted. After a
+  reinstall from a setup link, paste the relay address in again.
+- **Direct only** overrides it, just as it overrides the public list.
+
 ### The fetch log
 
 The health dots on the Feeds page answer "did this feed answer the *last* time
@@ -1035,6 +1069,8 @@ index.html             the entire app - markup, styles and logic
 sw.js                  service worker; caches the shell for offline use
 manifest.webmanifest   Home Screen icon, name, standalone display
 icons/                 app icons (180/192/512)
+relay/                 your own fetch relay (a Cloudflare Worker), optional;
+                       not served by Pages, see relay/README.md
 tools-icon.py          regenerates the icons; no dependencies
 .nojekyll              stops GitHub Pages running the files through Jekyll
 ```
@@ -1103,6 +1139,11 @@ So the app minimises it, and shows you exactly where you stand:
 - **Direct only** disables relays completely. Nothing but your phone and the
   publisher. Feeds that need a relay then fail honestly rather than quietly
   routing through a stranger — check the health dots and swap them out.
+- **Your own relay** (Settings, off by default) is a relay you run on your own
+  Cloudflare account from `relay/worker.js`. It still sees your IP and the feeds
+  sent through it, but the parties are you and Cloudflare rather than a
+  stranger, and it answers no one without its key. While it's on and healthy,
+  the public relays are not asked. See `relay/README.md`.
 - The relay list is editable: clear the box to run with no relay at all.
   Anything that is not a full `https://` prefix is refused and said so, and
   changing the list forgets which route each feed last used, so nothing keeps
