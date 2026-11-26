@@ -868,7 +868,15 @@ public list, so it can be left set up and switched on only when it's needed:
   screen for anyone holding the phone. The masked text stands for the saved
   address: Test uses the real one, and an edited masked address is refused
   rather than saved, since the key can't be recovered from the dots. To change
-  it, paste a whole new address. It's in **Export** (your full backup) but
+  it, paste a whole new address.
+- **Whatever is pasted is rebuilt to the one shape the Worker reads**:
+  `…/?key=<key>&url=`. Build 106 saved an address as pasted, and on the phone
+  one had text after `url=`. It saved cleanly and every request got the
+  relay's 400. Build 106 also masked *every* value, which hid that stray text
+  from the one person who could fix it. From 107 only the key is masked, a
+  stored address is tidied at load, and **Test** shows the relay's own
+  one-line reason ("url is not a URL", "wrong or missing key") rather than a
+  bare status code. It's in **Export** (your full backup) but
   left out of **setup links**, which are made to be mailed and pasted. After a
   reinstall from a setup link, paste the relay address in again.
 - **Direct only** overrides it, just as it overrides the public list.

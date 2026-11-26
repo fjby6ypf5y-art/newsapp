@@ -139,7 +139,7 @@ await page.fill('#own-relay',OWN.replace(KEY,'nope'));
 await page.click('#own-test');await page.waitForFunction(()=>!document.querySelector('#own-test').disabled);
 msg=await page.textContent('#own-msg');
 console.log('test, wrong key      :',msg);
-mark(/wrong key/.test(msg),'a wrong key says so');
+mark(/HTTP 401 — the relay says: wrong or missing key/.test(msg),'a wrong key says so, in the relay\'s own words');
 // Tapping Test takes focus out of the box, which saves it like any other
 // edit - so what was tested is what is kept. Put the right one back.
 mark((await cfgNow()).ownRelay===OWN.replace(KEY,'nope'),'leaving the box saves what was typed in it');
@@ -221,6 +221,23 @@ mark(c.ownRelay===''&&c.ownRelayOn===false,'clearing the address switches it off
 await page.click('#s-own');await page.waitForTimeout(100);
 mark(!(await page.isChecked('#s-own'))&&/Paste your relay/.test(await page.textContent('#own-msg')),'and it will not switch on with no address');
 
+// What went wrong on the phone with build 106: an address with text after
+// url=. Pasted twice, or with a test feed still on the end, it saved as it was
+// and every request came back 400. Now it is rebuilt to end at url=.
+for(const [what,pasted] of [
+  ['pasted twice',OWN+OWN],
+  ['a test feed left on the end',OWN+'https://www.cbc.ca/webfeed/rss/rss-canada'],
+  ['url= before key=','https://news-relay.me.workers.dev/?url=&key='+KEY],
+  ['no slash before ?','https://news-relay.me.workers.dev?key='+KEY+'&url=']]){
+  await page.fill('#own-relay',pasted);await page.dispatchEvent('#own-relay','change');
+  const saved=(await cfgNow()).ownRelay;
+  mark(saved===OWN,what+': saved as '+saved.replace(KEY,'<key>'));
+}
+console.log('tidied message       :',await page.textContent('#own-msg'));
+mark(await page.inputValue('#own-relay')===MASKED,'the box masks only the key, so stray text after url= would show');
+await page.click('#own-test');await page.waitForFunction(()=>!document.querySelector('#own-test').disabled);
+mark(/came back/.test(await page.textContent('#own-msg')),'and the tidied address works');
+
 // A pasted JSON import goes through the same gate.
 await page.fill('#io',JSON.stringify({feeds:FEEDS,ownRelay:'javascript:alert(1)//',ownRelayOn:true}));
 await page.click('#io-import');await page.waitForTimeout(300);
@@ -229,3 +246,24 @@ mark(c.ownRelay===''&&c.ownRelayOn===false,'a JSON import cannot install a javas
 
 console.log(errs.length?'ERRORS '+errs.join(';'):'no JS errors');
 await b.close();srv.close();
+
+// A phone already holding a build-106 address with text after url= is put
+// right at load, without anyone retyping it.
+{
+  const b2=await chromium.launch(CHROME);
+  const ctx2=await b2.newContext({...devices['iPhone 14 Pro']});const p2=await ctx2.newPage();
+  await ctx2.route('**/*',route=>route.request().url().startsWith('http://localhost:8095')?route.continue():route.abort('failed'));
+  const e2=[];p2.on('pageerror',e=>e2.push(e.message));
+  await p2.addInitScript(([feeds,bad])=>{ if(localStorage.getItem('breaking.v1'))return;
+    localStorage.setItem('breaking.v1',JSON.stringify({migrated:22,feeds,proxies:[],ownRelay:bad,ownRelayOn:true,autoRefresh:false}))},
+    [FEEDS,OWN+OWN]);
+  const srv2=http.createServer((q,res)=>{let p=decodeURIComponent(q.url.split('?')[0]);if(p==='/')p='/index.html';
+    const f=path.join(ROOT,p); if(!fs.existsSync(f)){res.writeHead(404);return res.end()}
+    res.writeHead(200,{'Content-Type':T[path.extname(f)]||'text/plain'});res.end(fs.readFileSync(f))});
+  await new Promise(res=>srv2.listen(8095,res));
+  await p2.goto('http://localhost:8095/index.html');await p2.waitForTimeout(1200);
+  const c2=await p2.evaluate(()=>cfg);
+  mark(c2.ownRelay===OWN&&c2.ownRelayOn===true,'a stored address with text after url= is tidied at load, and stays on');
+  if(e2.length)console.log('ERRORS '+e2.join(';'));
+  await b2.close();srv2.close();
+}

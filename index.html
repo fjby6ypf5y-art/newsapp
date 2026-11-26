@@ -1124,6 +1124,21 @@ const safeRelay = raw => {
   return t;
 };
 
+// Your own relay always has the same shape - relay/worker.js reads key= and
+// url= and nothing else - so whatever was pasted is rebuilt into exactly that,
+// ending at "url=". Build 106 kept an address as pasted, and one with text
+// after url= (pasted twice, or with a test feed still on the end) saved
+// cleanly and then failed every request with the relay's own 400. The first
+// key= wins; an address with none is kept, and Test then says the key is wrong.
+const ownPrefix = raw => {
+  const t = safeRelay(raw);
+  if (!t) return "";
+  let u; try { u = new URL(t); } catch { return ""; }
+  const key = u.searchParams.get("key");
+  return safeRelay(u.origin + u.pathname + "?"
+    + (key !== null ? "key=" + encodeURIComponent(key) + "&" : "") + "url=");
+};
+
 // Ids are load-bearing: the feed editor keys off them, and a feed without one
 // compares equal to every other feed without one. Migrations can be skipped by
 // a stored version number, so this runs unconditionally.
@@ -1137,7 +1152,7 @@ function normalise(c) {
   c.muted = mutedList(c.muted);
   // Arrives from storage and from a pasted JSON import, so it goes through
   // the same gate as a relay typed into Settings. On means nothing without it.
-  c.ownRelay = safeRelay(c.ownRelay);
+  c.ownRelay = ownPrefix(c.ownRelay);
   c.ownRelayOn = !!(c.ownRelayOn && c.ownRelay);
   return c;
 }
@@ -3339,13 +3354,14 @@ const showOwnRelay = (extra) => {
     + (extra || "");
 };
 
-// The box shows the saved address with every query value blanked out, so the
-// key is not sitting on screen for anyone holding the phone or reading a
-// screenshot: "…/?key=abc123&url=" shows as "…/?key=••••&url=". The empty
-// url= at the end has nothing to hide and stays as it is. To change the
-// address you paste a whole new one; the masked text itself is never saved.
+// The box shows the saved address with the key blanked out, so it is not
+// sitting on screen for anyone holding the phone or reading a screenshot:
+// "…/?key=abc123&url=" shows as "…/?key=••••&url=". Only the key: build 106
+// masked every value, and in doing so hid the stray text after url= that was
+// the whole problem. To change the address you paste a whole new one; the
+// masked text itself is never saved.
 const MASK = "••••";
-const maskRelay = pfx => String(pfx || "").replace(/([?&][^=&#]+=)[^&#]+/g, "$1" + MASK);
+const maskRelay = pfx => String(pfx || "").replace(/([?&]key=)[^&#]+/gi, "$1" + MASK);
 
 // What the box holds, as a relay prefix: the saved address if it still shows
 // the masked form of it, a new address if one was pasted, and "" with a
@@ -3354,8 +3370,9 @@ function ownRelayInput() {
   const raw = $("#own-relay").value.trim();
   if (cfg.ownRelay && raw === maskRelay(cfg.ownRelay)) return { pfx: cfg.ownRelay, raw };
   if (raw.includes(MASK)) return { pfx: "", raw, why: "To change it, paste the whole new address, key included." };
-  const pfx = safeRelay(raw);
-  return { pfx, raw, why: raw && !pfx ? "The address must start with https://" : "" };
+  const pfx = ownPrefix(raw);
+  return { pfx, raw, why: raw && !pfx ? "The address must start with https://" : "",
+           tidied: !!pfx && pfx !== raw };
 }
 
 // Turning it on or off, or changing where it points, is a fresh start for it
@@ -3371,7 +3388,7 @@ function ownRelayChanged() {
 }
 
 $("#own-relay").onchange = () => {
-  const { pfx: good, raw, why } = ownRelayInput();
+  const { pfx: good, raw, why, tidied } = ownRelayInput();
   if (raw && !good) {
     $("#own-relay").value = maskRelay(cfg.ownRelay);
     showOwnRelay(" · Not saved. " + why);
@@ -3383,7 +3400,8 @@ $("#own-relay").onchange = () => {
   if (!good) cfg.ownRelayOn = false;
   $("#s-own").checked = ownRelayOn();
   ownRelayChanged();
-  showOwnRelay(good ? " · saved" : " · removed");
+  showOwnRelay(!good ? " · removed"
+    : tidied ? " · saved, tidied to end at url=" : " · saved");
 };
 
 $("#s-own").onchange = e => {
@@ -3406,20 +3424,32 @@ $("#own-test").onclick = async () => {
   const feed = cfg.feeds[0];
   if (!feed) return showOwnRelay(" · Add a feed first: the test fetches one.");
   b.disabled = true; b.textContent = "Testing…";
-  const t0 = Date.now();
+  const t0 = Date.now(), ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), TIMEOUT);
   try {
-    const text = await tryOnce(pfx + encodeURIComponent(feed.url), new AbortController(), TIMEOUT);
+    // Its own fetch rather than tryOnce, so a refusal can be read: the relay
+    // says in a line of text why it refused, and "HTTP 400" alone sent a
+    // reader looking in the wrong place. Remote text, so it goes in as text,
+    // one line, cut short.
+    const res = await fetch(pfx + encodeURIComponent(feed.url), { signal: ctl.signal, cache: "no-store" });
+    const text = await res.text();
+    if (!res.ok) {
+      const said = text.replace(/\s+/g, " ").trim().slice(0, 120);
+      const hint = res.status === 401 ? " Check the key= part against the Worker's RELAY_KEY."
+        : res.status === 500 && /RELAY_KEY/.test(said) ? " Add it under Runtime variables and secrets, and deploy."
+        : "";
+      return showOwnRelay(" · Test failed: HTTP " + res.status + (said ? " — the relay says: " + said : "") + hint);
+    }
     const n = parseFeed(text, "probe", feed.url).length;
     showOwnRelay(" · Test: " + feed.name + " came back in " + (Date.now() - t0) + "ms"
       + (n ? " with " + n + " stor" + (n === 1 ? "y" : "ies") + "." : ", but not as a feed."));
   } catch (e) {
-    const m = String(e && e.message || e);
-    showOwnRelay(" · Test failed: " + (
-      /HTTP 401/.test(m) ? "wrong key (HTTP 401). Check the key= part against the Worker's RELAY_KEY."
-      : /HTTP 500/.test(m) ? "the Worker answered 500. Is RELAY_KEY set on it?"
-      : m === "blocked or unreachable" ? "no answer from that address. Check it, and that the Worker is deployed."
-      : m));
-  } finally { b.disabled = false; b.textContent = "Test my relay"; }
+    showOwnRelay(" · Test failed: " + (e && e.name === "AbortError"
+      ? "no answer within " + TIMEOUT / 1000 + "s."
+      : e instanceof TypeError
+        ? "no answer from that address. Check it, and that the Worker is deployed."
+        : String(e && e.message || e)));
+  } finally { clearTimeout(timer); b.disabled = false; b.textContent = "Test my relay"; }
 };
 
 $("#f-test").onclick = async () => {
@@ -4093,7 +4123,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-11-26.106";
+const BUILD = "2026-11-26.107";
 // Full stamp stays in Settings (the only place it was ever findable before);
 // this is just enough to tell two builds apart at a glance without opening
 // a sheet - the trailing counter, not the date, since the date rarely
