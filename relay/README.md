@@ -38,7 +38,10 @@ off. What you're after is a Worker, its code, and one secret.
    A password manager's "generate password" is ideal; the iPhone Passwords
    app's suggested strong password works. Keep it for step 5.
 2. **Make a Cloudflare account** at dash.cloudflare.com. The free plan is
-   enough: 100,000 requests a day, and this app uses a few hundred.
+   enough: 100,000 requests a day, and this app uses a few hundred. When it
+   asks for a **workers.dev subdomain**, pick something bland and unconnected
+   to you, such as a random word pair, not your name or handle. That name can
+   reach every publisher (see below), so it shouldn't point back at you.
 3. **Create a Worker.** Go to *Workers & Pages* → *Create* → *Create Worker*
    (the "Hello World" starter). Name it `news-relay` and deploy it as it is.
 4. **Replace its code.** Open the Worker → *Edit code*, delete everything,
@@ -76,9 +79,11 @@ RELAY_KEY`.
 
 - Accepts only `GET`, only with the right key, and only `http`/`https` feed
   addresses. It won't fetch itself.
-- Fetches the feed with your phone's own User-Agent, so the publisher sees the
-  same browser it would have seen on a direct request, and gives up after 10
-  seconds.
+- Fetches the feed with one fixed, generic desktop Safari User-Agent, not your
+  phone's own, and gives up after 10 seconds. Nothing else from your phone's
+  request is passed on: no cookies, no language, no other headers. A site
+  that only serves real browsers could refuse it, and **Test my relay** would
+  show that.
 - Sends back the publisher's status and content type, plus the CORS header the
   publisher left out. It doesn't pass on cookies or any other headers, and it
   refuses anything over 5MB.
@@ -86,6 +91,21 @@ RELAY_KEY`.
   as a 404, which the app reads as "this feed was refused" and doesn't hold
   against the relay. A publisher that can't be reached is a 502, and one that
   takes too long is a 504.
+
+## What a publisher sees
+
+Not your phone's IP address, and not your phone's browser. A request from this
+relay comes from one of Cloudflare's addresses, which countless other services
+share, with the generic User-Agent above. Cloudflare also adds a `CF-Worker`
+header to every request a Worker makes, naming its workers.dev address. A
+Worker can't remove it, which is why the subdomain in step 2 should be
+anonymous.
+
+That header stays the same each time you switch the relay on, and the app has
+no way to change it. A different identity would need a new workers.dev
+subdomain (renamed in Cloudflare's settings) or a new account. Cloudflare
+itself always knows it's your account. For anonymity from Cloudflare too,
+you'd need a VPN or Tor on the phone, which no web app can provide.
 
 ## Things it won't fix
 

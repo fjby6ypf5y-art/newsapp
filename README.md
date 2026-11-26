@@ -867,6 +867,12 @@ public list, so it can be left set up and switched on only when it's needed:
   left out of **setup links**, which are made to be mailed and pasted. After a
   reinstall from a setup link, paste the relay address in again.
 - **Direct only** overrides it, just as it overrides the public list.
+- What publishers get from it is deliberately thin: a Cloudflare IP address,
+  one fixed generic desktop Safari User-Agent (not the phone's, which an
+  earlier draft passed through), and the `CF-Worker` header Cloudflare stamps
+  on every Worker request, which names its workers.dev subdomain. That last
+  one can't be removed and doesn't change when the switch is toggled, so the
+  setup steps say to pick a subdomain that isn't your name.
 
 ### The fetch log
 

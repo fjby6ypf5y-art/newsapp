@@ -15,6 +15,7 @@
 
 const TIMEOUT_MS = 10000;               // the app gives up on one route at 7s
 const MAX_BYTES = 5 * 1024 * 1024;      // a big feed is ~1MB; this is not a file host
+const GENERIC_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
 
 export default {
   async fetch(request, env) {
@@ -53,11 +54,12 @@ export default {
         signal: ctl.signal,
         redirect: "follow",
         headers: {
-          // The phone's own browser identity, which is what the publisher
-          // would have seen had it allowed the direct request. Some sites turn
-          // away a request with no User-Agent at all.
-          "User-Agent": request.headers.get("User-Agent")
-            || "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+          // One fixed, ordinary browser identity rather than the phone's own:
+          // what reaches the publisher should say as little about you as it
+          // can. Some sites turn away a request with no User-Agent at all, so
+          // it is generic rather than absent. Common enough to blend in; not
+          // updated with every Safari release, and does not need to be.
+          "User-Agent": GENERIC_UA,
           "Accept": "application/rss+xml, application/atom+xml, application/feed+json, application/xml;q=0.9, text/xml;q=0.9, */*;q=0.8"
         }
       });

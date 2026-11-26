@@ -53,7 +53,9 @@ mark(r.headers.get('access-control-allow-origin')==='*','with the CORS header th
 mark(r.headers.get('content-type')==='application/rss+xml','with the publisher\'s content type');
 mark(!r.headers.get('set-cookie'),'without the publisher\'s cookies');
 mark(upstreamSaw&&upstreamSaw.u==='https://www.cbc.ca/webfeed/rss/rss-canada','fetched the decoded feed URL');
-mark(upstreamSaw&&upstreamSaw.init.headers['User-Agent']==='TestPhone/1','passing the phone\'s User-Agent on');
+const ua=upstreamSaw&&upstreamSaw.init.headers['User-Agent'];
+mark(ua&&ua!=='TestPhone/1'&&/Safari/.test(ua),'with a generic browser User-Agent, not the phone\'s own');
+mark(Object.keys(upstreamSaw.init.headers).sort().join()==='Accept,User-Agent','and nothing else of the phone\'s headers');
 mark(!String(upstreamSaw&&JSON.stringify(upstreamSaw)).includes('s3cret'),'and never the key');
 r=await call('?key=s3cret&url='+feed,{RELAY_KEY:'s3cret',ALLOW_ORIGIN:'https://me.github.io'});
 mark(r.headers.get('access-control-allow-origin')==='https://me.github.io','ALLOW_ORIGIN narrows the CORS header');
