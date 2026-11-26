@@ -1226,7 +1226,55 @@ const load = () => {
     return normalise({...DEFAULTS, migrated:13});
   }
 };
-const save = () => store(KEY, JSON.stringify(cfg));
+// Every tab of the app holds its own copy of the config and writes all of it
+// on every save. Two bugs that both ended the same way: feeds switched on on
+// the desktop were gone after a reload. The build 105-108 deploys did not
+// cause it; they reloaded every open tab, which swapped the config each tab
+// held in memory for whatever was actually in storage.
+// - A save that did not fit (the story cache had used up the quota) failed in
+//   silence: the screen showed the change, storage never had it, and a reload
+//   took it away. Now the story cache is trimmed to make room, as storeItems
+//   already did for itself, and a save that still fails says so.
+// - A second tab, open since before the change, wrote its older config over
+//   it the next time it saved anything at all. Now each tab follows the
+//   others: see adoptStoredConfig.
+let cfgRaw = null;        // the config as storage holds it, as far as this tab knows
+let saveFailed = false;   // this tab holds settings storage does not
+let itemsReady = false;   // the story cache exists, so it can be trimmed for room
+function save() {
+  const raw = JSON.stringify(cfg);
+  if (store(KEY, raw)) return saved(raw);
+  if (itemsReady) {
+    for (const keep of [200, 100, 50, 20, 0]) {
+      if (items.length <= keep) continue;
+      items = items.slice(0, keep);
+      store(KEY + ".items", JSON.stringify(items));
+      if (store(KEY, raw)) {
+        // Deferred: a save can run before the log exists, at startup.
+        setTimeout(() => logEvent({ kind: "store", name: "Settings", why: "storage full",
+          attempts: [{ host: "localStorage", err: "story cache trimmed to " + keep + " stories to make room", ms: 0 }] }), 0);
+        return saved(raw);
+      }
+    }
+  }
+  const first = !saveFailed;
+  saveFailed = true;
+  setTimeout(() => {
+    setStatus("Couldn't save your settings: this browser's storage for the app is full. "
+      + "The change will be lost on reload.", true);
+    if (first) logEvent({ kind: "store", name: "Settings", why: "storage full",
+      attempts: [{ host: "localStorage", err: "settings not saved", ms: 0 }] });
+  }, 0);
+  return false;
+}
+function saved(raw) {
+  cfgRaw = raw;
+  if (saveFailed) {
+    saveFailed = false;
+    setTimeout(() => setStatus("Settings saved"), 0);
+  }
+  return true;
+}
 let cfg = load();
 // Persist immediately: migrations rewrite feed URLs and backfill categories,
 // and without this they would be recomputed on every launch and lost the
@@ -1234,6 +1282,8 @@ let cfg = load();
 save();
 
 let items    = JSON.parse(localStorage.getItem(KEY + ".items") || "[]");
+itemsReady = true;
+if (saveFailed) save();    // the startup save had no cache to make room with
 
 // Cached stories outlive the feed that produced them - they sit in storage for
 // 72h regardless of the feed list. So removing a feed (by hand, or by a
@@ -2183,7 +2233,15 @@ async function stagedRefresh(quiet, why, maxAge) {
 const FRESH_MS = 2 * 60 * 1000;
 
 /* -------------------------------------------------------------- render */
-const setStatus = (s, err) => { const n = $("#status"); n.textContent = s; n.classList.toggle("err", !!err); };
+// While a settings change is sitting unsaved, every status line carries it.
+// Adding a feed fetches it straight away, and the fetch's "Updated just now"
+// replaced the warning within a second - which is how a failed save stayed
+// silent in the first place.
+const setStatus = (s, err) => {
+  const n = $("#status"), warn = saveFailed && !/^Couldn't save/.test(s);
+  n.textContent = warn ? "Settings not saved: storage is full · " + s : s;
+  n.classList.toggle("err", !!err || warn);
+};
 
 function timeAgo(ts) {
   if (!ts) return "";
@@ -3143,22 +3201,35 @@ function openFeeds(open) {
   if (!open) refreshChanged();
 }
 
+// The fields in Settings, from the config. A box that has focus is left alone:
+// this also runs when another tab changes the config, and that must not
+// overwrite what you are in the middle of typing.
+function fillSettings() {
+  const put = (sel, prop, v) => { const n = $(sel); if (document.activeElement !== n) n[prop] = v; };
+  put("#proxy", "value", cfg.proxies.join("\n"));
+  put("#own-relay", "value", maskRelay(cfg.ownRelay));
+  put("#s-own", "checked", ownRelayOn());
+  showRelayCount();
+  showOwnRelay();
+  showLogCount();
+  put("#s-auto", "checked", cfg.autoRefresh);
+  put("#s-direct", "checked", cfg.directOnly);
+  put("#s-idle", "value", String(cfg.idleResetMin));
+  if (!muteTyped) $("#mute").value = cfg.muted.join("\n");
+  showMuteCount();
+}
+
+function showVer() {
+  $("#ver").textContent = "News · build " + BUILD + " · "
+    + cfg.feeds.length + " feeds · all data stays on this device";
+}
+
 function openSettings(open) {
   if (open) {
     showSheet("#feeds-sheet", false);
     showSheet("#log-sheet", false);
-    $("#proxy").value      = cfg.proxies.join("\n");
-    $("#own-relay").value  = maskRelay(cfg.ownRelay);
-    $("#s-own").checked    = ownRelayOn();
-    showRelayCount();
-    showOwnRelay();
-    showLogCount();
-    $("#s-auto").checked   = cfg.autoRefresh;
-    $("#s-direct").checked = cfg.directOnly;
-    $("#s-idle").value     = String(cfg.idleResetMin);
-    $("#mute").value       = cfg.muted.join("\n");
     muteTyped = false;
-    showMuteCount();
+    fillSettings();
     const checked = cfg.feeds.filter(f => health[f.url] && health[f.url].ok);
     const viaRelay = checked.filter(f => !health[f.url].direct);
     $("#relay-count").textContent = checked.length
@@ -3732,6 +3803,7 @@ document.addEventListener("visibilitychange", () => {
     if (isHomeScreenApp() && window.releaseSides) window.releaseSides();
     return;
   }
+  syncFromStorage();
   if (isHomeScreenApp() && resetTabIfStale()) { render(); $("#list").scrollTop = 0; }
   markSeen();
   render();                                   // timestamps, at least, are stale
@@ -3742,11 +3814,69 @@ document.addEventListener("visibilitychange", () => {
   stagedRefresh(true, "back after a while");
 });
 
+// Another tab saved. Its config replaces this tab's, so this tab's next save
+// carries the change forward instead of writing over it with what this tab
+// loaded weeks ago. Nothing is written back in reply: the tab that saved
+// already did that, and replying would set two tabs answering each other.
+function adoptStoredConfig(raw) {
+  if (!raw || raw === cfgRaw) return;
+  let next;
+  try { next = normalise(migrate({ ...DEFAULTS, ...JSON.parse(raw) })); } catch { return; }
+  cfg = next; cfgRaw = raw;
+  // Whatever this tab could not save is moot now: storage moved on without it.
+  saveFailed = false;
+  if (editing && !cfg.feeds.some(f => f.id === editing)) editing = null;
+  render();
+  if (window.primeSides) window.primeSides();
+  if ($("#feeds-sheet").classList.contains("open")) { renderFeeds(); renderLibrary(); }
+  if ($("#settings").classList.contains("open")) fillSettings();
+  showVer();
+}
+
+// The stories another tab fetched. Taken as they are rather than merged: the
+// cache is shared, and the tab that wrote it merged it against the same
+// storage. Not mid-refresh, which would write its own merge over it anyway.
+function adoptStoredItems(raw) {
+  if (loading) return;
+  try {
+    const next = JSON.parse(raw || "[]");
+    if (!Array.isArray(next)) return;
+    items = next;
+    render();
+    if (window.primeSides) window.primeSides();
+  } catch {}
+}
+
+window.addEventListener("storage", e => {
+  if (e.storageArea !== localStorage) return;
+  if (e.key === KEY) adoptStoredConfig(e.newValue);
+  else if (e.key === KEY + ".items") adoptStoredItems(e.newValue);
+});
+
+// Coming back to the tab: a storage event can go missing while a tab is
+// frozen in the background, so look for ourselves. Two other cases land here.
+// A save that failed for want of room gets another try, since room may have
+// been made since. And a config that has vanished from storage under an open
+// tab - the browser evicting or clearing the site's data - is written back
+// from this tab, which still has it, rather than being lost on the next
+// reload as it was.
+function syncFromStorage() {
+  if (saveFailed) { save(); return; }
+  const raw = localStorage.getItem(KEY);
+  if (raw === null && cfgRaw !== null) {
+    if (save()) logEvent({ kind: "store", name: "Settings", why: "missing from storage",
+      attempts: [{ host: "localStorage", err: "written back from this tab", ms: 0 }] });
+    return;
+  }
+  if (raw !== cfgRaw) adoptStoredConfig(raw);
+}
+
 // A web app iOS has held in the background comes back either as the page it
 // was, or - if the process was reclaimed - as a fresh load. Both arrive here;
 // the restored one needs its clocks and panels brought up to date.
 window.addEventListener("pageshow", e => {
   if (!e.persisted) return;
+  syncFromStorage();
   markSeen(); render();
   if (window.primeSides) window.primeSides();
 });
@@ -4136,14 +4266,13 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-11-26.108";
+const BUILD = "2026-11-26.109";
 // Full stamp stays in Settings (the only place it was ever findable before);
 // this is just enough to tell two builds apart at a glance without opening
 // a sheet - the trailing counter, not the date, since the date rarely
 // differs between two builds worth telling apart.
 $("#ver-short").textContent = "b" + BUILD.split(".").pop();
-$("#ver").textContent = "News · build " + BUILD + " · "
-  + cfg.feeds.length + " feeds · all data stays on this device";
+showVer();
 </script>
 </body>
 </html>

@@ -1106,6 +1106,42 @@ tools-icon.py          regenerates the icons; no dependencies
 No build step, no dependencies, no npm. Edit `index.html`, commit, and Pages
 redeploys in about a minute.
 
+## Settings are never lost quietly
+
+Your settings (the feed list, sources switched off, muted words) are one entry
+in the browser's storage, and every save writes the whole of it. On
+2026-11-26 a desktop browser came back from the build 105–108 deploys with
+feeds that had been switched on now switched off. The deploys didn't cause it.
+Replaying a build-104 config through every build since keeps it byte for byte,
+and `testtabs` checks that. What a deploy does is reload every open tab, and
+two older bugs could leave storage out of step with what a tab was showing.
+The reload swapped one for the other:
+
+- **A second tab wrote its old settings over newer ones.** Each tab kept its
+  own copy and never heard about the others' changes. Switching a feed on in
+  one tab and then touching anything in a tab open since before, such as a
+  source switch or a muted word, saved the old list back. Since build 109
+  every tab follows the others through the browser's `storage` event, and
+  re-reads storage when it comes back to the front in case an event was
+  missed. A tab adopts another's settings without writing them back, so two
+  tabs never answer each other. Stories fetched in one tab show up in the
+  others the same way. This can't happen in the iPhone Home Screen app,
+  which only ever has one copy open.
+- **A save that didn't fit failed silently.** The story cache can grow until
+  the storage quota is used up. A settings save then failed, the screen still
+  showed the change, and a reload took it away. Now a save that doesn't fit
+  trims the story cache to make room, as the cache already did for itself,
+  and the log says so. If it still doesn't fit, every status line carries
+  *Settings not saved: storage is full* in red until it does, and coming back
+  to the tab tries again.
+- **Settings that vanish from storage under an open tab are written back.**
+  This covers the browser evicting or clearing the site's data while the tab
+  stays open. That tab still holds them, and used to lose them on the next
+  reload.
+
+None of this survives deleting the Home Screen icon or clearing the browser's
+site data with no tab open. That's what the setup link below is for.
+
 ## Keeping your feeds through a reinstall
 
 **On iOS a Home Screen app has its own storage, separate from Safari — and

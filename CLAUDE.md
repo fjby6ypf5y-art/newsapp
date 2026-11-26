@@ -35,6 +35,10 @@ something that went wrong on the device.
   says otherwise. That is why there are health dots, a "Test all feeds"
   button, and the `DEAD_FEEDS`/`SWAPPED` migration mechanisms. Do not claim a
   feed works.
+- **Every save writes the whole config from this tab's memory.** On a
+  desktop, several tabs can be open; `adoptStoredConfig` keeps them in step
+  and must never write back in reply. A save can fail (storage full) and must
+  never do so silently. See "Settings are never lost quietly" in README.
 - **Cached stories outlive the feed they came from.** Removing a feed without
   `pruneOrphans()` leaves its headlines on screen.
 - **The three panels are never created, destroyed, reparented or restyled.**

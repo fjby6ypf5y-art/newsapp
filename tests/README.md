@@ -47,6 +47,7 @@ If Chromium is somewhere else, set `CHROMIUM_PATH`.
 | `testadd` | Switching a feed on: is only that feed fetched, and do the chips under your finger stay put? |
 | `testrelays` | Five relays, three of them broken: how long a refresh takes, whether the screen comes back, and whether a dead relay costs one timeout per feed |
 | `testcsp` `testsec` | The policy blocks what it should; a hostile feed gets nothing through |
+| `testtabs` | Two tabs: does a stale one write its old settings over newer ones? A full store: does a save make room or say so? Settings gone from under an open tab, and the update from the last build: byte-identical? |
 | `testsetup` | The setup link restores feeds and refuses a corrupt one |
 | `testresume` | Backgrounding releases the parked panels; a launch on a hanging network serves the cache rather than a blank page |
 | `testownrelay` | Your own relay: does the Worker refuse a missing key and anything but http(s), and pass the feed back with CORS? In the app, does the switch put it ahead of the public relays when on, take it out entirely when off, and keep its key out of the screen, the log and setup links? |
