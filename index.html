@@ -2073,8 +2073,21 @@ async function refresh(scope, opts) {
                     : badAll.join(", "))
                 : ""),
         okAll.length === 0);
-    } else if (ok === 0) {
+    } else if (ok === 0 && !scoped) {
+      // Only a pass over every feed gets to say that nothing is reachable.
+      // A scoped pass is a category, a pull, or the failing feeds of the
+      // category you just turned to - and arriving at a category re-fetches
+      // exactly the feeds in it that have been failing. When those failed
+      // again, this line used to announce that no feed anywhere could be
+      // reached, seconds after a refresh that had just brought in dozens of
+      // stories. A scoped pass names what failed, below, like any other.
       setStatus("No feeds reachable — check your connection or relays", true);
+    } else if (ok === 0) {
+      setStatus("Couldn't fetch " + (total === 1 ? failed[0] : "any of " + total + " " + name + "feeds")
+        + (total > 1 ? ": " + (failed.length > 3
+            ? failed.slice(0, 3).join(", ") + " +" + (failed.length - 3) + " more"
+            : failed.join(", ")) : "")
+        + (o.why ? " · " + o.why : ""), true);
     } else {
       // "new" counts what this refresh actually brought in. It used to count
       // every story never tapped, across the whole cache - a number in the
@@ -4123,7 +4136,7 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
 }
-const BUILD = "2026-11-26.107";
+const BUILD = "2026-11-26.108";
 // Full stamp stays in Settings (the only place it was ever findable before);
 // this is just enough to tell two builds apart at a glance without opening
 // a sheet - the trailing counter, not the date, since the date rarely

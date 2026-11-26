@@ -201,6 +201,15 @@ trailing pass is silent: the near pass's result stays up, the dimmed ↻ arrow i
 the sign that something is still going, and the summary at the end is the
 report.
 
+**"No feeds reachable" means exactly that.** It is said only by a pass over
+every feed in which none answered. Until build 108 any pass that got nothing
+said it, and turning to a category re-fetches exactly the feeds in it that
+have been failing. So one dead feed in Business, fetched again on arrival and
+failing again, announced that nothing anywhere could be reached, seconds after
+a refresh had brought in dozens of stories. A category, a pull or an arrival
+that gets nothing now names what failed: `Couldn't fetch Yahoo Finance · you
+opened Business`.
+
 **Turning to a category checks it.** The stories you are about to read are the
 ones worth being current, so arriving at a category — by chip or by page turn —
 fetches its feeds if they have not answered in the last five minutes. Before,
